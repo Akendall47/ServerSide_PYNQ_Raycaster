@@ -61,7 +61,7 @@ assert HEADER_SIZE == 8, f"ServerPacketHeader must be 8 bytes, got {HEADER_SIZE}
 #    13       1    B   flags
 #    14       —    x   padding
 
-PLAYER_FMT  = '<BfffBx'
+PLAYER_FMT  = '<BfffB'
 PLAYER_SIZE = struct.calcsize(PLAYER_FMT)
 assert PLAYER_SIZE == 14, f"PlayerEntry must be 14 bytes, got {PLAYER_SIZE}"
 
