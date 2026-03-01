@@ -225,10 +225,8 @@ class NodeSimulator:
             print(f"[NODE {self.player_id}] Closed after {self.tick} ticks")
     
     def close(self):
-        """Clean up and close socket."""
+        """Signal the game loop to stop. Socket is closed by _run_one_game's finally block."""
         self.running = False
-        self.sock.close()
-        print(f"[NODE {self.player_id}] Closed after {self.tick} ticks")
 
 
 def main():

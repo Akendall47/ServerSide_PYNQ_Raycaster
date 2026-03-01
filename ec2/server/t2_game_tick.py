@@ -205,8 +205,8 @@ class GameTick:
 
     async def _check_match_end(self):
         """Match ends the moment the runner (lowest player_id) gets tagged.
-        Fires match_end event, then resets match state so a new game can start
-        once the tag flash expires.
+        Fires match_end event and clears all players — server waits for fresh
+        re-registrations before starting the next match.
         """
         if not self.match_started or self.match_ended:
             return
@@ -215,7 +215,10 @@ class GameTick:
             self.match_ended = True
             print(f"[T2] match ended — runner P{runner['player_id']} tagged")
             await self._push_event({"event": "match_end", "winner": "tagger"})
-            # Reset so next connect pair starts a fresh match
+            # Clear all players so the loop goes idle until sims re-register
+            self.players       = {}
+            self.next_id       = 1
+            self.tag_clear_at  = {}
             self.match_started = False
             self.match_ended   = False
 

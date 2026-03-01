@@ -76,26 +76,28 @@ tmux split-window -t "$SESSION:0.1" -v -p 50   # 1=sidecar 4=bot-M
 tmux split-window -t "$SESSION:0.2" -v -p 50   # 2=monitor 5=bot-R
 # Final: 0=server  1=sidecar  2=monitor  3=node-sim-1  4=node-sim-2  5=redis-stats
 
+# Auto-start EC2 services (server → sidecar → monitor) then leave node sims ready to run manually.
+# Startup order matters: server must bind port 9000 before nodes register.
+
 tmux select-pane -t "$SESSION:0.0" -T "seda server"
-tmux send-keys -t "$SESSION:0.0" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/server/server.py'"
+tmux send-keys -t "$SESSION:0.0" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/server/server.py'" Enter
 
 tmux select-pane -t "$SESSION:0.1" -T "sidecar"
-tmux send-keys -t "$SESSION:0.1" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/sidecar/sidecar.py'"
+tmux send-keys -t "$SESSION:0.1" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/sidecar/sidecar.py'" Enter
 
-# Monitor pane: start monitor.py on EC2, wait for port 8080, then open tunnel
-# We use a wrapper that waits for the port before the tunnel is established by
-# running monitor.py in background, polling until ready, then exec-ing the tunnel.
+# Monitor: start on EC2, poll until port 8080 is bound, then tail log (tunnel already open via -L).
 tmux select-pane -t "$SESSION:0.2" -T "monitor :8080"
-tmux send-keys -t "$SESSION:0.2" "fuser -k 8080/tcp 2>/dev/null || true; ssh -t -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && nohup python3 ec2/monitor/monitor.py > /tmp/monitor.log 2>&1 & sleep 2 && tail -f /tmp/monitor.log'"
+tmux send-keys -t "$SESSION:0.2" "fuser -k 8080/tcp 2>/dev/null || true; ssh -t -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && nohup python3 ec2/monitor/monitor.py > /tmp/monitor.log 2>&1 & until nc -z localhost 8080 2>/dev/null; do sleep 0.2; done && echo [monitor] port 8080 ready && tail -f /tmp/monitor.log'" Enter
 
-tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)"
+# Node sims: pre-filled but NOT auto-started — press Enter in each pane when server is ready.
+tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)  ← press Enter to start"
 tmux send-keys -t "$SESSION:0.3" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 0"
 
-tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)"
+tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)  ← press Enter to start"
 tmux send-keys -t "$SESSION:0.4" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 1"
 
 tmux select-pane -t "$SESSION:0.5" -T "redis stats"
-tmux send-keys -t "$SESSION:0.5" "ssh -t -i $KEY $EC2 'redis-cli --stat'"
+tmux send-keys -t "$SESSION:0.5" "ssh -t -i $KEY $EC2 'redis-cli --stat'" Enter
 
 # Open browser — use WSL IP since SSH tunnel binds to WSL interface, not Windows localhost
 WSL_IP=$(hostname -I | awk '{print $1}')
