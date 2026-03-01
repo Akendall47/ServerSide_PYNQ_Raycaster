@@ -231,8 +231,7 @@ class NodeSimulator:
                     break
 
                 print(f"\n[NODE {self.player_id}] ── GAME OVER ──")
-                print(f"[NODE {self.player_id}] Waiting for dashboard ▶ RESTART button"
-                      f"{' or press Enter' if ps else ''}...")
+                print(f"[NODE {self.player_id}] Waiting for dashboard ▶ RESTART button...")
 
                 # Drain any messages that arrived during the match (stale publishes)
                 if ps:
@@ -240,6 +239,10 @@ class NodeSimulator:
                         pass
 
                 # Wait for restart: pub/sub message OR keyboard Enter
+                # stdin_is_tty: only offer keyboard fallback on a real terminal.
+                # When launched non-interactively (tmux send-keys, pipe) stdin
+                # select() returns immediately on EOF, causing infinite restarts.
+                stdin_is_tty = sys.stdin.isatty()
                 restarting = False
                 while not restarting:
                     if ps:
@@ -253,17 +256,24 @@ class NodeSimulator:
                             except Exception:
                                 pass
 
-                    # Also check keyboard Enter (non-blocking)
-                    r_list, _, _ = select.select([sys.stdin], [], [], 0)
-                    if r_list:
-                        sys.stdin.readline()
-                        restarting = True
+                    # Keyboard Enter fallback — only on a real terminal
+                    if stdin_is_tty and not restarting:
+                        r_list, _, _ = select.select([sys.stdin], [], [], 0)
+                        if r_list:
+                            line = sys.stdin.readline()
+                            if line:  # empty string = EOF, not a real keypress
+                                restarting = True
 
                     if not restarting:
                         time.sleep(0.1)  # 10 Hz poll — low CPU while waiting
 
                 if not restarting:
                     break
+                # Wait for server lockout to expire before re-registering.
+                # Server clears players after MATCH_END_HOLD_S (1s) then locks out
+                # for LOCKOUT_S (3s). We sleep 4.5s to be safely past both windows.
+                print(f"[NODE {self.player_id}] Restarting in 4.5s (waiting for server lockout)...")
+                time.sleep(4.5)
                 print(f"[NODE {self.player_id}] Restarting...\n")
 
         except KeyboardInterrupt:
