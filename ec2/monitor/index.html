@@ -338,9 +338,9 @@
       <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
       <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
       <div class="metric-note">
-        ~100 ops/sec normal: 2 players × 20Hz × ~2–3 cmds/tick<br>
-        (HSET player state + LPUSH on events).<br>
-        Blocked = sidecar waiting on BRPOP for next event.
+        <b style="color:#888">ops/sec:</b> ~150–200 normal — game server ~100 (2 players × 20Hz × 2–3 cmds) + monitor ~50 (5 INFO/LRANGE calls × 10Hz)<br>
+        <b style="color:#888">clients 4:</b> T4 RedisWriter · Sidecar · Monitor · redis-cli<br>
+        <b style="color:#888">blocked 1:</b> sidecar sleeping on BRPOP — wakes instantly when an event is pushed
       </div>
     </div>
 
@@ -542,34 +542,41 @@ function updateMatches(matches) {
 }
 
 // ── Event log ──────────────────────────────────────────────────────────────
-// Redis LRANGE returns events newest-first (LPUSH prepends).
-// seenCount tracks how many we've logged; new ones are at indices 0..newCount-1.
-let seenCount = 0;
+// monitor.py maintains an append-only deduplicated log server-side and sends
+// the newest 20 events each tick. We track which ones we've displayed by
+// content key so re-sends don't create duplicates.
+const shownEvents = new Set();
 function updateEvents(events) {
   if (!events || events.length === 0) return;
-  const newCount = Math.max(0, events.length - seenCount);
-  if (newCount === 0) return;
 
   const list = document.getElementById('event-list');
   const now  = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  let added  = 0;
 
-  // events[0] is newest; add newest-first to top of list
-  for (let i = newCount - 1; i >= 0; i--) {
-    const ev   = events[i];
+  // events[0] is newest; iterate oldest-first so prepend order is correct
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev  = events[i];
+    const key = JSON.stringify(ev);
+    if (shownEvents.has(key)) continue;
+    shownEvents.add(key);
+    added++;
+
     const type = ev.event || 'unknown';
     let text = type;
     if (type === 'player_tagged') text = `P${ev.player_id} tagged  (dist ${ev.dist != null ? ev.dist.toFixed(1) : '?'}u)`;
     else if (type === 'match_start') text = `match started  (${ev.players ?? '?'} players)`;
-    else if (type === 'match_end')   text = `match ended`;
+    else if (type === 'match_end')   text = `match ended  (winner: ${ev.winner ?? '?'})`;
 
     const div = document.createElement('div');
     div.className = `event-item ${type}`;
     div.innerHTML = `<span class="event-text">${text}</span><span class="event-time">${now}</span>`;
     list.prepend(div);
   }
-  seenCount = events.length;
-  document.getElementById('event-count').textContent = `total ${seenCount}`;
-  while (list.children.length > 60) list.removeChild(list.lastChild);
+
+  if (added > 0) {
+    document.getElementById('event-count').textContent = `${shownEvents.size} total`;
+    while (list.children.length > 60) list.removeChild(list.lastChild);
+  }
 }
 
 // ── WorldBounds auto-fit ───────────────────────────────────────────────────

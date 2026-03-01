@@ -51,12 +51,14 @@ def poll_dynamodb():
     if now - _ddb_last_fetch < 5.0:
         return _ddb_cache
     try:
+        # Limit applies per page before filtering, so use a large value to ensure
+        # we get enough META records back after the FilterExpression is applied.
         resp = dyndb.scan(
             FilterExpression="record_type = :rt",
             ExpressionAttributeValues={":rt": "META"},
             ProjectionExpression="match_id, #s, #ts",
             ExpressionAttributeNames={"#s": "status", "#ts": "timestamp"},
-            Limit=10,
+            Limit=100,
         )
         items = sorted(resp.get("Items", []),
                        key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
@@ -70,6 +72,29 @@ def poll_dynamodb():
     except Exception as e:
         print(f"[monitor] DynamoDB poll error: {e}")
     return _ddb_cache
+
+# ── Event accumulator (append-only, survives BRPOP draining the Redis list) ───
+#
+# BRPOP in sidecar.py removes events from game:seda-events as it reads them,
+# so LLEN shrinks and index-based "new event" detection breaks.
+# Instead: monitor reads whatever events are currently in the list each tick,
+# and deduplicates by content hash into a local append-only log.
+
+_event_log  = []          # [{event, ts, ...}, ...] newest first
+_event_seen = set()       # set of json strings already logged
+
+def accumulate_events(raw_events: list):
+    """Merge raw_events (from LRANGE, may be partial) into _event_log."""
+    added = 0
+    for e in raw_events:
+        key = json.dumps(e, sort_keys=True)
+        if key not in _event_seen:
+            _event_seen.add(key)
+            _event_log.insert(0, e)
+            added += 1
+    # Cap log at 200 entries
+    del _event_log[200:]
+    return added
 
 # ── Redis state collection ─────────────────────────────────────────────────────
 
@@ -92,33 +117,37 @@ def collect_state():
     clients = r.info("clients")
     persist = r.info("persistence")
 
-    # ops/sec breakdown: T4 does ~5 HSETs + occasional LPUSHes per tick at 20Hz
-    # = ~100 ops/sec for 2 players. Formula: 2 players × 20Hz × ~2-3 cmds each.
-    events_raw   = r.lrange("game:seda-events", 0, 9)   # last 10 events
-    events_total = r.llen("game:seda-events")            # total events ever pushed
+    # Merge any events still sitting in the Redis list into our local log.
+    # (Sidecar pops events via BRPOP so the list is usually short/empty;
+    #  LRANGE catches anything that arrived between pops.)
+    events_raw = r.lrange("game:seda-events", 0, 49)
+    parsed     = [json.loads(e) for e in events_raw if e]
+    accumulate_events(parsed)
+    events_in_list = r.llen("game:seda-events")
+
+    n_clients = clients.get("connected_clients", 0)
+    blocked   = clients.get("blocked_clients", 0)
 
     return {
         "players": players,
         "redis": {
             "ops_per_sec":       info.get("instantaneous_ops_per_sec", 0),
             "mem_used":          mem.get("used_memory_human", "?"),
-            "connected_clients": clients.get("connected_clients", 0),
-            "blocked_clients":   clients.get("blocked_clients", 0),
-            "total_commands":    info.get("total_commands_processed", 0),
+            # clients breakdown: server(T4) + sidecar + monitor + redis-cli = 4
+            "connected_clients": n_clients,
+            "blocked_clients":   blocked,
+            # blocked=1 is normal: sidecar sleeping on BRPOP waiting for next event
             "keyspace_hits":     info.get("keyspace_hits", 0),
             "keyspace_misses":   info.get("keyspace_misses", 0),
-            "rdb_last_save":     persist.get("rdb_last_bgsave_status", "?"),
         },
         "pipeline": {
-            # In-process queue depths not visible from outside; server logs them.
-            # We expose what we CAN measure from Redis.
             "players_online":  len(players),
-            "events_in_list":  events_total,   # game:seda-events LLEN
-            "sidecar_blocked": clients.get("blocked_clients", 0),  # BRPOP waiting
+            "events_in_list":  events_in_list,
+            "sidecar_blocked": blocked,
             "ops_per_sec":     info.get("instantaneous_ops_per_sec", 0),
             "ddb_matches":     len(_ddb_cache),
         },
-        "events":  [json.loads(e) for e in events_raw if e],
+        "events":  _event_log[:20],   # send newest 20 to browser
         "matches": poll_dynamodb(),
     }
 

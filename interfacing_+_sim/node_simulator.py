@@ -55,7 +55,8 @@ class NodeSimulator:
         self.player_id = player_id
         self.node_index = node_index
         self.seq = 0
-        self.tag_after = None  # if set to int, force a local tag after N ticks
+        self.tag_after     = None  # if set to int, force a local tag after N ticks
+        self.server_id     = None  # assigned by server on first GAME_STATE (position in player list)
         self.tick = 0
         self.running = False
         
@@ -129,18 +130,18 @@ class NodeSimulator:
             pkt_type, seq, timestamp, players = unpack_server_packet(data)
             
             if pkt_type == PKT_GAME_STATE:
-                print(f"[NODE {self.player_id}] ← GAME_STATE: "
-                      f"seq={seq}, {len(players)} players, "
-                      f"timestamp={timestamp}")
+                if self.tick % 20 == 0:
+                    print(f"[NODE {self.player_id}] ← GAME_STATE: "
+                          f"seq={seq}, {len(players)} players")
+
+                # Infer server-assigned ID from connection order:
+                # node_index 0 → server ID 1 (runner), node_index 1 → server ID 2 (tagger)
+                my_server_id = self.node_index + 1
+
                 for player in players:
-                    print(f"    Player {player['player_id']}: "
-                          f"({player['x']:.2f}, {player['y']:.2f}) "
-                          f"angle={player['angle']:.3f} "
-                          f"flags=0x{player['flags']:02x}")
-                    # If this player entry is for us and we're flagged TAGGED, end the game
-                    if player['player_id'] == self.player_id and (player['flags'] & FLAG_TAGGED):
-                        print(f"[NODE {self.player_id}] GAME OVER: you have been tagged (flags=0x{player['flags']:02x})")
-                        # Stop the simulator gracefully
+                    if player['flags'] & FLAG_TAGGED:
+                        tagged_id = player['player_id']
+                        print(f"[NODE {self.player_id}] P{tagged_id} TAGGED — match over")
                         self.close()
                         return
         except socket.timeout:
@@ -148,56 +149,80 @@ class NodeSimulator:
         except Exception as e:
             print(f"[NODE {self.player_id}] Error receiving: {e}")
     
-    def run(self, duration_seconds=None, max_ticks=None):
-        """
-        Run the simulation.
-        
-        Args:
-            duration_seconds: Run for this many seconds (None = infinite)
-            max_ticks: Stop after this many ticks (None = infinite)
-        """
+    def _run_one_game(self, duration_seconds=None, max_ticks=None):
+        """Run a single game until tagged or limits hit. Returns True if tagged (play again prompt),
+        False if interrupted or hard-stopped."""
         self.running = True
-        
-        # Send registration packet
+        self.tick    = 0
+        self.seq     = 0
+
+        # Re-open socket (closed at end of previous game)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(0.05)
+
         self.register()
-        time.sleep(0.1)  # Wait a bit for ACK before starting
-        
-        # Run at 20 Hz (50ms per tick)
+        time.sleep(0.1)
+
         tick_interval = 1.0 / 20.0
-        start_time = time.time()
-        
+        start_time    = time.time()
+        tagged_out    = False
+
         try:
             while self.running:
                 tick_start = time.time()
-                
-                # Check if we should stop
+
                 if duration_seconds and (time.time() - start_time) > duration_seconds:
                     break
                 if max_ticks and self.tick >= max_ticks:
                     break
-                
-                # Send state update
+
                 self.send_state_update()
-                # If tag_after is set, check and trigger local game over
+
                 if self.tag_after is not None and self.tick >= self.tag_after:
                     print(f"[NODE {self.player_id}] (local) GAME OVER: forced tag after {self.tag_after} ticks")
+                    tagged_out = True
                     break
-                
-                # Try to receive incoming packets
+
                 self.receive_game_state()
-                
-                # Maintain 20 Hz tick rate
-                elapsed = time.time() - tick_start
+                if not self.running:   # receive_game_state() called close() on tag
+                    tagged_out = True
+                    break
+
+                elapsed    = time.time() - tick_start
                 sleep_time = max(0, tick_interval - elapsed)
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-                
+
                 self.tick += 1
-        
+
         except KeyboardInterrupt:
-            print(f"\n[NODE {self.player_id}] Interrupted by user")
+            print(f"\n[NODE {self.player_id}] Interrupted")
+            return False
         finally:
-            self.close()
+            self.sock.close()
+
+        return tagged_out
+
+    def run(self, duration_seconds=None, max_ticks=None):
+        """Run games in a loop, prompting to play again after each match ends."""
+        try:
+            while True:
+                tagged = self._run_one_game(duration_seconds, max_ticks)
+                if not tagged:
+                    break
+                print(f"\n[NODE {self.player_id}] ── GAME OVER ──")
+                try:
+                    answer = input(f"[NODE {self.player_id}] Play again? [Y/n]: ").strip().lower()
+                except EOFError:
+                    answer = 'n'   # non-interactive (piped/tmux without tty)
+                if answer in ('', 'y', 'yes'):
+                    print(f"[NODE {self.player_id}] Restarting...\n")
+                else:
+                    break
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print(f"[NODE {self.player_id}] Closed after {self.tick} ticks")
     
     def close(self):
         """Clean up and close socket."""
