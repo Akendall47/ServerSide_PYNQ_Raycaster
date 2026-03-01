@@ -38,9 +38,10 @@ import struct
 TAG_RADIUS       = 20.0  # units: players closer than this get tagged (orbit radius=50, so ~40° arc)
 MATCH_PLAYERS    = 2     # number of players that triggers match_start
 MAX_PLAYERS      = 2     # reject registrations beyond this limit
-TAGS_TO_WIN      = 3     # tagger must tag runner this many times to win
+TAGS_TO_WIN      = 2     # tagger must tag runner this many times to win
 TAG_FLASH_S      = 1.0   # seconds FLAG_TAGGED stays set (visual flash) before clearing for next tag
-MATCH_END_HOLD_S = 1.0   # after final tag: keep broadcasting FLAG_TAGGED so nodes see it before idle
+MATCH_END_HOLD_S  = 1.0   # after final tag: keep broadcasting FLAG_TAGGED so nodes see it before idle
+LOCKOUT_S         = 3.0   # after match end: reject new registrations (gives sims time to stop+prompt)
 # Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.08 rad/tick)
 
 class GameTick:
@@ -55,6 +56,7 @@ class GameTick:
         self.match_started = False
         self.match_ended   = False
         self.match_end_at  = None   # monotonic time to clear players after final tag broadcast
+        self.lockout_until = None   # monotonic time after which new registrations are accepted
         self.tag_count     = 0      # number of times runner has been tagged this match
         self.tag_flash_at  = None   # monotonic time when current FLAG_TAGGED flash expires
         self.tick_count    = 0
@@ -124,9 +126,12 @@ class GameTick:
         p["flags"] = (p["flags"] & FLAG_TAGGED) | (flags & ~FLAG_TAGGED)
 
     def _register_player(self, addr):
+        if self.lockout_until and time.monotonic() < self.lockout_until:
+            return  # silently drop — sims are still winding down after match end
         if len(self.players) >= MAX_PLAYERS:
             print(f"[T2] rejected connection from {addr} — already at {MAX_PLAYERS} players")
             return
+        self.lockout_until = None  # first registration after lockout clears it
         player_id = self.next_id
         self.next_id += 1
         self.players[addr] = {
@@ -180,7 +185,7 @@ class GameTick:
         if self.match_end_at is None:
             return
         if time.monotonic() >= self.match_end_at:
-            print("[T2] match end hold expired — clearing players")
+            print(f"[T2] match end hold expired — clearing players, lockout {LOCKOUT_S}s")
             # Delete stale player HSET keys from Redis so monitor goes idle cleanly
             for p in self.players.values():
                 self.write_queue.put({"op": "del", "key": f"player:{p['player_id']}"})
@@ -191,6 +196,7 @@ class GameTick:
             self.match_end_at  = None
             self.match_started = False
             self.match_ended   = False
+            self.lockout_until = time.monotonic() + LOCKOUT_S
 
     async def _check_proximity(self):
         """Generic pairwise distance check across all players.
