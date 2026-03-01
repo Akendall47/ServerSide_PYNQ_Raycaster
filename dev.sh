@@ -17,17 +17,10 @@ EC2="ubuntu@18.175.238.148"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 
-# Kill existing session and stale EC2 processes, then pull latest code
+# Kill stale EC2 processes and pull latest code (non-fatal — WSL SSH can be flaky)
 tmux kill-session -t "$SESSION" 2>/dev/null
 echo "--- pulling latest code on EC2 ---"
-for attempt in 1 2 3; do
-    if ssh -i "$KEY" "$EC2" "pkill -f 'ec2/server/server.py' || true; pkill -f 'ec2/sidecar/sidecar.py' || true; cd ~/ServerSide_PYNQ_Raycaster && git pull && echo 'pull OK'"; then
-        break
-    fi
-    echo "SSH attempt $attempt failed, retrying..." >&2
-    [ $attempt -eq 3 ] && { echo "!!! EC2 git pull FAILED after 3 attempts — aborting." >&2; exit 1; }
-    sleep 2
-done
+ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; cd ~/ServerSide_PYNQ_Raycaster && git pull"
 echo "--- done ---"
 
 # Create session
