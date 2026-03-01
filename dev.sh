@@ -13,7 +13,7 @@
 #
 # Usage: ./dev.sh  (from repo root)
 # Requires: tmux, SSH key at repo root raycastpair.pem
-# For basic/ stack: ./basic/basicdev.sh
+# For basic/ stack: ./basic/basicdev.sh 
 
 SESSION="seda"
 EC2="ubuntu@18.175.238.148"
