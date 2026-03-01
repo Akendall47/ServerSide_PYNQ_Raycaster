@@ -118,6 +118,9 @@ class GameTick:
         if pkt_type == PKT_REGISTER:
             return  # position not included in REGISTER packets
 
+        if addr not in self.players:
+            return  # registration was rejected (lockout or full) — drop packet
+
         p = self.players[addr]
         p["x"]     = x
         p["y"]     = y
@@ -161,10 +164,10 @@ class GameTick:
     #   _check_match_end() : win condition (all tagged, time limit, score, etc.)
 
     async def _tick(self):
-        self._clear_tag_flash()
         await self._check_match_end_hold()
         await self._check_proximity()
         await self._check_match_end()
+        self._clear_tag_flash()
         # await self._check_shooting()   # TODO: wire to C++ is_visible()
 
     def _clear_tag_flash(self):

@@ -124,30 +124,28 @@ class NodeSimulator:
         self.seq = (self.seq + 1) & 0xFFFF  # Wrap at 65535
     
     def receive_game_state(self):
-        """Try to receive and print a GAME_STATE packet."""
-        try:
-            data, addr = self.sock.recvfrom(1024)
-            pkt_type, seq, timestamp, players = unpack_server_packet(data)
-            
-            if pkt_type == PKT_GAME_STATE:
-                if self.tick % 20 == 0:
-                    print(f"[NODE {self.player_id}] ← GAME_STATE: "
-                          f"seq={seq}, {len(players)} players")
+        """Drain all available GAME_STATE packets this tick. Stop on FLAG_TAGGED."""
+        while True:
+            try:
+                data, addr = self.sock.recvfrom(1024)
+                pkt_type, seq, timestamp, players = unpack_server_packet(data)
 
-                # Infer server-assigned ID from connection order:
-                # node_index 0 → server ID 1 (runner), node_index 1 → server ID 2 (tagger)
-                my_server_id = self.node_index + 1
+                if pkt_type == PKT_GAME_STATE:
+                    if self.tick % 20 == 0:
+                        print(f"[NODE {self.player_id}] ← GAME_STATE: "
+                              f"seq={seq}, {len(players)} players")
 
-                for player in players:
-                    if player['flags'] & FLAG_TAGGED:
-                        tagged_id = player['player_id']
-                        print(f"[NODE {self.player_id}] P{tagged_id} TAGGED — match over")
-                        self.close()
-                        return
-        except socket.timeout:
-            pass  
-        except Exception as e:
-            print(f"[NODE {self.player_id}] Error receiving: {e}")
+                    for player in players:
+                        if player['flags'] & FLAG_TAGGED:
+                            tagged_id = player['player_id']
+                            print(f"[NODE {self.player_id}] P{tagged_id} TAGGED — match over")
+                            self.close()
+                            return
+            except socket.timeout:
+                break  # no more packets waiting this tick
+            except Exception as e:
+                print(f"[NODE {self.player_id}] Error receiving: {e}")
+                break
     
     def _run_one_game(self, duration_seconds=None, max_ticks=None):
         """Run a single game until tagged or limits hit. Returns True if tagged (play again prompt),
