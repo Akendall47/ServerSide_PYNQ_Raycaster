@@ -16,9 +16,9 @@ EC2="ubuntu@18.175.238.148"
 KEY="$(cd "$(dirname "$0")" && pwd)/raycastpair.pem"
 SSH="ssh -t -i $KEY $EC2"
 
-# Kill existing tmux session and stale EC2 processes
+# Kill existing tmux session and stale EC2 processes, then pull latest code
 tmux kill-session -t "$SESSION" 2>/dev/null
-$SSH "pkill -f server.py; pkill -f sidecar.py" 2>/dev/null || true
+$SSH "pkill -f server.py; pkill -f sidecar.py; cd ~/ServerSide_PYNQ_Raycaster && git pull" 2>/dev/null || true
 
 # Create session
 tmux new-session -d -s "$SESSION" -x 220 -y 50
