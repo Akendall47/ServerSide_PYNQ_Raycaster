@@ -70,7 +70,7 @@ tmux send-keys -t "$SESSION:0.1" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activat
 
 # Monitor: SSH tunnel (-L 8080) + monitor.py — open http://localhost:8080 in browser
 tmux select-pane -t "$SESSION:0.2" -T "monitor :8080"
-tmux send-keys -t "$SESSION:0.2" "ssh -i $KEY -L 8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/monitor/monitor.py'"
+tmux send-keys -t "$SESSION:0.2" "ssh -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/monitor/monitor.py'"
 
 tmux select-pane -t "$SESSION:0.3" -T "node sim 1"
 tmux send-keys -t "$SESSION:0.3" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1"
