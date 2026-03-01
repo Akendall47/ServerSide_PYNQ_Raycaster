@@ -10,7 +10,7 @@ import time
 # Add parent directory to path so we can import interfacing module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from interfacing.protocol import (
+from interfacing_+_sim.protocol import (
     pack_node_packet,
     unpack_header,
     unpack_player_entries,

@@ -23,7 +23,7 @@ import queue
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'interfacing'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'interfacing_+_sim'))
 
 from t1_udp_receiver import UDPReceiver
 from t2_game_tick    import GameTick
