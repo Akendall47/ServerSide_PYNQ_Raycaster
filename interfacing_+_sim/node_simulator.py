@@ -25,7 +25,6 @@ Example:
 
 import socket
 import time
-import sys
 import math
 import argparse
 import threading
@@ -209,8 +208,6 @@ class NodeSimulator:
     def run(self, duration_seconds=None, max_ticks=None, redis_host="127.0.0.1", redis_port=6379):
         """Run games in a loop. After game over, waits for 'Restart' button in dashboard
         (Redis pub/sub on game:control) or keyboard Enter — whichever comes first."""
-        import select
-
         ps = None  # pubsub handle — created once, reused across games
         try:
             if redislib:
@@ -235,34 +232,37 @@ class NodeSimulator:
 
                 # Drain any messages that arrived during the match (stale publishes)
                 if ps:
+                    drained = 0
                     while ps.get_message():
-                        pass
+                        drained += 1
+                    if drained:
+                        print(f"[NODE {self.player_id}] drained {drained} stale pub/sub message(s)")
 
-                # Wait for restart: pub/sub message OR keyboard Enter
-                # stdin_is_tty: only offer keyboard fallback on a real terminal.
-                # When launched non-interactively (tmux send-keys, pipe) stdin
-                # select() returns immediately on EOF, causing infinite restarts.
-                stdin_is_tty = sys.stdin.isatty()
+                # Wait for restart: pub/sub message only.
+                # Keyboard fallback deliberately removed — tmux panes have a real
+                # PTY so isatty()=True, meaning any accidental Enter would restart.
+                # Dashboard ▶ RESTART button is the sole trigger.
                 restarting = False
                 while not restarting:
                     if ps:
                         msg = ps.get_message()
-                        if msg and msg["type"] == "message":
-                            try:
-                                cmd = json.loads(msg["data"])
-                                if cmd.get("cmd") == "restart":
-                                    print(f"[NODE {self.player_id}] Restart from dashboard!")
-                                    restarting = True
-                            except Exception:
-                                pass
-
-                    # Keyboard Enter fallback — only on a real terminal
-                    if stdin_is_tty and not restarting:
-                        r_list, _, _ = select.select([sys.stdin], [], [], 0)
-                        if r_list:
-                            line = sys.stdin.readline()
-                            if line:  # empty string = EOF, not a real keypress
-                                restarting = True
+                        if msg:
+                            print(f"[NODE {self.player_id}] pub/sub msg: {msg}")
+                            if msg["type"] == "message":
+                                try:
+                                    cmd = json.loads(msg["data"])
+                                    if cmd.get("cmd") == "restart":
+                                        print(f"[NODE {self.player_id}] Restart from dashboard!")
+                                        restarting = True
+                                except Exception:
+                                    pass
+                    else:
+                        # No Redis — block on stdin (only reaches here if Redis unavailable)
+                        try:
+                            input("    Press Enter to restart: ")
+                            restarting = True
+                        except EOFError:
+                            time.sleep(1.0)
 
                     if not restarting:
                         time.sleep(0.1)  # 10 Hz poll — low CPU while waiting
