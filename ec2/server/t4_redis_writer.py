@@ -14,6 +14,14 @@
 #   T2 puts items onto write_queue (a SimpleQueue) from the event loop;
 #   T4's thread blocks on write_queue.get() — zero CPU while idle.
 #
+# Pipeline batching:
+#   Every tick T2 pushes one HSET per player. Rather than executing each as a
+#   separate round-trip, _drain() collects everything currently on the queue,
+#   batches all HSETs into a single redis.pipeline().execute() call, then handles
+#   any LPUSHes individually (rare events — no benefit batching them).
+#   On localhost this saves ~0.05ms per extra player; on ElastiCache (~0.5ms RTT)
+#   it becomes meaningful immediately.
+#
 # Queue input (from T2):
 #   {"op": "hset",  "key": str, "mapping": dict}  : player position, every tick
 #   {"op": "lpush", "key": str, "value":   str}   : match event (match_start etc.)
@@ -22,7 +30,6 @@
 
 import threading
 import queue
-import json
 
 REDIS_HOST = "127.0.0.1"   # change to ElastiCache endpoint on real EC2
 REDIS_PORT = 6379
@@ -41,7 +48,7 @@ class RedisWriter:
         print("[T4 RedisWriter] thread started")
 
     def _run(self):
-        """Thread entry point. Connects to Redis then blocks on write_queue.get()."""
+        """Thread entry point. Connects to Redis then processes queue in batches."""
         try:
             import redis as redislib
             self.client = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT,
@@ -52,35 +59,46 @@ class RedisWriter:
             print(f"[T4 RedisWriter] Redis not available ({e}) : writes logged only")
             self.client = None
 
-        # Block on queue — zero CPU while T2 has nothing to write
         while True:
-            msg = self.queue.get()   # blocks here until T2 puts something
-            self._write(msg)
+            # Block until at least one message is ready, then drain the rest
+            first = self.queue.get()
+            msgs  = [first]
+            while True:
+                try:
+                    msgs.append(self.queue.get_nowait())
+                except queue.Empty:
+                    break
+            self._flush(msgs)
 
-    def _write(self, msg: dict):
-        op = msg.get("op")
-        if op == "hset":
-            self._hset(msg["key"], msg["mapping"])
-        elif op == "lpush":
-            self._lpush(msg["key"], msg["value"])
-        else:
-            print(f"[T4] unknown op: {msg}")
+    def _flush(self, msgs: list):
+        """Batch all HSETs into one pipeline; execute LPUSHes individually."""
+        hsets  = [m for m in msgs if m.get("op") == "hset"]
+        lpushs = [m for m in msgs if m.get("op") == "lpush"]
+        other  = [m for m in msgs if m.get("op") not in ("hset", "lpush")]
 
-    def _hset(self, key: str, mapping: dict):
-        if not self.client:
-            print(f"[T4] would HSET {key} {mapping}")
-            return
-        try:
-            self.client.hset(key, mapping=mapping)
-        except Exception as e:
-            print(f"[T4] HSET {key} failed: {e}")
+        for m in other:
+            print(f"[T4] unknown op: {m}")
 
-    def _lpush(self, key: str, value: str):
-        if not self.client:
-            print(f"[T4] would LPUSH {key} {value}")
-            return
-        try:
-            self.client.lpush(key, value)
-            print(f"[T4] event: {value}")
-        except Exception as e:
-            print(f"[T4] LPUSH {key} failed: {e}")
+        # Pipeline: bundle all per-tick player position writes into one round-trip
+        if hsets and self.client:
+            try:
+                pipe = self.client.pipeline(transaction=False)
+                for m in hsets:
+                    pipe.hset(m["key"], mapping=m["mapping"])
+                pipe.execute()
+            except Exception as e:
+                print(f"[T4] pipeline HSET failed: {e}")
+        elif hsets:
+            for m in hsets:
+                print(f"[T4] would HSET {m['key']} {m['mapping']}")
+
+        # Events are rare — execute individually so errors are visible per-event
+        for m in lpushs:
+            if self.client:
+                try:
+                    self.client.lpush(m["key"], m["value"])
+                    print(f"[T4] event: {m['value']}")
+                except Exception as e:
+                    print(f"[T4] LPUSH {m['key']} failed: {e}")
+            else:
+                print(f"[T4] would LPUSH {m['key']} {m['value']}")

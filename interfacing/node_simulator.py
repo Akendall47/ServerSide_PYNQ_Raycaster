@@ -64,19 +64,14 @@ class NodeSimulator:
         self.y = 0.0
         self.angle = 0.0
         
-        if node_index % 2 == 0:
-            # Even nodes: larger circles, slower rotation
-            self.radius = 50.0 + (node_index * 10)
-            self.rotation_speed = 0.05 + (node_index * 0.01)
-            self.shoot_frequency = 20  # Shoot every 20 ticks
-        else:
-            # Odd nodes: smaller circles, faster rotation
-            self.radius = 30.0 + (node_index * 5)
-            self.rotation_speed = 0.15 + (node_index * 0.02)
-            self.shoot_frequency = 30  # Shoot every 30 ticks
-        
-        # Give each node a different starting angle
-        self.angle = (node_index * math.pi * 2 / 4)  # Spread them around the circle
+        # All nodes share the same radius so their paths intersect and tag fires.
+        # Different rotation speeds mean they lap each other repeatedly.
+        self.radius          = 50.0
+        self.rotation_speed  = 0.05 + (node_index * 0.03)  # node 0: 0.05, node 1: 0.08
+        self.shoot_frequency = 20 + (node_index * 10)
+
+        # Spread starting angles so they don't begin on top of each other
+        self.angle = (node_index * math.pi * 2 / 4)
         
         # Socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -218,7 +213,8 @@ def main():
     parser.add_argument('max_ticks', nargs='?', type=int, default=None, help='Stop after N ticks (optional)')
     parser.add_argument('--tag-after', '-t', type=int, default=None,
                         help='Force a local TAG after N ticks (prints GAME OVER and stops)')
-    parser.add_argument('--player-id', '-p', type=int, default=1, help='Player ID for first node (default: 1)')
+    parser.add_argument('--player-id', '-p', type=int, default=1,
+                        help='Local label only — NOT sent on the wire. Server assigns real IDs by connection order.')
     parser.add_argument('--nodes', '-n', type=int, default=1, help='Number of nodes to simulate (default: 1)')
     args = parser.parse_args()
 

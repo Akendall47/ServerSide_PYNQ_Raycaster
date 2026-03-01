@@ -35,7 +35,7 @@ from protocol import (
 )
 import struct
 
-TAG_RADIUS    = 5.0   # units: players closer than this get tagged
+TAG_RADIUS    = 8.0   # units: players closer than this get tagged
 MATCH_PLAYERS = 2     # number of players that triggers match_start
 
 class GameTick:
@@ -46,7 +46,7 @@ class GameTick:
         self.interval        = 1.0 / tick_rate
 
         self.players       = {}     # addr → {player_id, x, y, angle, flags}
-        self.next_id       = 0
+        self.next_id       = 1      # player IDs start at 1
         self.match_started = False
         self.tick_count    = 0
 

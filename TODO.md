@@ -9,9 +9,16 @@ _2026-03-01_
 - **Single event loop = single core:** T1/T2/T3 share one CPU thread; expensive game logic (raycasting, many players) starves T1/T3
 - **BRPOP is LIFO:** `LPUSH` + `BRPOP` processes events newest-first; under burst `match_end` can arrive before `player_tagged`; fix: use `RPUSH` + `BLPOP`
 
+## Dashboard (next feature)
+
+- **Game visualiser:** localhost web page showing live player positions as dots on a 2D canvas, tag events as flashes — driven by T3 broadcast state via WebSocket
+- **Server metrics panel:** queue depths (pkt_q, bcast_q, write_q), tick_ms, player count — polled from T2's existing metrics via a small HTTP endpoint
+- **Redis monitor panel:** `redis-cli --stat` equivalent in browser — ops/sec, memory, connected clients
+- **Match event log:** stream of `match_start`, `player_tagged`, `match_end` events from the sidecar/DynamoDB
+- **Transport:** T3 already has a `_send_websocket` stub — add a `websockets` server there, push the same game state JSON the UDP clients get
+
 ## Infrastructure TODOs
 
-- **T4 Redis pipeline:** each HSET is a separate round-trip; use `redis.pipeline()` to batch per-tick writes into one network call — low gain on localhost but important before ElastiCache migration
 - **Redis localhost:** currently `127.0.0.1:6379` (see below); should point to ElastiCache for production
 - **match_end trigger:** no explicit end condition yet; currently only fires on server Ctrl+C (SIGINT handler)
 - **Player auth / rate limiting:** T1 accepts any UDP packet; no source validation or flood protection
