@@ -209,13 +209,13 @@ class GameTick:
 
     async def _push_redis_writes(self):
         for p in self.players.values():
-            await self.write_queue.put({
+            self.write_queue.put({          # SimpleQueue.put() — no await
                 "op": "hset", "key": f"player:{p['player_id']}",
                 "mapping": {"x": round(p["x"], 4), "y": round(p["y"], 4),
                             "angle": round(p["angle"], 4), "flags": p["flags"]},
             })
 
     async def _push_event(self, event: dict):
-        await self.write_queue.put({
+        self.write_queue.put({              # SimpleQueue.put() — no await
             "op": "lpush", "key": "game:seda-events", "value": json.dumps(event),
         })
