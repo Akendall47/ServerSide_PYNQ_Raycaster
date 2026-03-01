@@ -39,21 +39,12 @@ echo "--- killing stale EC2 processes and pulling latest code ---"
 # Each pkill uses '|| true' so a "no process found" exit-1 doesn't abort the chain.
 # fuser on EC2 also frees port 8080 server-side in case monitor.py crashed mid-bind.
 # git pull is last and its exit code is checked.
-ssh -i "$KEY" "$EC2" "
-  pkill -f server.py  2>/dev/null || true
-  pkill -f sidecar.py 2>/dev/null || true
-  pkill -f monitor.py 2>/dev/null || true
-  fuser -k 8080/tcp   2>/dev/null || true
-  sleep 1
-  cd ~/ServerSide_PYNQ_Raycaster || exit 1
-  echo '--- git status ---'
-  git status --short
-  echo '--- git pull ---'
-  git pull
-"
-SSH_EXIT=$?
-if [ $SSH_EXIT -ne 0 ]; then
-  echo "!!! EC2 setup failed (exit $SSH_EXIT) — check output above"
+# Write a stop script to EC2 and run it — avoids pkill -f matching its own SSH command string
+ssh -i "$KEY" "$EC2" 'printf "#!/bin/bash\npkill -f server.py 2>/dev/null; pkill -f sidecar.py 2>/dev/null; pkill -f monitor.py 2>/dev/null; fuser -k 8080/tcp 2>/dev/null; true\n" > /tmp/_stop_seda.sh && bash /tmp/_stop_seda.sh'
+sleep 1
+ssh -i "$KEY" "$EC2" 'cd ~/ServerSide_PYNQ_Raycaster && git status --short && git pull'
+if [ $? -ne 0 ]; then
+  echo "!!! EC2 git pull failed — check output above"
   exit 1
 fi
 echo "--- EC2 ready ---"
