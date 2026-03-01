@@ -35,8 +35,12 @@ from protocol import (
 )
 import struct
 
-TAG_RADIUS    = 8.0   # units: players closer than this get tagged
+TAG_RADIUS    = 20.0  # units: players closer than this get tagged (orbit radius=50, so ~40° arc)
 MATCH_PLAYERS = 2     # number of players that triggers match_start
+MAX_PLAYERS   = 2     # reject registrations beyond this limit
+# Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.08 rad/tick)
+# Tag fires when tagger enters runner's hitbox (dist < TAG_RADIUS). Runner (lower ID) is tagged.
+TAG_CLEAR_S   = 1.5   # seconds before FLAG_TAGGED is cleared (visual flash)
 
 class GameTick:
     def __init__(self, packet_queue, broadcast_queue, write_queue, tick_rate=20):
@@ -49,6 +53,7 @@ class GameTick:
         self.next_id       = 1      # player IDs start at 1
         self.match_started = False
         self.tick_count    = 0
+        self.tag_clear_at  = {}     # player_id → monotonic time when FLAG_TAGGED clears
 
     async def run(self):
         print(f"[T2 GameTick] running at {1/self.interval:.0f} Hz")
@@ -115,6 +120,9 @@ class GameTick:
         p["flags"] = (p["flags"] & FLAG_TAGGED) | (flags & ~FLAG_TAGGED)
 
     def _register_player(self, addr):
+        if len(self.players) >= MAX_PLAYERS:
+            print(f"[T2] rejected connection from {addr} — already at {MAX_PLAYERS} players")
+            return
         player_id = self.next_id
         self.next_id += 1
         self.players[addr] = {
@@ -144,9 +152,20 @@ class GameTick:
     #   _check_match_end() : win condition (all tagged, time limit, score, etc.)
 
     async def _tick(self):
+        self._clear_expired_tags()
         await self._check_proximity()
         # await self._check_shooting()   # TODO: wire to C++ is_visible()
         # await self._check_match_end()  # TODO: win condition
+
+    def _clear_expired_tags(self):
+        now = time.monotonic()
+        for p in self.players.values():
+            pid = p["player_id"]
+            if (p["flags"] & FLAG_TAGGED) and pid in self.tag_clear_at:
+                if now >= self.tag_clear_at[pid]:
+                    p["flags"] &= ~FLAG_TAGGED
+                    del self.tag_clear_at[pid]
+                    print(f"[T2] player {pid} tag cleared")
 
     async def _check_proximity(self):
         """Generic pairwise distance check across all players.
@@ -165,14 +184,18 @@ class GameTick:
                 # Generic: compute straight-line distance between this pair
                 dist = math.sqrt((p1["x"] - p2["x"])**2 + (p1["y"] - p2["y"])**2)
 
-                # Tag game rule: players within TAG_RADIUS → lower player_id gets tagged
-                # TODO: replace with C++ game_logic.is_visible() check before tagging
+                # Tag game rule: when a player enters another's hitbox (dist < TAG_RADIUS),
+                # the runner (lower player_id = slower orbit) gets tagged by the tagger
+                # (higher player_id = faster orbit, speed 0.08 vs 0.05).
                 if dist < TAG_RADIUS:
                     tagged = p1 if p1["player_id"] < p2["player_id"] else p2
                     if not (tagged["flags"] & FLAG_TAGGED):
                         tagged["flags"] |= FLAG_TAGGED
+                        self.tag_clear_at[tagged["player_id"]] = (
+                            time.monotonic() + TAG_CLEAR_S
+                        )
                         print(f"[T2] player {tagged['player_id']} tagged "
-                              f"(dist={dist:.2f})")
+                              f"(dist={dist:.2f}) — clears in {TAG_CLEAR_S}s")
                         await self._push_event({
                             "event":     "player_tagged",
                             "player_id": tagged["player_id"],

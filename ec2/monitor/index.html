@@ -15,19 +15,109 @@
     height: 100vh;
     overflow: hidden;
   }
+
+  /* ── Header ── */
   header {
-    padding: 8px 16px;
+    padding: 6px 14px;
     background: #111;
     border-bottom: 1px solid #222;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
+    flex-shrink: 0;
   }
-  header h1 { font-size: 14px; color: #00d4ff; letter-spacing: 2px; text-transform: uppercase; }
+  header h1 { font-size: 13px; color: #00d4ff; letter-spacing: 2px; text-transform: uppercase; }
   #status { font-size: 12px; }
-  #status.connected { color: #00ff88; }
+  #status.connected    { color: #00ff88; }
   #status.disconnected { color: #ff4444; }
+  #fps { font-size: 11px; color: #555; margin-left: auto; }
+  #game-chip {
+    font-size: 11px; color: #555;
+    background: #181818; border: 1px solid #2a2a2a;
+    padding: 2px 8px; border-radius: 3px;
+  }
+  #game-chip.active { color: #ffaa00; border-color: #ffaa0055; }
 
+  /* ── SEDA Pipeline strip ── */
+  .pipeline-strip {
+    flex-shrink: 0;
+    background: #0f0f0f;
+    border-bottom: 1px solid #1e1e1e;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .pipe-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 90px;
+  }
+  .pipe-stage .stage-label {
+    font-size: 9px;
+    color: #333;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .pipe-stage .stage-box {
+    border: 1px solid #222;
+    border-radius: 4px;
+    padding: 4px 10px;
+    text-align: center;
+    min-width: 80px;
+  }
+  .pipe-stage .stage-name {
+    font-size: 11px;
+    font-weight: bold;
+    color: #00d4ff;
+  }
+  .pipe-stage .stage-desc {
+    font-size: 9px;
+    color: #444;
+    margin-top: 1px;
+  }
+  .pipe-stage .stage-val {
+    font-size: 10px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .pipe-stage .stage-val span {
+    color: #ffaa00;
+    font-weight: bold;
+  }
+  /* arrow between stages */
+  .pipe-arrow {
+    font-size: 14px;
+    color: #2a2a2a;
+    padding: 0 4px;
+    margin-bottom: -10px; /* align with box midpoint */
+  }
+  /* queue label on the arrow */
+  .pipe-queue {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 2px;
+  }
+  .pipe-queue .q-arrow { font-size: 13px; color: #2a2a2a; }
+  .pipe-queue .q-label { font-size: 8px; color: #2a2a2a; letter-spacing: 0.5px; margin-top: -2px; }
+  /* stage colours by role */
+  .stage-net   { border-color: #1a3a2a; }
+  .stage-net   .stage-name { color: #00ff88; }
+  .stage-logic { border-color: #1a2a3a; }
+  .stage-logic .stage-name { color: #00d4ff; }
+  .stage-io    { border-color: #2a2a1a; }
+  .stage-io    .stage-name { color: #ffaa00; }
+  .stage-store { border-color: #2a1a1a; }
+  .stage-store .stage-name { color: #ff6688; }
+  .stage-ext   { border-color: #2a1a2a; }
+  .stage-ext   .stage-name { color: #cc88ff; }
+
+  /* ── Main content ── */
   .main {
     display: flex;
     flex: 1;
@@ -36,7 +126,7 @@
     background: #1a1a1a;
   }
 
-  /* ── Canvas panel ── */
+  /* ── Canvas ── */
   .canvas-panel {
     flex: 1;
     display: flex;
@@ -44,93 +134,81 @@
     justify-content: center;
     background: #0d0d0d;
     position: relative;
+    min-width: 0;
   }
-  canvas {
-    border: 1px solid #1e1e1e;
-  }
+  canvas { border: 1px solid #1e1e1e; }
   .canvas-label {
-    position: absolute;
-    top: 8px;
-    left: 12px;
-    font-size: 11px;
-    color: #444;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    position: absolute; top: 8px; left: 12px;
+    font-size: 10px; color: #333; letter-spacing: 1px; text-transform: uppercase;
   }
 
   /* ── Side panel ── */
   .side {
-    width: 280px;
+    width: 310px;
     display: flex;
     flex-direction: column;
     background: #111;
     border-left: 1px solid #1e1e1e;
+    overflow-y: auto;
   }
 
   .panel {
-    padding: 12px 14px;
-    border-bottom: 1px solid #1e1e1e;
+    padding: 10px 13px;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
   }
   .panel h2 {
-    font-size: 11px;
-    color: #00d4ff;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
+    font-size: 10px; color: #00d4ff;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 8px;
   }
 
-  /* ── Redis metrics ── */
-  .metric-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    color: #aaa;
-  }
-  .metric-row span:last-child { color: #e0e0e0; font-weight: bold; }
+  .metric-row { display: flex; justify-content: space-between; margin-bottom: 4px; color: #888; }
+  .metric-row span:last-child { color: #ddd; font-weight: bold; }
+  .metric-note { font-size: 10px; color: #444; margin-top: 2px; margin-bottom: 4px; line-height: 1.4; }
 
-  /* ── Player table ── */
   table { width: 100%; border-collapse: collapse; }
-  th { color: #555; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
-  td { padding: 2px 0; color: #ccc; }
-  td.pid { color: #00ff88; font-weight: bold; }
-  td.tagged { color: #ff4444; }
+  th { color: #444; font-weight: normal; text-align: left; padding-bottom: 3px; font-size: 10px; }
+  td { padding: 2px 0; color: #bbb; font-size: 12px; }
+  td.pid { font-weight: bold; }
+  td.tagged { color: #ff4444; font-weight: bold; animation: flash 0.4s infinite; }
+  @keyframes flash { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
 
-  /* ── Event log ── */
+  /* event log */
   .events-panel {
-    flex: 1;
-    padding: 12px 14px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    flex: 1; padding: 10px 13px;
+    display: flex; flex-direction: column;
+    min-height: 80px;
   }
   .events-panel h2 {
-    font-size: 11px;
-    color: #00d4ff;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
+    font-size: 10px; color: #00d4ff;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 8px; flex-shrink: 0;
   }
-  #event-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+  #event-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
   .event-item {
-    background: #161616;
-    border-left: 3px solid #333;
-    padding: 5px 8px;
-    font-size: 11px;
-    color: #888;
-    border-radius: 2px;
+    background: #141414; border-left: 3px solid #2a2a2a;
+    padding: 4px 7px; font-size: 11px; color: #777; border-radius: 2px;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
   }
-  .event-item.tagged { border-left-color: #ff4444; color: #ffaaaa; }
-  .event-item.match_start { border-left-color: #00ff88; color: #aaffcc; }
-  .event-item.match_end { border-left-color: #ffaa00; color: #ffd088; }
+  .event-text { flex: 1; }
+  .event-time { color: #333; font-size: 10px; flex-shrink: 0; }
+  .event-item.player_tagged { border-left-color: #ff4444; color: #ffaaaa; }
+  .event-item.match_start   { border-left-color: #00ff88; color: #aaffcc; }
+  .event-item.match_end     { border-left-color: #ffaa00; color: #ffd088; }
 
-  /* ── FPS counter ── */
-  #fps { font-size: 11px; color: #444; margin-left: auto; }
+  /* DynamoDB matches */
+  .match-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 3px 0; border-bottom: 1px solid #1a1a1a;
+    font-size: 11px;
+  }
+  .match-row:last-child { border-bottom: none; }
+  .match-id { color: #888; font-size: 10px; }
+  .match-status.in_progress { color: #ffaa00; }
+  .match-status.completed   { color: #00ff88; }
+  .match-time { color: #444; font-size: 10px; }
+  .ddb-note { font-size: 10px; color: #333; margin-top: 5px; }
 </style>
 </head>
 <body>
@@ -138,44 +216,151 @@
 <header>
   <h1>PYNQ Raycaster Monitor</h1>
   <span id="status" class="disconnected">● DISCONNECTED</span>
+  <span id="game-chip">no game</span>
   <span id="fps"></span>
 </header>
 
-<div class="main">
-  <!-- Canvas -->
-  <div class="canvas-panel">
-    <span class="canvas-label">game world</span>
-    <canvas id="arena" width="500" height="500"></canvas>
+<!-- ═══ SEDA Pipeline Strip ═══════════════════════════════════════════════ -->
+<div class="pipeline-strip">
+
+  <!-- T1 UDP Receiver -->
+  <div class="pipe-stage">
+    <div class="stage-label">asyncio</div>
+    <div class="stage-box stage-net">
+      <div class="stage-name">T1 UDP</div>
+      <div class="stage-desc">receives datagrams</div>
+      <div class="stage-val">port <span>9000</span></div>
+    </div>
   </div>
 
-  <!-- Side panel -->
+  <div class="pipe-queue">
+    <div class="q-arrow">→</div>
+    <div class="q-label">packet_queue</div>
+  </div>
+
+  <!-- T2 GameTick -->
+  <div class="pipe-stage">
+    <div class="stage-label">asyncio · 20 Hz</div>
+    <div class="stage-box stage-logic">
+      <div class="stage-name">T2 GameTick</div>
+      <div class="stage-desc">parse · tag · state</div>
+      <div class="stage-val"><span id="pp-players">0</span> players</div>
+    </div>
+  </div>
+
+  <div class="pipe-queue">
+    <div class="q-arrow">→</div>
+    <div class="q-label">broadcast_queue</div>
+  </div>
+
+  <!-- T3 Broadcaster -->
+  <div class="pipe-stage">
+    <div class="stage-label">asyncio</div>
+    <div class="stage-box stage-net">
+      <div class="stage-name">T3 Broadcast</div>
+      <div class="stage-desc">UDP fan-out</div>
+      <div class="stage-val">→ clients</div>
+    </div>
+  </div>
+
+  <div class="pipe-queue">
+    <div class="q-arrow">→</div>
+    <div class="q-label">write_queue</div>
+  </div>
+
+  <!-- T4 Redis Writer -->
+  <div class="pipe-stage">
+    <div class="stage-label">OS thread</div>
+    <div class="stage-box stage-io">
+      <div class="stage-name">T4 Redis</div>
+      <div class="stage-desc">HSET · LPUSH</div>
+      <div class="stage-val"><span id="pp-ops">—</span> ops/s</div>
+    </div>
+  </div>
+
+  <div class="pipe-queue">
+    <div class="q-arrow">→</div>
+    <div class="q-label">BRPOP wait</div>
+  </div>
+
+  <!-- Sidecar -->
+  <div class="pipe-stage">
+    <div class="stage-label">process</div>
+    <div class="stage-box stage-store">
+      <div class="stage-name">Sidecar</div>
+      <div class="stage-desc">Redis → DynamoDB</div>
+      <div class="stage-val">blocked: <span id="pp-blocked">—</span></div>
+    </div>
+  </div>
+
+  <div class="pipe-queue">
+    <div class="q-arrow">→</div>
+    <div class="q-label">PutItem</div>
+  </div>
+
+  <!-- DynamoDB -->
+  <div class="pipe-stage">
+    <div class="stage-label">AWS</div>
+    <div class="stage-box stage-ext">
+      <div class="stage-name">DynamoDB</div>
+      <div class="stage-desc">persistent store</div>
+      <div class="stage-val"><span id="pp-ddb">—</span> matches</div>
+    </div>
+  </div>
+
+  <!-- Event counter -->
+  <div style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; padding-left:16px;">
+    <div style="font-size:9px;color:#333;letter-spacing:1px;">EVENTS IN REDIS LIST</div>
+    <div style="font-size:18px;color:#00d4ff;font-weight:bold;" id="pp-events">—</div>
+    <div style="font-size:9px;color:#333;">game:seda-events</div>
+  </div>
+
+</div>
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+
+<div class="main">
+  <div class="canvas-panel">
+    <span class="canvas-label">game world · TAG_RADIUS = 20u</span>
+    <canvas id="arena" width="480" height="480"></canvas>
+  </div>
+
   <div class="side">
 
-    <!-- Redis metrics -->
-    <div class="panel">
-      <h2>Redis</h2>
-      <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
-      <div class="metric-row"><span>memory used</span><span id="r-mem">—</span></div>
-      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
-      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
-    </div>
-
-    <!-- Player table -->
+    <!-- Players -->
     <div class="panel">
       <h2>Players</h2>
       <table>
-        <thead>
-          <tr>
-            <th>ID</th><th>X</th><th>Y</th><th>angle</th><th>flags</th>
-          </tr>
-        </thead>
+        <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th></tr></thead>
         <tbody id="player-tbody"></tbody>
       </table>
     </div>
 
+    <!-- Redis -->
+    <div class="panel">
+      <h2>Redis</h2>
+      <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
+      <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
+      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
+      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
+      <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
+      <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
+      <div class="metric-note">
+        ~100 ops/sec normal: 2 players × 20Hz × ~2–3 cmds/tick<br>
+        (HSET player state + LPUSH on events).<br>
+        Blocked = sidecar waiting on BRPOP for next event.
+      </div>
+    </div>
+
+    <!-- DynamoDB matches -->
+    <div class="panel">
+      <h2>DynamoDB — recent matches</h2>
+      <div id="match-list"><span style="color:#333">loading...</span></div>
+      <div class="ddb-note">polled every 5s · pynq-raycaster-seda-matches</div>
+    </div>
+
     <!-- Event log -->
     <div class="events-panel">
-      <h2>Match Events</h2>
+      <h2>Match Events  <span id="event-count" style="color:#333;font-size:9px;float:right;font-weight:normal;letter-spacing:0"></span></h2>
       <div id="event-list"></div>
     </div>
 
@@ -183,236 +368,262 @@
 </div>
 
 <script>
-// ── Canvas setup ──────────────────────────────────────────────────────────────
-
 const canvas = document.getElementById('arena');
 const ctx    = canvas.getContext('2d');
-const W = canvas.width;
-const H = canvas.height;
+const W = canvas.width, H = canvas.height;
+const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
+const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
 
-const TAG_RADIUS = 8.0;   // must match server T2 TAG_RADIUS
-const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688', '#cc88ff'];
+// ── State ──────────────────────────────────────────────────────────────────
+let latestState    = null;
+let worldBounds    = { minX: -80, maxX: 80, minY: -80, maxY: 80 };
+let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
+let renderCount = 0, renderLastTime = performance.now();
 
-// world-to-canvas: we track bounds dynamically and auto-scale
-let worldBounds = { minX: -60, maxX: 60, minY: -60, maxY: 60 };
-
+// ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy) {
-  const pad = 40;
-  const rangeX = worldBounds.maxX - worldBounds.minX;
-  const rangeY = worldBounds.maxY - worldBounds.minY;
-  const scale  = Math.min((W - pad*2) / rangeX, (H - pad*2) / rangeY);
-  const cx = pad + (wx - worldBounds.minX) * scale;
-  const cy = pad + (wy - worldBounds.minY) * scale;
-  return [cx, cy, scale];
+  const pad = 36;
+  const rx  = worldBounds.maxX - worldBounds.minX;
+  const ry  = worldBounds.maxY - worldBounds.minY;
+  const sc  = Math.min((W - pad*2) / rx, (H - pad*2) / ry);
+  return [(pad + (wx - worldBounds.minX) * sc), (pad + (wy - worldBounds.minY) * sc), sc];
 }
 
 function drawArena(players) {
   ctx.clearRect(0, 0, W, H);
 
-  // Background grid
-  ctx.strokeStyle = '#151515';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 10; i++) {
-    const x = (W / 10) * i;
-    const y = (H / 10) * i;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  // Grid
+  ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 8; i++) {
+    const x = W/8*i, y = H/8*i;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
   }
 
-  // Origin crosshair
+  // Origin axes
   const [ox, oy] = worldToCanvas(0, 0);
-  ctx.strokeStyle = '#222';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
+  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(ox,0); ctx.lineTo(ox,H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,oy); ctx.lineTo(W,oy); ctx.stroke();
 
-  // TAG_RADIUS ring (drawn around each player pair centroid, scaled)
-  const [, , scale] = worldToCanvas(0, 0);
-  const tagPx = TAG_RADIUS * scale;
+  const [,,sc] = worldToCanvas(0,0);
+  const tagPx  = TAG_RADIUS * sc;
+
+  // Distance line
+  if (players.length >= 2) {
+    const [ax,ay] = worldToCanvas(players[0].x, players[0].y);
+    const [bx,by] = worldToCanvas(players[1].x, players[1].y);
+    const dx = players[1].x - players[0].x;
+    const dy = players[1].y - players[0].y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const close = dist <= TAG_RADIUS;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
+    ctx.strokeStyle = close ? 'rgba(255,68,68,0.7)' : 'rgba(255,255,255,0.08)';
+    ctx.setLineDash([4,4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    const mx = (ax+bx)/2, my = (ay+by)/2;
+    ctx.fillStyle = close ? '#ff6666' : '#444';
+    ctx.font = '11px Courier New';
+    ctx.fillText(`${dist.toFixed(1)}u`, mx+4, my-4);
+  }
 
   players.forEach((p, i) => {
-    const [cx, cy] = worldToCanvas(p.x, p.y);
-    const colour   = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
-    const isTagged = (p.flags & 0x01) !== 0;
+    const [cx,cy] = worldToCanvas(p.x, p.y);
+    const colour  = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const tagged  = (p.flags & 0x02) !== 0;   // FLAG_TAGGED = 0x02
 
-    // Tag radius ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, tagPx, 0, Math.PI * 2);
-    ctx.strokeStyle = isTagged ? 'rgba(255,68,68,0.25)' : 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    // Hitbox ring (TAG_RADIUS)
+    ctx.beginPath(); ctx.arc(cx, cy, tagPx, 0, Math.PI*2);
+    ctx.strokeStyle = tagged ? 'rgba(255,68,68,0.55)' : 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = tagged ? 2 : 1; ctx.stroke();
 
-    // Direction line
-    const lineLen = 14;
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(p.angle) * lineLen, cy + Math.sin(p.angle) * lineLen);
+    // Glow when tagged
+    if (tagged) {
+      ctx.beginPath(); ctx.arc(cx, cy, tagPx * 1.4, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,68,68,0.12)'; ctx.lineWidth = 6; ctx.stroke();
+    }
+
+    // Direction arrow
+    ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(p.angle)*15, cy + Math.sin(p.angle)*15);
     ctx.stroke();
 
     // Player dot
-    ctx.beginPath();
-    ctx.arc(cx, cy, isTagged ? 7 : 5, 0, Math.PI * 2);
-    ctx.fillStyle = isTagged ? '#ff4444' : colour;
-    ctx.fill();
+    const dotR = tagged ? 9 : 6;
+    ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2);
+    ctx.fillStyle = tagged ? '#ff2222' : colour; ctx.fill();
+    if (tagged) {
+      ctx.strokeStyle = '#ff8888'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, dotR+3, 0, Math.PI*2); ctx.stroke();
+    }
 
-    // Label
-    ctx.fillStyle = '#fff';
-    ctx.font = '11px Courier New';
-    ctx.fillText(`P${p.id}`, cx + 8, cy - 6);
+    // Label: show role (P1=runner, P2=tagger) and tagged status
+    const role = (p.id === 1) ? 'runner' : 'tagger';
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Courier New';
+    ctx.fillText(`P${p.id} ${role}${tagged ? '  ★TAGGED' : ''}`, cx+10, cy-6);
   });
-
-  // Distance line between first two players
-  if (players.length >= 2) {
-    const [ax, ay] = worldToCanvas(players[0].x, players[0].y);
-    const [bx, by] = worldToCanvas(players[1].x, players[1].y);
-    const dx = players[1].x - players[0].x;
-    const dy = players[1].y - players[0].y;
-    const dist = Math.sqrt(dx*dx + dy*dy).toFixed(1);
-    const close = parseFloat(dist) <= TAG_RADIUS;
-
-    ctx.beginPath();
-    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-    ctx.strokeStyle = close ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.1)';
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Mid-point distance label
-    const mx = (ax + bx) / 2;
-    const my = (ay + by) / 2;
-    ctx.fillStyle = close ? '#ff6666' : '#555';
-    ctx.font = '11px Courier New';
-    ctx.fillText(`${dist}u`, mx + 4, my - 4);
-  }
 }
 
-// ── Side panel updates ────────────────────────────────────────────────────────
+// ── 60 fps render loop ─────────────────────────────────────────────────────
+function renderLoop() {
+  if (latestState) drawArena(latestState.players);
+  renderCount++;
+  const now = performance.now();
+  if (now - renderLastTime >= 1000) {
+    document.getElementById('fps').textContent = `${renderCount} fps · ws ${wsHz}/s`;
+    renderCount = 0; renderLastTime = now;
+  }
+  requestAnimationFrame(renderLoop);
+}
+requestAnimationFrame(renderLoop);
+
+// ── Side-panel updates ─────────────────────────────────────────────────────
+function updatePlayers(players) {
+  const tbody = document.getElementById('player-tbody');
+  tbody.innerHTML = '';
+  let dist = '—';
+  if (players.length >= 2) {
+    const dx = players[1].x - players[0].x;
+    const dy = players[1].y - players[0].y;
+    dist = Math.sqrt(dx*dx + dy*dy).toFixed(1) + 'u';
+  }
+  players.forEach((p, i) => {
+    const tagged = (p.flags & 0x02) !== 0;
+    const colour = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const tr = document.createElement('tr');
+    const role = (p.id === 1) ? 'runner' : 'tagger';
+    const roleColour = (p.id === 1) ? '#888' : '#ffaa00';
+    tr.innerHTML = `
+      <td class="pid" style="color:${colour}">P${p.id}</td>
+      <td style="color:${roleColour};font-size:10px">${role}</td>
+      <td>${p.x.toFixed(1)}</td>
+      <td>${p.y.toFixed(1)}</td>
+      <td>${(p.angle * 180/Math.PI).toFixed(0)}°</td>
+      <td>${i === 0 ? dist : ''}</td>
+      <td class="${tagged ? 'tagged' : ''}">${tagged ? '★ TAGGED' : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
 function updateRedis(redis) {
   document.getElementById('r-ops').textContent     = redis.ops_per_sec;
   document.getElementById('r-mem').textContent     = redis.mem_used;
   document.getElementById('r-clients').textContent = redis.connected_clients;
   document.getElementById('r-blocked').textContent = redis.blocked_clients;
+  document.getElementById('r-hits').textContent    = redis.keyspace_hits;
+  document.getElementById('r-misses').textContent  = redis.keyspace_misses;
 }
 
-function updatePlayers(players) {
-  const tbody = document.getElementById('player-tbody');
-  tbody.innerHTML = '';
-  players.forEach((p, i) => {
-    const isTagged = (p.flags & 0x01) !== 0;
-    const colour   = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="pid" style="color:${colour}">P${p.id}</td>
-      <td>${p.x.toFixed(1)}</td>
-      <td>${p.y.toFixed(1)}</td>
-      <td>${(p.angle * 180 / Math.PI).toFixed(0)}°</td>
-      <td class="${isTagged ? 'tagged' : ''}">${isTagged ? 'TAGGED' : '—'}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+function updatePipeline(pipeline) {
+  if (!pipeline) return;
+  document.getElementById('pp-players').textContent = pipeline.players_online;
+  document.getElementById('pp-ops').textContent     = pipeline.ops_per_sec;
+  document.getElementById('pp-blocked').textContent = pipeline.sidecar_blocked;
+  document.getElementById('pp-events').textContent  = pipeline.events_in_list;
+  document.getElementById('pp-ddb').textContent     = pipeline.ddb_matches;
 }
 
-const seenEvents = new Set();
+function updateMatches(matches) {
+  const el = document.getElementById('match-list');
+  if (!matches || matches.length === 0) {
+    el.innerHTML = '<span style="color:#333">no matches yet</span>';
+    return;
+  }
+  const active = matches.find(m => m.status === 'in_progress');
+  const chip   = document.getElementById('game-chip');
+  if (active) {
+    chip.textContent = `game ${active.match_id.replace(/^match-/, '')}`;
+    chip.className = 'active';
+  } else {
+    chip.textContent = `last: ${matches[0].match_id.replace(/^match-/, '')}`;
+    chip.className = '';
+  }
+  el.innerHTML = matches.map(m => `
+    <div class="match-row">
+      <span class="match-id">${m.match_id.replace(/^match-/, '')}</span>
+      <span class="match-status ${m.status}">${m.status.replace('_', ' ')}</span>
+      <span class="match-time">${m.timestamp.slice(11)}</span>
+    </div>
+  `).join('');
+}
+
+// ── Event log ──────────────────────────────────────────────────────────────
+// Redis LRANGE returns events newest-first (LPUSH prepends).
+// seenCount tracks how many we've logged; new ones are at indices 0..newCount-1.
+let seenCount = 0;
 function updateEvents(events) {
+  if (!events || events.length === 0) return;
+  const newCount = Math.max(0, events.length - seenCount);
+  if (newCount === 0) return;
+
   const list = document.getElementById('event-list');
-  events.forEach(ev => {
-    const key = JSON.stringify(ev);
-    if (seenEvents.has(key)) return;
-    seenEvents.add(key);
+  const now  = new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+  // events[0] is newest; add newest-first to top of list
+  for (let i = newCount - 1; i >= 0; i--) {
+    const ev   = events[i];
+    const type = ev.event || 'unknown';
+    let text = type;
+    if (type === 'player_tagged') text = `P${ev.player_id} tagged  (dist ${ev.dist != null ? ev.dist.toFixed(1) : '?'}u)`;
+    else if (type === 'match_start') text = `match started  (${ev.players ?? '?'} players)`;
+    else if (type === 'match_end')   text = `match ended`;
 
     const div = document.createElement('div');
-    const type = ev.event || 'unknown';
-    div.className = `event-item ${type.includes('tagged') ? 'tagged' : type}`;
-
-    let text = type;
-    if (type === 'player_tagged')
-      text = `P${ev.player_id} tagged  dist=${ev.dist?.toFixed(2) ?? '?'}u`;
-    else if (type === 'match_start')
-      text = `match started  id=${ev.match_id ?? '?'}`;
-    else if (type === 'match_end')
-      text = `match ended`;
-
-    div.textContent = text;
+    div.className = `event-item ${type}`;
+    div.innerHTML = `<span class="event-text">${text}</span><span class="event-time">${now}</span>`;
     list.prepend(div);
-
-    // Keep max 50 events
-    while (list.children.length > 50) list.removeChild(list.lastChild);
-  });
+  }
+  seenCount = events.length;
+  document.getElementById('event-count').textContent = `total ${seenCount}`;
+  while (list.children.length > 60) list.removeChild(list.lastChild);
 }
 
-// ── WebSocket ─────────────────────────────────────────────────────────────────
+// ── WorldBounds auto-fit ───────────────────────────────────────────────────
+function fitBounds(players) {
+  if (!players.length) return;
+  const xs  = players.map(p => p.x);
+  const ys  = players.map(p => p.y);
+  const pad = 30;
+  let minX = Math.min(...xs)-pad, maxX = Math.max(...xs)+pad;
+  let minY = Math.min(...ys)-pad, maxY = Math.max(...ys)+pad;
+  const rx = maxX-minX, ry = maxY-minY;
+  if (rx > ry) { const d=(rx-ry)/2; minY-=d; maxY+=d; }
+  else         { const d=(ry-rx)/2; minX-=d; maxX+=d; }
+  worldBounds = { minX, maxX, minY, maxY };
+}
 
+// ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
-const fpsEl    = document.getElementById('fps');
-let frameCount = 0, lastFpsTime = performance.now();
-
 function connect() {
-  // Connect to same host as the page (works via SSH tunnel or direct)
-  const wsUrl = `ws://${location.hostname}:${location.port}/ws`;
-  const ws = new WebSocket(wsUrl);
-
+  const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => {
     statusEl.textContent = '● LIVE';
     statusEl.className   = 'connected';
   };
-
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
-
-    // Update world bounds from current player positions
-    if (state.players.length > 0) {
-      const xs = state.players.map(p => p.x);
-      const ys = state.players.map(p => p.y);
-      const pad = 20;
-      worldBounds = {
-        minX: Math.min(...xs) - pad,
-        maxX: Math.max(...xs) + pad,
-        minY: Math.min(...ys) - pad,
-        maxY: Math.max(...ys) + pad,
-      };
-      // Keep it square
-      const rangeX = worldBounds.maxX - worldBounds.minX;
-      const rangeY = worldBounds.maxY - worldBounds.minY;
-      if (rangeX > rangeY) {
-        const diff = (rangeX - rangeY) / 2;
-        worldBounds.minY -= diff;
-        worldBounds.maxY += diff;
-      } else {
-        const diff = (rangeY - rangeX) / 2;
-        worldBounds.minX -= diff;
-        worldBounds.maxX += diff;
-      }
-    }
-
-    drawArena(state.players);
-    updateRedis(state.redis);
+    latestState = state;
+    fitBounds(state.players);
     updatePlayers(state.players);
+    updateRedis(state.redis);
+    updatePipeline(state.pipeline);
+    updateMatches(state.matches);
     updateEvents(state.events);
-
-    // FPS counter
-    frameCount++;
+    wsUpdateCount++;
     const now = performance.now();
-    if (now - lastFpsTime >= 1000) {
-      fpsEl.textContent = `${frameCount} fps`;
-      frameCount = 0;
-      lastFpsTime = now;
+    if (now - wsLastTime >= 1000) {
+      wsHz = wsUpdateCount;
+      wsUpdateCount = 0; wsLastTime = now;
     }
   };
-
   ws.onclose = () => {
     statusEl.textContent = '● DISCONNECTED';
     statusEl.className   = 'disconnected';
-    fpsEl.textContent    = '';
-    setTimeout(connect, 2000);   // auto-reconnect
+    setTimeout(connect, 2000);
   };
-
   ws.onerror = () => ws.close();
 }
-
 connect();
 </script>
 </body>

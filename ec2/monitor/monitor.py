@@ -5,10 +5,9 @@
 # Serves index.html over HTTP on port 8080, and pushes live game state
 # to the browser over WebSocket on the same port (/ws).
 #
-# Data sources (all local Redis reads — zero coupling to server internals):
-#   HGET player:1 / player:2  → x, y, angle, flags  (set by T4 every tick)
-#   INFO server / stats        → redis ops/sec, memory, clients
-#   GET  game:seda-events      → last match event (via LRANGE)
+# Data sources:
+#   Redis (local):   HGET player:1/2, INFO stats/memory/clients, LRANGE game:seda-events
+#   DynamoDB:        scan last 5 matches (polled every 5s, not every tick)
 #
 # No changes to T1/T2/T3/T4 required.
 #
@@ -23,24 +22,60 @@
 import asyncio
 import json
 import os
+import time
 import redis as redislib
+import boto3
 from aiohttp import web
 
 REDIS_HOST   = "127.0.0.1"
 REDIS_PORT   = 6379
 HTTP_PORT    = 8080
-PUSH_RATE_HZ = 10   # push to browser at 10 Hz (no need to match server's 20 Hz)
+PUSH_RATE_HZ = 10   # push to browser at 10 Hz
 
-# ── Redis connection ───────────────────────────────────────────────────────────
+DYNAMO_TABLE = "pynq-raycaster-seda-matches"
+AWS_REGION   = "eu-west-2"
 
-r = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+# ── Connections ────────────────────────────────────────────────────────────────
 
-# ── Data collection ───────────────────────────────────────────────────────────
+r     = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
+
+# ── DynamoDB poll (slow — every 5s) ───────────────────────────────────────────
+
+_ddb_cache      = []
+_ddb_last_fetch = 0.0
+
+def poll_dynamodb():
+    global _ddb_cache, _ddb_last_fetch
+    now = time.monotonic()
+    if now - _ddb_last_fetch < 5.0:
+        return _ddb_cache
+    try:
+        resp = dyndb.scan(
+            FilterExpression="record_type = :rt",
+            ExpressionAttributeValues={":rt": "META"},
+            ProjectionExpression="match_id, #s, #ts",
+            ExpressionAttributeNames={"#s": "status", "#ts": "timestamp"},
+            Limit=10,
+        )
+        items = sorted(resp.get("Items", []),
+                       key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
+        _ddb_cache = [
+            {"match_id": i["match_id"],
+             "status":   i.get("status", "?"),
+             "timestamp": i.get("timestamp", "")[:19].replace("T", " ")}
+            for i in items
+        ]
+        _ddb_last_fetch = now
+    except Exception as e:
+        print(f"[monitor] DynamoDB poll error: {e}")
+    return _ddb_cache
+
+# ── Redis state collection ─────────────────────────────────────────────────────
 
 def collect_state():
-    """Read all dashboard data from Redis in one go."""
     players = []
-    for pid in range(1, 10):   # scan player:1 .. player:9
+    for pid in range(1, 10):
         raw = r.hgetall(f"player:{pid}")
         if not raw:
             break
@@ -52,23 +87,39 @@ def collect_state():
             "flags": int(raw.get("flags", 0)),
         })
 
-    # Redis INFO — ops/sec, memory, connected clients
-    info = r.info("stats")
-    mem  = r.info("memory")
+    info    = r.info("stats")
+    mem     = r.info("memory")
     clients = r.info("clients")
+    persist = r.info("persistence")
 
-    # Last 5 match events
-    events = r.lrange("game:seda-events", 0, 4)
+    # ops/sec breakdown: T4 does ~5 HSETs + occasional LPUSHes per tick at 20Hz
+    # = ~100 ops/sec for 2 players. Formula: 2 players × 20Hz × ~2-3 cmds each.
+    events_raw   = r.lrange("game:seda-events", 0, 9)   # last 10 events
+    events_total = r.llen("game:seda-events")            # total events ever pushed
 
     return {
         "players": players,
         "redis": {
-            "ops_per_sec":      info.get("instantaneous_ops_per_sec", 0),
-            "mem_used":         mem.get("used_memory_human", "?"),
+            "ops_per_sec":       info.get("instantaneous_ops_per_sec", 0),
+            "mem_used":          mem.get("used_memory_human", "?"),
             "connected_clients": clients.get("connected_clients", 0),
-            "blocked_clients":  clients.get("blocked_clients", 0),
+            "blocked_clients":   clients.get("blocked_clients", 0),
+            "total_commands":    info.get("total_commands_processed", 0),
+            "keyspace_hits":     info.get("keyspace_hits", 0),
+            "keyspace_misses":   info.get("keyspace_misses", 0),
+            "rdb_last_save":     persist.get("rdb_last_bgsave_status", "?"),
         },
-        "events": [json.loads(e) for e in events if e],
+        "pipeline": {
+            # In-process queue depths not visible from outside; server logs them.
+            # We expose what we CAN measure from Redis.
+            "players_online":  len(players),
+            "events_in_list":  events_total,   # game:seda-events LLEN
+            "sidecar_blocked": clients.get("blocked_clients", 0),  # BRPOP waiting
+            "ops_per_sec":     info.get("instantaneous_ops_per_sec", 0),
+            "ddb_matches":     len(_ddb_cache),
+        },
+        "events":  [json.loads(e) for e in events_raw if e],
+        "matches": poll_dynamodb(),
     }
 
 # ── WebSocket handler ──────────────────────────────────────────────────────────
@@ -83,7 +134,7 @@ async def ws_handler(request):
                 state = collect_state()
                 await ws.send_str(json.dumps(state))
             except Exception as e:
-                print(f"[monitor] Redis read error: {e}")
+                print(f"[monitor] collect error: {e}")
             await asyncio.sleep(1 / PUSH_RATE_HZ)
     finally:
         print(f"[monitor] browser disconnected")
@@ -99,8 +150,8 @@ async def index_handler(request):
 
 async def main():
     app = web.Application()
-    app.router.add_get("/",    index_handler)
-    app.router.add_get("/ws",  ws_handler)
+    app.router.add_get("/",   index_handler)
+    app.router.add_get("/ws", ws_handler)
 
     runner = web.AppRunner(app)
     await runner.setup()
