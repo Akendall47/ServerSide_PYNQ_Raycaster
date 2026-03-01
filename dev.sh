@@ -20,6 +20,15 @@ EC2="ubuntu@18.175.238.148"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 
+# Warn if local commits haven't been pushed yet
+UNPUSHED=$(git -C "$REPO" log --oneline @{u}..HEAD 2>/dev/null | wc -l)
+if [ "$UNPUSHED" -gt 0 ]; then
+  echo "!!! WARNING: $UNPUSHED unpushed commit(s) — EC2 pull will miss them. Push first!"
+  echo "    git push && ./dev.sh"
+  read -rp "    Continue anyway? [y/N] " confirm
+  [[ "$confirm" =~ ^[Yy]$ ]] || exit 1
+fi
+
 # Kill stale session and EC2 processes, pull latest code
 tmux kill-session -t "$SESSION" 2>/dev/null
 echo "--- pulling latest code on EC2 ---"
