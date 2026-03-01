@@ -20,7 +20,7 @@ KEY="$REPO/raycastpair.pem"
 # Kill existing session and stale EC2 processes, then pull latest code
 tmux kill-session -t "$SESSION" 2>/dev/null
 echo "--- pulling latest code on EC2 ---"
-if ! ssh -i "$KEY" "$EC2" "pkill -f 'ec2/server/server.py'; pkill -f 'ec2/sidecar/sidecar.py'; cd ~/ServerSide_PYNQ_Raycaster && git pull && echo 'pull OK'"; then
+if ! ssh -i "$KEY" "$EC2" "pkill -f 'ec2/server/server.py' || true; pkill -f 'ec2/sidecar/sidecar.py' || true; cd ~/ServerSide_PYNQ_Raycaster && git pull && echo 'pull OK'"; then
     echo "!!! EC2 git pull FAILED — aborting. Check SSH key and network." >&2
     exit 1
 fi
