@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PYNQ Raycaster — Live Monitor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0d0d;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    padding: 8px 16px;
+    background: #111;
+    border-bottom: 1px solid #222;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 14px; color: #00d4ff; letter-spacing: 2px; text-transform: uppercase; }
+  #status { font-size: 12px; }
+  #status.connected { color: #00ff88; }
+  #status.disconnected { color: #ff4444; }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 1px;
+    background: #1a1a1a;
+  }
+
+  /* ── Canvas panel ── */
+  .canvas-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0d0d0d;
+    position: relative;
+  }
+  canvas {
+    border: 1px solid #1e1e1e;
+  }
+  .canvas-label {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── Side panel ── */
+  .side {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    background: #111;
+    border-left: 1px solid #1e1e1e;
+  }
+
+  .panel {
+    padding: 12px 14px;
+    border-bottom: 1px solid #1e1e1e;
+  }
+  .panel h2 {
+    font-size: 11px;
+    color: #00d4ff;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ── Redis metrics ── */
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    color: #aaa;
+  }
+  .metric-row span:last-child { color: #e0e0e0; font-weight: bold; }
+
+  /* ── Player table ── */
+  table { width: 100%; border-collapse: collapse; }
+  th { color: #555; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
+  td { padding: 2px 0; color: #ccc; }
+  td.pid { color: #00ff88; font-weight: bold; }
+  td.tagged { color: #ff4444; }
+
+  /* ── Event log ── */
+  .events-panel {
+    flex: 1;
+    padding: 12px 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .events-panel h2 {
+    font-size: 11px;
+    color: #00d4ff;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  #event-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .event-item {
+    background: #161616;
+    border-left: 3px solid #333;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: #888;
+    border-radius: 2px;
+  }
+  .event-item.tagged { border-left-color: #ff4444; color: #ffaaaa; }
+  .event-item.match_start { border-left-color: #00ff88; color: #aaffcc; }
+  .event-item.match_end { border-left-color: #ffaa00; color: #ffd088; }
+
+  /* ── FPS counter ── */
+  #fps { font-size: 11px; color: #444; margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PYNQ Raycaster Monitor</h1>
+  <span id="status" class="disconnected">● DISCONNECTED</span>
+  <span id="fps"></span>
+</header>
+
+<div class="main">
+  <!-- Canvas -->
+  <div class="canvas-panel">
+    <span class="canvas-label">game world</span>
+    <canvas id="arena" width="500" height="500"></canvas>
+  </div>
+
+  <!-- Side panel -->
+  <div class="side">
+
+    <!-- Redis metrics -->
+    <div class="panel">
+      <h2>Redis</h2>
+      <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
+      <div class="metric-row"><span>memory used</span><span id="r-mem">—</span></div>
+      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
+      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
+    </div>
+
+    <!-- Player table -->
+    <div class="panel">
+      <h2>Players</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>X</th><th>Y</th><th>angle</th><th>flags</th>
+          </tr>
+        </thead>
+        <tbody id="player-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Event log -->
+    <div class="events-panel">
+      <h2>Match Events</h2>
+      <div id="event-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('arena');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+const TAG_RADIUS = 8.0;   // must match server T2 TAG_RADIUS
+const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688', '#cc88ff'];
+
+// world-to-canvas: we track bounds dynamically and auto-scale
+let worldBounds = { minX: -60, maxX: 60, minY: -60, maxY: 60 };
+
+function worldToCanvas(wx, wy) {
+  const pad = 40;
+  const rangeX = worldBounds.maxX - worldBounds.minX;
+  const rangeY = worldBounds.maxY - worldBounds.minY;
+  const scale  = Math.min((W - pad*2) / rangeX, (H - pad*2) / rangeY);
+  const cx = pad + (wx - worldBounds.minX) * scale;
+  const cy = pad + (wy - worldBounds.minY) * scale;
+  return [cx, cy, scale];
+}
+
+function drawArena(players) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid
+  ctx.strokeStyle = '#151515';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 10; i++) {
+    const x = (W / 10) * i;
+    const y = (H / 10) * i;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Origin crosshair
+  const [ox, oy] = worldToCanvas(0, 0);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
+
+  // TAG_RADIUS ring (drawn around each player pair centroid, scaled)
+  const [, , scale] = worldToCanvas(0, 0);
+  const tagPx = TAG_RADIUS * scale;
+
+  players.forEach((p, i) => {
+    const [cx, cy] = worldToCanvas(p.x, p.y);
+    const colour   = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const isTagged = (p.flags & 0x01) !== 0;
+
+    // Tag radius ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, tagPx, 0, Math.PI * 2);
+    ctx.strokeStyle = isTagged ? 'rgba(255,68,68,0.25)' : 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Direction line
+    const lineLen = 14;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(p.angle) * lineLen, cy + Math.sin(p.angle) * lineLen);
+    ctx.stroke();
+
+    // Player dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, isTagged ? 7 : 5, 0, Math.PI * 2);
+    ctx.fillStyle = isTagged ? '#ff4444' : colour;
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Courier New';
+    ctx.fillText(`P${p.id}`, cx + 8, cy - 6);
+  });
+
+  // Distance line between first two players
+  if (players.length >= 2) {
+    const [ax, ay] = worldToCanvas(players[0].x, players[0].y);
+    const [bx, by] = worldToCanvas(players[1].x, players[1].y);
+    const dx = players[1].x - players[0].x;
+    const dy = players[1].y - players[0].y;
+    const dist = Math.sqrt(dx*dx + dy*dy).toFixed(1);
+    const close = parseFloat(dist) <= TAG_RADIUS;
+
+    ctx.beginPath();
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.strokeStyle = close ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.1)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Mid-point distance label
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    ctx.fillStyle = close ? '#ff6666' : '#555';
+    ctx.font = '11px Courier New';
+    ctx.fillText(`${dist}u`, mx + 4, my - 4);
+  }
+}
+
+// ── Side panel updates ────────────────────────────────────────────────────────
+
+function updateRedis(redis) {
+  document.getElementById('r-ops').textContent     = redis.ops_per_sec;
+  document.getElementById('r-mem').textContent     = redis.mem_used;
+  document.getElementById('r-clients').textContent = redis.connected_clients;
+  document.getElementById('r-blocked').textContent = redis.blocked_clients;
+}
+
+function updatePlayers(players) {
+  const tbody = document.getElementById('player-tbody');
+  tbody.innerHTML = '';
+  players.forEach((p, i) => {
+    const isTagged = (p.flags & 0x01) !== 0;
+    const colour   = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="pid" style="color:${colour}">P${p.id}</td>
+      <td>${p.x.toFixed(1)}</td>
+      <td>${p.y.toFixed(1)}</td>
+      <td>${(p.angle * 180 / Math.PI).toFixed(0)}°</td>
+      <td class="${isTagged ? 'tagged' : ''}">${isTagged ? 'TAGGED' : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+const seenEvents = new Set();
+function updateEvents(events) {
+  const list = document.getElementById('event-list');
+  events.forEach(ev => {
+    const key = JSON.stringify(ev);
+    if (seenEvents.has(key)) return;
+    seenEvents.add(key);
+
+    const div = document.createElement('div');
+    const type = ev.event || 'unknown';
+    div.className = `event-item ${type.includes('tagged') ? 'tagged' : type}`;
+
+    let text = type;
+    if (type === 'player_tagged')
+      text = `P${ev.player_id} tagged  dist=${ev.dist?.toFixed(2) ?? '?'}u`;
+    else if (type === 'match_start')
+      text = `match started  id=${ev.match_id ?? '?'}`;
+    else if (type === 'match_end')
+      text = `match ended`;
+
+    div.textContent = text;
+    list.prepend(div);
+
+    // Keep max 50 events
+    while (list.children.length > 50) list.removeChild(list.lastChild);
+  });
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+
+const statusEl = document.getElementById('status');
+const fpsEl    = document.getElementById('fps');
+let frameCount = 0, lastFpsTime = performance.now();
+
+function connect() {
+  // Connect to same host as the page (works via SSH tunnel or direct)
+  const wsUrl = `ws://${location.hostname}:${location.port}/ws`;
+  const ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    statusEl.textContent = '● LIVE';
+    statusEl.className   = 'connected';
+  };
+
+  ws.onmessage = (evt) => {
+    const state = JSON.parse(evt.data);
+
+    // Update world bounds from current player positions
+    if (state.players.length > 0) {
+      const xs = state.players.map(p => p.x);
+      const ys = state.players.map(p => p.y);
+      const pad = 20;
+      worldBounds = {
+        minX: Math.min(...xs) - pad,
+        maxX: Math.max(...xs) + pad,
+        minY: Math.min(...ys) - pad,
+        maxY: Math.max(...ys) + pad,
+      };
+      // Keep it square
+      const rangeX = worldBounds.maxX - worldBounds.minX;
+      const rangeY = worldBounds.maxY - worldBounds.minY;
+      if (rangeX > rangeY) {
+        const diff = (rangeX - rangeY) / 2;
+        worldBounds.minY -= diff;
+        worldBounds.maxY += diff;
+      } else {
+        const diff = (rangeY - rangeX) / 2;
+        worldBounds.minX -= diff;
+        worldBounds.maxX += diff;
+      }
+    }
+
+    drawArena(state.players);
+    updateRedis(state.redis);
+    updatePlayers(state.players);
+    updateEvents(state.events);
+
+    // FPS counter
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+      fpsEl.textContent = `${frameCount} fps`;
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+  };
+
+  ws.onclose = () => {
+    statusEl.textContent = '● DISCONNECTED';
+    statusEl.className   = 'disconnected';
+    fpsEl.textContent    = '';
+    setTimeout(connect, 2000);   // auto-reconnect
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+connect();
+</script>
+</body>
+</html>
