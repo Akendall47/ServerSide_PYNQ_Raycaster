@@ -18,7 +18,9 @@ SSH="ssh -t -i $KEY $EC2"
 
 # Kill existing tmux session and stale EC2 processes, then pull latest code
 tmux kill-session -t "$SESSION" 2>/dev/null
-ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; cd ~/ServerSide_PYNQ_Raycaster && git pull" || true
+echo "--- pulling latest code on EC2 ---"
+ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; cd ~/ServerSide_PYNQ_Raycaster && git pull"
+echo "--- done ---"
 
 # Create session
 tmux new-session -d -s "$SESSION" -x 220 -y 50
