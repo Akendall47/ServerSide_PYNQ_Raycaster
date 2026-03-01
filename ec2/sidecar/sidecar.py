@@ -53,7 +53,7 @@ def handle_match_start(event: dict):
     tag_count        = 0
 
     players = []
-    for pid in range(event.get("players", 0)):
+    for pid in range(1, event.get("players", 0) + 1):   # IDs start at 1
         pos = r.hgetall(f"player:{pid}")  # {"x": "1.0", "y": "2.0", ...}
         players.append({
             "player_id": pid,
@@ -92,6 +92,7 @@ def handle_match_end(event: dict):
     """UPDATE META status → completed.
     TODO: candidate for Lambda — T4 pushes to SNS, Lambda does update_item.
     """
+    global current_match_id
     if not current_match_id:
         print("match_end: no active match, ignoring")
         return
@@ -104,6 +105,7 @@ def handle_match_end(event: dict):
                                    ":t": datetime.now(timezone.utc).isoformat()},
     )
     print(f"DynamoDB: {current_match_id} completed")
+    current_match_id = None
 
 # ── Event dispatch ────────────────────────────────────────────────────────────
 # Add entries here for any new event T4 pushes to game:seda-events.

@@ -216,6 +216,8 @@ def main():
     parser.add_argument('--player-id', '-p', type=int, default=1,
                         help='Local label only — NOT sent on the wire. Server assigns real IDs by connection order.')
     parser.add_argument('--nodes', '-n', type=int, default=1, help='Number of nodes to simulate (default: 1)')
+    parser.add_argument('--node-index', type=int, default=None,
+                        help='Override node_index for orbit speed/start angle (default: 0,1,2... per node)')
     args = parser.parse_args()
 
     server_ip = args.server_ip
@@ -237,7 +239,8 @@ def main():
     
     for i in range(num_nodes):
         player_id = args.player_id + i
-        node = NodeSimulator(server_ip, server_port, player_id=player_id, node_index=i)
+        node_index = args.node_index if args.node_index is not None else i
+        node = NodeSimulator(server_ip, server_port, player_id=player_id, node_index=node_index)
         if args.tag_after is not None:
             node.tag_after = args.tag_after
         nodes.append(node)

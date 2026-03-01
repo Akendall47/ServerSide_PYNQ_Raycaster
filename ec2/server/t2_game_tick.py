@@ -52,6 +52,7 @@ class GameTick:
         self.players       = {}     # addr → {player_id, x, y, angle, flags}
         self.next_id       = 1      # player IDs start at 1
         self.match_started = False
+        self.match_ended   = False
         self.tick_count    = 0
         self.tag_clear_at  = {}     # player_id → monotonic time when FLAG_TAGGED clears
 
@@ -154,8 +155,8 @@ class GameTick:
     async def _tick(self):
         self._clear_expired_tags()
         await self._check_proximity()
+        await self._check_match_end()
         # await self._check_shooting()   # TODO: wire to C++ is_visible()
-        # await self._check_match_end()  # TODO: win condition
 
     def _clear_expired_tags(self):
         now = time.monotonic()
@@ -201,6 +202,22 @@ class GameTick:
                             "player_id": tagged["player_id"],
                             "dist":      round(dist, 2),
                         })
+
+    async def _check_match_end(self):
+        """Match ends the moment the runner (lowest player_id) gets tagged.
+        Fires match_end event, then resets match state so a new game can start
+        once the tag flash expires.
+        """
+        if not self.match_started or self.match_ended:
+            return
+        runner = min(self.players.values(), key=lambda p: p["player_id"], default=None)
+        if runner and (runner["flags"] & FLAG_TAGGED):
+            self.match_ended = True
+            print(f"[T2] match ended — runner P{runner['player_id']} tagged")
+            await self._push_event({"event": "match_end", "winner": "tagger"})
+            # Reset so next connect pair starts a fresh match
+            self.match_started = False
+            self.match_ended   = False
 
     # ── Broadcast ─────────────────────────────────────────────────────────────
 

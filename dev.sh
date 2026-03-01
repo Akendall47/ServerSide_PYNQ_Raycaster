@@ -82,15 +82,22 @@ tmux send-keys -t "$SESSION:0.0" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activat
 tmux select-pane -t "$SESSION:0.1" -T "sidecar"
 tmux send-keys -t "$SESSION:0.1" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/sidecar/sidecar.py'"
 
-# Monitor: kill any lingering local :8080 bind, then open SSH tunnel + monitor.py
+# Monitor pane: start monitor.py on EC2, wait for port 8080, then open tunnel
+# We use a wrapper that waits for the port before the tunnel is established by
+# running monitor.py in background, polling until ready, then exec-ing the tunnel.
+MONITOR_CMD="source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster"
+MONITOR_CMD+=" && nohup python3 ec2/monitor/monitor.py > /tmp/monitor.log 2>&1 &"
+MONITOR_CMD+=" && echo 'waiting for monitor.py on :8080...'"
+MONITOR_CMD+=" && for i in \$(seq 1 20); do nc -z localhost 8080 2>/dev/null && echo '[monitor] port 8080 ready' && break; sleep 0.5; done"
+MONITOR_CMD+=" && tail -f /tmp/monitor.log"
 tmux select-pane -t "$SESSION:0.2" -T "monitor :8080"
-tmux send-keys -t "$SESSION:0.2" "fuser -k 8080/tcp 2>/dev/null || true; ssh -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/monitor/monitor.py'"
+tmux send-keys -t "$SESSION:0.2" "fuser -k 8080/tcp 2>/dev/null || true; ssh -t -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 '$MONITOR_CMD'"
 
-tmux select-pane -t "$SESSION:0.3" -T "node sim 1"
-tmux send-keys -t "$SESSION:0.3" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1"
+tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)"
+tmux send-keys -t "$SESSION:0.3" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 0"
 
-tmux select-pane -t "$SESSION:0.4" -T "node sim 2"
-tmux send-keys -t "$SESSION:0.4" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --player-id 2"
+tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)"
+tmux send-keys -t "$SESSION:0.4" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 1"
 
 tmux select-pane -t "$SESSION:0.5" -T "redis stats"
 tmux send-keys -t "$SESSION:0.5" "ssh -t -i $KEY $EC2 'redis-cli --stat'"
