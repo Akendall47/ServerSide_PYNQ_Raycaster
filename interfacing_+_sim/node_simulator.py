@@ -231,12 +231,12 @@ class NodeSimulator:
                 print(f"[NODE {self.player_id}] Waiting for dashboard ▶ RESTART button...")
 
                 # Drain any messages that arrived during the match (stale publishes)
+                game_over_time = time.time()
                 if ps:
                     drained = 0
                     while ps.get_message():
                         drained += 1
-                    if drained:
-                        print(f"[NODE {self.player_id}] drained {drained} stale pub/sub message(s)")
+                    print(f"[NODE {self.player_id}] drain complete: {drained} stale message(s) cleared")
 
                 # Wait for restart: pub/sub message only.
                 # Keyboard fallback deliberately removed — tmux panes have a real
@@ -252,7 +252,8 @@ class NodeSimulator:
                                 try:
                                     cmd = json.loads(msg["data"])
                                     if cmd.get("cmd") == "restart":
-                                        print(f"[NODE {self.player_id}] Restart from dashboard!")
+                                        delay = time.time() - game_over_time
+                                        print(f"[NODE {self.player_id}] Restart from dashboard! ({delay:.1f}s after game over)")
                                         restarting = True
                                 except Exception:
                                     pass
