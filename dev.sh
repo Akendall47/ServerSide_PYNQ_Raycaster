@@ -23,7 +23,7 @@ KEY="$REPO/raycastpair.pem"
 # Kill stale session and EC2 processes, pull latest code
 tmux kill-session -t "$SESSION" 2>/dev/null
 echo "--- pulling latest code on EC2 ---"
-ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; pkill -f monitor.py; cd ~/ServerSide_PYNQ_Raycaster && git pull"
+ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; pkill -f monitor.py; sleep 2; cd ~/ServerSide_PYNQ_Raycaster && git pull"
 echo "--- done ---"
 
 # Create session (6 panes)
