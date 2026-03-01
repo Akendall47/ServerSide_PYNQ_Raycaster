@@ -46,13 +46,20 @@ tmux set-option -t "$SESSION" pane-active-border-style "fg=brightcyan"
 tmux set-option -t "$SESSION" pane-border-status top
 tmux set-option -t "$SESSION" pane-border-format " #{pane_title} "
 
-# Build layout — top row: server | sidecar | monitor (3 columns)
-#                bottom row: node-sim-1 | node-sim-2 | redis (3 columns)
-tmux split-window -t "$SESSION:0.0" -h -p 50          # 0=top-left  1=top-right-half
-tmux split-window -t "$SESSION:0.1" -h -p 50          # 1=top-mid   2=top-right
-tmux split-window -t "$SESSION:0.0" -v -p 40          # 0=server    3=bottom-left
-tmux split-window -t "$SESSION:0.3" -h -p 66          # 3=bot-left  4=bot-mid
-tmux split-window -t "$SESSION:0.4" -h -p 50          # 4=bot-mid   5=bot-right
+# Build layout — 2 rows x 3 columns, all panes equal size (50% height, 33% width)
+#
+#   ┌──────────────┬──────────────┬──────────────┐
+#   │  seda server │   sidecar    │   monitor    │  50%
+#   ├──────────────┼──────────────┼──────────────┤
+#   │  node sim 1  │  node sim 2  │  redis stats │  50%
+#   └──────────────┴──────────────┴──────────────┘
+#
+# Strategy: split top row into 3, then split each pane vertically 50%
+tmux split-window -t "$SESSION:0.0" -h -p 67   # 0=top-L  1=top-R-two-thirds
+tmux split-window -t "$SESSION:0.1" -h -p 50   # 1=top-M  2=top-R   (now 3 equal cols)
+tmux split-window -t "$SESSION:0.0" -v -p 50   # 0=server  3=bot-L
+tmux split-window -t "$SESSION:0.1" -v -p 50   # 1=sidecar 4=bot-M
+tmux split-window -t "$SESSION:0.2" -v -p 50   # 2=monitor 5=bot-R
 # Final: 0=server  1=sidecar  2=monitor  3=node-sim-1  4=node-sim-2  5=redis-stats
 
 tmux select-pane -t "$SESSION:0.0" -T "seda server"
@@ -63,7 +70,7 @@ tmux send-keys -t "$SESSION:0.1" "ssh -t -i $KEY $EC2 'source ~/venv/bin/activat
 
 # Monitor: SSH tunnel (-L 8080) + monitor.py — open http://localhost:8080 in browser
 tmux select-pane -t "$SESSION:0.2" -T "monitor :8080"
-tmux send-keys -t "$SESSION:0.2" "ssh -t -i $KEY -L 8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/monitor/monitor.py'"
+tmux send-keys -t "$SESSION:0.2" "ssh -i $KEY -L 8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster && python3 ec2/monitor/monitor.py'"
 
 tmux select-pane -t "$SESSION:0.3" -T "node sim 1"
 tmux send-keys -t "$SESSION:0.3" "cd $REPO && python3 interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1"
