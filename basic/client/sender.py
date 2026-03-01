@@ -15,6 +15,9 @@ import sys
 import os
 import socket
 import time
+import tty
+import termios
+import threading
 
 # Allow importing from basic/protocol/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'protocol'))
@@ -27,15 +30,52 @@ from protocol import (
 SERVER_IP   = "18.175.238.148"  # EC2 elastic IP
 SERVER_PORT = 9000
 
-# ── Fake position (replace with real PYNQ sensor data) ───────────────────────
+MOVE_SPEED  = 0.1   # units per keypress
+TURN_SPEED  = 0.05  # radians per keypress
+
+# ── Player state ──────────────────────────────────────────────────────────────
 x     = 1.0
 y     = 2.0
 angle = 0.0
 seq   = 0
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.settimeout(0.01)  # non-blocking receive
+sock.settimeout(0.01)
 
+# ── Keyboard input (non-blocking, runs in background thread) ──────────────────
+import math
+
+def read_keys():
+    """Background thread: reads arrow keys and updates x, y, angle."""
+    global x, y, angle
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == '\x1b':          # escape sequence start
+                ch2 = sys.stdin.read(1)
+                ch3 = sys.stdin.read(1)
+                if ch2 == '[':
+                    if ch3 == 'A':    # up arrow: move forward
+                        x += math.cos(angle) * MOVE_SPEED
+                        y += math.sin(angle) * MOVE_SPEED
+                    elif ch3 == 'B':  # down arrow: move backward
+                        x -= math.cos(angle) * MOVE_SPEED
+                        y -= math.sin(angle) * MOVE_SPEED
+                    elif ch3 == 'C':  # right arrow: turn right
+                        angle -= TURN_SPEED
+                    elif ch3 == 'D':  # left arrow: turn left
+                        angle += TURN_SPEED
+            elif ch in ('q', '\x03'): # q or Ctrl+C: quit
+                os._exit(0)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+threading.Thread(target=read_keys, daemon=True).start()
+
+# ── Send / receive ─────────────────────────────────────────────────────────────
 def send_packet():
     global seq
     pkt = pack_node_packet(PKT_STATE_UPDATE, seq, x, y, angle)
@@ -55,11 +95,12 @@ def receive():
     if pkt_type != PKT_GAME_STATE:
         return
 
-    print(f"  Game state : {len(players)} player(s):")
+    print(f"\r  Game state : {len(players)} player(s):")
     for p in players:
         print(f"    player {p['player_id']}  x={p['x']:.2f}  y={p['y']:.2f}  angle={p['angle']:.2f}")
 
-print(f"Sending to {SERVER_IP}:{SERVER_PORT} at 20 Hz. Ctrl+C to stop.")
+print(f"Sending to {SERVER_IP}:{SERVER_PORT} at 20 Hz.")
+print("Arrow keys: move/turn  |  Q: quit")
 interval = 1.0 / 20  # 20 Hz
 
 while True:

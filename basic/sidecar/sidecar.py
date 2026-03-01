@@ -25,6 +25,8 @@ import boto3
 from decimal import Decimal
 from datetime import datetime, timezone
 
+current_match_id = None
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 REDIS_HOST      = "127.0.0.1"   # change to ElastiCache endpoint on EC2
@@ -50,7 +52,9 @@ def handle_match_start(event: dict):
     Called when server.py pushes {"event": "match_start", "players": 2}.
     Reads all player positions from Redis and writes a match record to DynamoDB.
     """
-    match_id  = f"match-{int(time.time())}"
+    global current_match_id
+    match_id  = datetime.now(timezone.utc).strftime("match-%Y%m%d-%H%M%S")
+    current_match_id = match_id
     timestamp = datetime.now(timezone.utc).isoformat()
 
     # Read player positions from Redis (set by server.py each packet)
@@ -75,10 +79,40 @@ def handle_match_start(event: dict):
     table.put_item(Item=item)
     print(f"DynamoDB: wrote match record {match_id} with {len(players)} player(s)")
 
+def handle_match_end(event: dict):
+    """
+    Called when server.py pushes {"event": "match_end", "players": N} on Ctrl+C.
+    Updates the DynamoDB match record status from in_progress to completed.
+
+    # TODO: this handler will become a Lambda function.
+    # How it will work:
+    #   1. server.py pushes match_end to Redis as it does now
+    #   2. sidecar pushes the event to an SNS topic instead of handling it directly
+    #   3. SNS triggers a Lambda function with the event payload
+    #   4. Lambda updates DynamoDB : same update_item call as below, but serverless
+    # Benefit: no sidecar process needed for end-of-match writes, Lambda scales
+    # automatically and costs nothing when idle.
+    """
+    global current_match_id
+    if not current_match_id:
+        print("match_end received but no current match ID : ignoring")
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    table.update_item(
+        Key={"match_id": current_match_id, "record_type": "META"},
+        UpdateExpression="SET #s = :s, end_time = :t",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={":s": "completed", ":t": timestamp},
+    )
+    print(f"DynamoDB: match {current_match_id} marked as completed")
+    current_match_id = None
+
 # ── Event dispatch ────────────────────────────────────────────────────────────
 
 HANDLERS = {
     "match_start": handle_match_start,
+    "match_end":   handle_match_end,
     # "match_start" is one event type for the tag game demo.
     # Any event server.py pushes to Redis can be handled here.
     # Examples: "match_end", "player_tagged", "item_picked_up", "round_won", etc.

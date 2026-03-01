@@ -24,6 +24,8 @@ import socket
 import sys
 import os
 import time
+import signal
+import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'protocol'))
 from protocol import (
@@ -103,6 +105,15 @@ def broadcast(sock):
     pkt = build_game_state()
     for addr in nodes:
         sock.sendto(pkt, addr)
+
+# ── Shutdown ──────────────────────────────────────────────────────────────────
+
+def handle_sigint(sig, frame):
+    print("\nShutting down: pushing match_end event...")
+    redis_push_event(json.dumps({"event": "match_end", "players": len(nodes)}))
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_sigint)
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
