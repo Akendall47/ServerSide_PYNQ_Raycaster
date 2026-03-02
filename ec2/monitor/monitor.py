@@ -476,7 +476,7 @@ async def index_handler(request):
 async def replay_handler(request):
     match_id = request.match_info["match_id"]
     try:
-        payload = fetch_replay(match_id)
+        payload = await asyncio.to_thread(fetch_replay, match_id)
     except web.HTTPException:
         raise
     except Exception as e:
