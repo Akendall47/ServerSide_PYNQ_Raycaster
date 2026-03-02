@@ -134,6 +134,10 @@
     position: absolute; top: 8px; left: 12px;
     font-size: 10px; color: #333; letter-spacing: 1px; text-transform: uppercase;
   }
+  .canvas-legend {
+    position: absolute; top: 26px; left: 12px;
+    font-size: 10px; color: #5a5a5a; line-height: 1.4;
+  }
 
   /* ── Side panel ── */
   .side {
@@ -159,6 +163,7 @@
   .metric-row { display: flex; justify-content: space-between; margin-bottom: 5px; color: #aaa; }
   .metric-row span:last-child { color: #eee; font-weight: bold; }
   .metric-note { font-size: 10px; color: #555; margin-top: 3px; margin-bottom: 4px; line-height: 1.5; }
+  .metric-note strong { color: #9ad9ff; font-weight: bold; }
 
   table { width: 100%; border-collapse: collapse; }
   th { color: #666; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
@@ -314,7 +319,8 @@
 
 <div class="main">
   <div class="canvas-panel">
-    <span class="canvas-label">game world · TAG_RADIUS = 20u</span>
+    <span class="canvas-label">fixed world view · TAG_RADIUS = 20u</span>
+    <span class="canvas-legend">static coordinates keep the arena stable while players move inside it</span>
     <canvas id="arena" width="480" height="480"></canvas>
   </div>
 
@@ -331,17 +337,17 @@
 
     <!-- Redis -->
     <div class="panel">
-      <h2>Redis</h2>
+      <h2>Redis Runtime</h2>
       <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
       <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
-      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
-      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
-      <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
-      <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
+      <div class="metric-row"><span>redis clients</span><span id="r-clients">—</span></div>
+      <div class="metric-row"><span>waiting on BRPOP</span><span id="r-blocked">—</span></div>
+      <div class="metric-row"><span>cache hit rate</span><span id="r-hit-rate">—</span></div>
+      <div class="metric-row"><span>key hits / misses</span><span id="r-keyspace">—</span></div>
+      <div class="metric-note" id="r-clients-note">measuring Redis connections...</div>
+      <div class="metric-note" id="r-keyspace-note">measuring key lookups...</div>
       <div class="metric-note">
-        <b style="color:#888">ops/sec:</b> ~150–200 normal — game server ~100 (2 players × 20Hz × 2–3 cmds) + monitor ~50 (5 INFO/LRANGE calls × 10Hz)<br>
-        <b style="color:#888">clients 4:</b> T4 RedisWriter · Sidecar · Monitor · redis-cli<br>
-        <b style="color:#888">blocked 1:</b> sidecar sleeping on BRPOP — wakes instantly when an event is pushed
+        <strong>Blocked client = healthy idle sidecar.</strong> It should usually be 1 while the sidecar waits for the next event.
       </div>
     </div>
 
@@ -367,10 +373,12 @@ const ctx    = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
+const WORLD_EXTENT   = 100;
+const GRID_STEP      = 20;
 
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
-let worldBounds    = { minX: -80, maxX: 80, minY: -80, maxY: 80 };
+let worldBounds    = { minX: -WORLD_EXTENT, maxX: WORLD_EXTENT, minY: -WORLD_EXTENT, maxY: WORLD_EXTENT };
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
 let renderCount = 0, renderLastTime = performance.now();
 
@@ -385,23 +393,37 @@ function worldToCanvas(wx, wy) {
 
 function drawArena(players) {
   ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0f12';
+  ctx.fillRect(0, 0, W, H);
 
-  // Grid
-  ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 8; i++) {
-    const x = W/8*i, y = H/8*i;
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  // World-space grid
+  ctx.strokeStyle = '#162027';
+  ctx.lineWidth = 1;
+  for (let unit = -WORLD_EXTENT; unit <= WORLD_EXTENT; unit += GRID_STEP) {
+    const [gx] = worldToCanvas(unit, 0);
+    const [,gy] = worldToCanvas(0, unit);
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
   }
 
   // Origin axes
   const [ox, oy] = worldToCanvas(0, 0);
-  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
+  ctx.strokeStyle = '#29424d'; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(ox,0); ctx.lineTo(ox,H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0,oy); ctx.lineTo(W,oy); ctx.stroke();
 
   const [,,sc] = worldToCanvas(0,0);
   const tagPx  = TAG_RADIUS * sc;
+
+  // Arena ring
+  ctx.beginPath();
+  ctx.arc(ox, oy, 50 * sc, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0, 212, 255, 0.18)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.strokeStyle = '#20303a';
+  ctx.strokeRect(18, 18, W - 36, H - 36);
 
   // Distance line
   if (players.length >= 2) {
@@ -505,8 +527,24 @@ function updateRedis(redis) {
   document.getElementById('r-mem').textContent     = redis.mem_used;
   document.getElementById('r-clients').textContent = redis.connected_clients;
   document.getElementById('r-blocked').textContent = redis.blocked_clients;
-  document.getElementById('r-hits').textContent    = redis.keyspace_hits;
-  document.getElementById('r-misses').textContent  = redis.keyspace_misses;
+  document.getElementById('r-hit-rate').textContent = `${redis.hit_rate}%`;
+  document.getElementById('r-keyspace').textContent = `${redis.keyspace_hits} / ${redis.keyspace_misses}`;
+
+  const clientNote = [];
+  clientNote.push(`<strong>${redis.active_clients}</strong> active connection(s) talking to Redis right now.`);
+  clientNote.push(`Baseline is usually ${redis.baseline_clients}: T4 writer, sidecar, and this monitor.`);
+  if (redis.extra_clients > 0) {
+    clientNote.push(`${redis.extra_clients} extra connection(s) are open as well, usually from redis-cli, another monitor tab, or a second process.`);
+  } else {
+    clientNote.push('No unexpected extra Redis clients are visible.');
+  }
+  document.getElementById('r-clients-note').innerHTML = clientNote.join(' ');
+
+  const keyspaceNote = [];
+  keyspaceNote.push(`<strong>Hits/misses are cumulative Redis key lookups, not game errors.</strong>`);
+  keyspaceNote.push(`This monitor alone does about ${redis.monitor_reads_per_push} player-key reads each push at 10 Hz.`);
+  keyspaceNote.push(`With ${redis.monitor_probe_misses_per_push} expected probe miss per push, the miss counter rising is normal.`);
+  document.getElementById('r-keyspace-note').innerHTML = keyspaceNote.join(' ');
 }
 
 function updatePipeline(pipeline) {
@@ -580,20 +618,6 @@ function updateEvents(events) {
   }
 }
 
-// ── WorldBounds auto-fit ───────────────────────────────────────────────────
-function fitBounds(players) {
-  if (!players.length) return;
-  const xs  = players.map(p => p.x);
-  const ys  = players.map(p => p.y);
-  const pad = 30;
-  let minX = Math.min(...xs)-pad, maxX = Math.max(...xs)+pad;
-  let minY = Math.min(...ys)-pad, maxY = Math.max(...ys)+pad;
-  const rx = maxX-minX, ry = maxY-minY;
-  if (rx > ry) { const d=(rx-ry)/2; minY-=d; maxY+=d; }
-  else         { const d=(ry-rx)/2; minX-=d; maxX+=d; }
-  worldBounds = { minX, maxX, minY, maxY };
-}
-
 // ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
 let ws = null;
@@ -614,7 +638,6 @@ function connect() {
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
     latestState = state;
-    fitBounds(state.players);
     updatePlayers(state.players);
     updateRedis(state.redis);
     updatePipeline(state.pipeline);
