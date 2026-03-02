@@ -35,13 +35,16 @@ from protocol import (
 )
 import struct
 
-TAG_RADIUS       = 20.0  # units: players closer than this get tagged (orbit radius=50, so ~40° arc)
-MATCH_PLAYERS    = 2     # number of players that triggers match_start
-MAX_PLAYERS      = 2     # reject registrations beyond this limit
-TAGS_TO_WIN      = 2     # tagger must tag runner this many times to win
-TAG_FLASH_S      = 3.0   # seconds FLAG_TAGGED stays set — long enough nodes separate before next tag
-MATCH_END_HOLD_S  = 1.0   # after final tag: keep broadcasting FLAG_TAGGED so nodes see it before idle
-LOCKOUT_S         = 3.0   # after match end: reject new registrations (gives sims time to stop+prompt)
+TAG_RADIUS       = 20.0  # units
+MATCH_PLAYERS    = 2
+MAX_PLAYERS      = 2
+TAGS_TO_WIN      = 1     # one tag ends the match
+TAG_FLASH_S      = 0.0   # no flash needed with TAGS_TO_WIN=1
+MATCH_END_HOLD_S = 2.0   # broadcast FLAG_TAGGED for 2s so nodes reliably see it
+LOCKOUT_S        = 3.0   # reject re-registration for 3s after match ends
+# Grace period: ignore proximity for this many ticks after match start.
+# Prevents instant tag when both nodes register at (0,0) before sending real positions.
+GRACE_TICKS      = 40    # 2s at 20 Hz — enough for nodes to reach their orbits
 # Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.08 rad/tick)
 
 class GameTick:
@@ -51,15 +54,16 @@ class GameTick:
         self.write_queue     = write_queue
         self.interval        = 1.0 / tick_rate
 
-        self.players       = {}     # addr → {player_id, x, y, angle, flags}
-        self.next_id       = 1      # player IDs start at 1
+        self.players       = {}
+        self.next_id       = 1
         self.match_started = False
         self.match_ended   = False
-        self.match_end_at  = None   # monotonic time to clear players after final tag broadcast
-        self.lockout_until = None   # monotonic time after which new registrations are accepted
-        self.tag_count     = 0      # number of times runner has been tagged this match
-        self.tag_flash_at  = None   # monotonic time when current FLAG_TAGGED flash expires
+        self.match_end_at  = None
+        self.lockout_until = None
+        self.tag_count     = 0
+        self.tag_flash_at  = None
         self.tick_count    = 0
+        self.match_tick    = 0      # ticks since match started (for grace period)
 
     async def run(self):
         print(f"[T2 GameTick] running at {1/self.interval:.0f} Hz")
@@ -146,6 +150,7 @@ class GameTick:
 
         if len(self.players) == MATCH_PLAYERS and not self.match_started:
             self.match_started = True
+            self.match_tick    = 0
             asyncio.ensure_future(self._push_event(
                 {"event": "match_start", "players": MATCH_PLAYERS}
             ))
@@ -168,6 +173,8 @@ class GameTick:
         await self._check_proximity()
         await self._check_match_end()
         self._clear_tag_flash()
+        if self.match_started and not self.match_ended:
+            self.match_tick += 1
         # await self._check_shooting()   # TODO: wire to C++ is_visible()
 
     def _clear_tag_flash(self):
@@ -202,13 +209,12 @@ class GameTick:
             self.lockout_until = time.monotonic() + LOCKOUT_S
 
     async def _check_proximity(self):
-        """Generic pairwise distance check across all players.
-        Game-mode rule applied here: tag game (player within TAG_RADIUS gets tagged).
-        Swap out the rule block below for a different game mode without touching
-        the distance loop.
-        """
+        """Pairwise tag check. Skipped during grace period so nodes can
+        reach their orbits before proximity detection starts."""
         players = list(self.players.values())
         if len(players) < 2:
+            return
+        if self.match_tick < GRACE_TICKS:
             return
 
         for i in range(len(players)):
