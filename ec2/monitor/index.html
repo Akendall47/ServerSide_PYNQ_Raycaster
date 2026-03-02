@@ -357,8 +357,9 @@
         <button class="control-btn start" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
         <button class="control-btn stop" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
         <button class="control-btn restart" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
-        <button class="control-btn restart" onclick="sendControl('restart', 'restart match')">Restart Match</button>
+        <button class="control-btn restart" onclick="sendControl('restart', 'start match')">Start Match</button>
       </div>
+      <div class="metric-note">EC2 services are controlled here. Node simulators still run locally via `dev.sh`.</div>
       <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
     </div>
 
