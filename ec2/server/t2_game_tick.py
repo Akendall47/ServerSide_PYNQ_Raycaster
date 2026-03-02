@@ -119,13 +119,16 @@ class GameTick:
         if addr not in self.players:
             self._register_player(addr)
 
-        if pkt_type == PKT_REGISTER:
-            return  # position not included in REGISTER packets
-
         if addr not in self.players:
             return  # registration was rejected (lockout or full) — drop packet
 
         p = self.players[addr]
+
+        if pkt_type == PKT_REGISTER:
+            # Accept starting position from REGISTER so player doesn't sit at (0,0)
+            # until the first STATE_UPDATE arrives.
+            p["x"], p["y"], p["angle"] = x, y, angle
+            return
         p["x"]     = x
         p["y"]     = y
         p["angle"] = angle

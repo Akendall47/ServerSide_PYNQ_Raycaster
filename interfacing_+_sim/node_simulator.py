@@ -112,9 +112,15 @@ def run_node(server_ip, server_port, player_id, node_index,
                     sock.close()
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.settimeout(0.05)
-                pkt = pack_node_packet(PKT_REGISTER, seq=0, x=0, y=0, angle=0, flags=0)
+                # Reset angle to spread starting position so nodes begin far apart,
+                # not both at (0,0) which would trigger an instant tag.
+                angle = node_index * math.pi * 2 / 4
+                start_x = radius * math.cos(angle)
+                start_y = radius * math.sin(angle)
+                pkt = pack_node_packet(PKT_REGISTER, seq=0,
+                                       x=start_x, y=start_y, angle=angle, flags=0)
                 sock.sendto(pkt, server_addr)
-                print(f"{tag} REGISTER sent")
+                print(f"{tag} REGISTER sent at ({start_x:.1f},{start_y:.1f})")
                 seq     = 1
                 tick    = 0
                 playing = True
@@ -129,8 +135,6 @@ def run_node(server_ip, server_port, player_id, node_index,
                     pkt_type, _, _, players = unpack_server_packet(data)
                     if pkt_type == PKT_GAME_STATE:
                         for p in players:
-                            if p["flags"] != 0 or tick % TICK_HZ == 0:
-                                print(f"{tag} recv P{p['player_id']} flags={p['flags']:#04x}")
                             if p["flags"] & FLAG_TAGGED:
                                 print(f"{tag} P{p['player_id']} TAGGED — stopping")
                                 playing = False
