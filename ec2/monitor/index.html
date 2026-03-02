@@ -134,10 +134,6 @@
     position: absolute; top: 8px; left: 12px;
     font-size: 10px; color: #333; letter-spacing: 1px; text-transform: uppercase;
   }
-  .canvas-legend {
-    position: absolute; top: 26px; left: 12px;
-    font-size: 10px; color: #5a5a5a; line-height: 1.4;
-  }
 
   /* ── Side panel ── */
   .side {
@@ -163,14 +159,12 @@
   .metric-row { display: flex; justify-content: space-between; margin-bottom: 5px; color: #aaa; }
   .metric-row span:last-child { color: #eee; font-weight: bold; }
   .metric-note { font-size: 10px; color: #555; margin-top: 3px; margin-bottom: 4px; line-height: 1.5; }
-  .metric-note strong { color: #9ad9ff; font-weight: bold; }
 
   table { width: 100%; border-collapse: collapse; }
   th { color: #666; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
   td { padding: 3px 0; color: #ccc; font-size: 12px; }
   td.pid { font-weight: bold; }
-  td.tagged { color: #ff4444; font-weight: bold; animation: flash 0.4s infinite; }
-  @keyframes flash { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+  td.tagged { color: #ff6666; font-weight: bold; }
 
   /* event log */
   .events-panel {
@@ -319,8 +313,7 @@
 
 <div class="main">
   <div class="canvas-panel">
-    <span class="canvas-label">fixed world view · TAG_RADIUS = 20u</span>
-    <span class="canvas-legend">static coordinates keep the arena stable while players move inside it</span>
+    <span class="canvas-label">fixed world · orbit 50u · tag radius 20u</span>
     <canvas id="arena" width="480" height="480"></canvas>
   </div>
 
@@ -337,17 +330,17 @@
 
     <!-- Redis -->
     <div class="panel">
-      <h2>Redis Runtime</h2>
+      <h2>Redis</h2>
       <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
       <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
-      <div class="metric-row"><span>redis clients</span><span id="r-clients">—</span></div>
-      <div class="metric-row"><span>waiting on BRPOP</span><span id="r-blocked">—</span></div>
-      <div class="metric-row"><span>cache hit rate</span><span id="r-hit-rate">—</span></div>
-      <div class="metric-row"><span>key hits / misses</span><span id="r-keyspace">—</span></div>
-      <div class="metric-note" id="r-clients-note">measuring Redis connections...</div>
-      <div class="metric-note" id="r-keyspace-note">measuring key lookups...</div>
+      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
+      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
+      <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
+      <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
       <div class="metric-note">
-        <strong>Blocked client = healthy idle sidecar.</strong> It should usually be 1 while the sidecar waits for the next event.
+        <b style="color:#888">ops/sec:</b> ~150–200 normal — game server ~100 (2 players × 20Hz × 2–3 cmds) + monitor ~50 (5 INFO/LRANGE calls × 10Hz)<br>
+        <b style="color:#888">clients 4:</b> T4 RedisWriter · Sidecar · Monitor · redis-cli<br>
+        <b style="color:#888">blocked 1:</b> sidecar sleeping on BRPOP — wakes instantly when an event is pushed
       </div>
     </div>
 
@@ -373,11 +366,8 @@ const ctx    = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
 const ORBIT_RADIUS   = 50.0;   // must match t2_game_tick.py ORBIT_RADIUS
+const WORLD_LIMIT    = ORBIT_RADIUS + TAG_RADIUS + 10.0;  // 80u total safe view
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
-const WORLD_EXTENT   = 70;
-const GRID_STEP      = 20;
-const CANVAS_PAD     = 36;
-const WORLD_SCALE    = (Math.min(W, H) - CANVAS_PAD * 2) / (WORLD_EXTENT * 2);
 
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
@@ -386,57 +376,40 @@ let renderCount = 0, renderLastTime = performance.now();
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy) {
-  return [
-    W / 2 + wx * WORLD_SCALE,
-    H / 2 - wy * WORLD_SCALE,
-    WORLD_SCALE,
-  ];
+  const pad = 36;
+  const minX = -WORLD_LIMIT, maxX = WORLD_LIMIT;
+  const minY = -WORLD_LIMIT, maxY = WORLD_LIMIT;
+  const rx  = maxX - minX;
+  const ry  = maxY - minY;
+  const sc  = Math.min((W - pad*2) / rx, (H - pad*2) / ry);
+  return [(pad + (wx - minX) * sc), (pad + (wy - minY) * sc), sc];
 }
 
 function drawArena(players) {
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0b0f12';
-  ctx.fillRect(0, 0, W, H);
 
-  // World-space grid
-  ctx.strokeStyle = '#162027';
-  ctx.lineWidth = 1;
-  for (let unit = -WORLD_EXTENT; unit <= WORLD_EXTENT; unit += GRID_STEP) {
-    const [gx] = worldToCanvas(unit, 0);
-    const [,gy] = worldToCanvas(0, unit);
-    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+  // Grid
+  ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 8; i++) {
+    const x = W/8*i, y = H/8*i;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
   }
 
   // Origin axes
   const [ox, oy] = worldToCanvas(0, 0);
-  ctx.strokeStyle = '#29424d'; ctx.lineWidth = 1.2;
+  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(ox,0); ctx.lineTo(ox,H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0,oy); ctx.lineTo(W,oy); ctx.stroke();
 
   const [,,sc] = worldToCanvas(0,0);
+  const tagPx  = TAG_RADIUS * sc;
 
-  // Arena ring
-  ctx.beginPath();
-  ctx.arc(ox, oy, ORBIT_RADIUS * sc, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0, 212, 255, 0.18)';
-  ctx.lineWidth = 1.5;
+  // Fixed orbit guide matching the actual node radius used by the game.
+  ctx.beginPath(); ctx.arc(ox, oy, ORBIT_RADIUS * sc, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(0,212,255,0.12)';
+  ctx.lineWidth = 1;
   ctx.stroke();
-
-  // Spawn markers
-  [[ORBIT_RADIUS, 0], [0, ORBIT_RADIUS]].forEach(([sx, sy], idx) => {
-    const [mx, my] = worldToCanvas(sx, sy);
-    ctx.beginPath();
-    ctx.arc(mx, my, 5, 0, Math.PI * 2);
-    ctx.fillStyle = idx === 0 ? 'rgba(0, 255, 136, 0.18)' : 'rgba(0, 212, 255, 0.18)';
-    ctx.fill();
-    ctx.strokeStyle = idx === 0 ? 'rgba(0, 255, 136, 0.45)' : 'rgba(0, 212, 255, 0.45)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  });
-
-  ctx.strokeStyle = '#20303a';
-  ctx.strokeRect(18, 18, W - 36, H - 36);
 
   // Distance line
   if (players.length >= 2) {
@@ -460,6 +433,11 @@ function drawArena(players) {
     const colour  = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
     const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
 
+    // Hitbox ring (TAG_RADIUS)
+    ctx.beginPath(); ctx.arc(cx, cy, tagPx, 0, Math.PI*2);
+    ctx.strokeStyle = tagged ? 'rgba(255,68,68,0.55)' : 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = tagged ? 2 : 1; ctx.stroke();
+
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
@@ -475,9 +453,10 @@ function drawArena(players) {
       ctx.beginPath(); ctx.arc(cx, cy, dotR+3, 0, Math.PI*2); ctx.stroke();
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px Courier New';
-    ctx.fillText(`P${p.id}`, cx + 9, cy - 8);
+    // Keep label text stable so tag events do not cause visual jumping.
+    const role = (p.id === 1) ? 'runner' : 'tagger';
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Courier New';
+    ctx.fillText(`P${p.id} ${role}`, cx+10, cy-6);
   });
 }
 
@@ -528,24 +507,8 @@ function updateRedis(redis) {
   document.getElementById('r-mem').textContent     = redis.mem_used;
   document.getElementById('r-clients').textContent = redis.connected_clients;
   document.getElementById('r-blocked').textContent = redis.blocked_clients;
-  document.getElementById('r-hit-rate').textContent = `${redis.hit_rate}%`;
-  document.getElementById('r-keyspace').textContent = `${redis.keyspace_hits} / ${redis.keyspace_misses}`;
-
-  const clientNote = [];
-  clientNote.push(`<strong>${redis.active_clients}</strong> active connection(s) talking to Redis right now.`);
-  clientNote.push(`Baseline is usually ${redis.baseline_clients}: T4 writer, sidecar, and this monitor.`);
-  if (redis.extra_clients > 0) {
-    clientNote.push(`${redis.extra_clients} extra connection(s) are open as well, usually from redis-cli, another monitor tab, or a second process.`);
-  } else {
-    clientNote.push('No unexpected extra Redis clients are visible.');
-  }
-  document.getElementById('r-clients-note').innerHTML = clientNote.join(' ');
-
-  const keyspaceNote = [];
-  keyspaceNote.push(`<strong>Hits/misses are cumulative Redis key lookups, not game errors.</strong>`);
-  keyspaceNote.push(`This monitor alone does about ${redis.monitor_reads_per_push} player-key reads each push at 10 Hz.`);
-  keyspaceNote.push(`With ${redis.monitor_probe_misses_per_push} expected probe miss per push, the miss counter rising is normal.`);
-  document.getElementById('r-keyspace-note').innerHTML = keyspaceNote.join(' ');
+  document.getElementById('r-hits').textContent    = redis.keyspace_hits;
+  document.getElementById('r-misses').textContent  = redis.keyspace_misses;
 }
 
 function updatePipeline(pipeline) {

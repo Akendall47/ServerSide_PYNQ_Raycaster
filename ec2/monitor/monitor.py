@@ -126,35 +126,21 @@ def collect_state():
 
     n_clients = clients.get("connected_clients", 0)
     blocked   = clients.get("blocked_clients", 0)
-    player_count = len(players)
-    probe_misses = 1 if player_count < 9 else 0
-    monitor_reads_per_push = player_count + probe_misses
-    baseline_clients = 3  # T4 RedisWriter + sidecar + monitor process
 
     return {
         "players": players,
         "redis": {
             "ops_per_sec":       info.get("instantaneous_ops_per_sec", 0),
             "mem_used":          mem.get("used_memory_human", "?"),
+            # clients breakdown: server(T4) + sidecar + monitor + redis-cli = 4
             "connected_clients": n_clients,
             "blocked_clients":   blocked,
+            # blocked=1 is normal: sidecar sleeping on BRPOP waiting for next event
             "keyspace_hits":     info.get("keyspace_hits", 0),
             "keyspace_misses":   info.get("keyspace_misses", 0),
-            "active_clients":    max(0, n_clients - blocked),
-            "extra_clients":     max(0, n_clients - baseline_clients),
-            "baseline_clients":  baseline_clients,
-            "monitor_reads_per_push": monitor_reads_per_push,
-            "monitor_probe_misses_per_push": probe_misses,
-            "hit_rate":          (
-                round(
-                    (100.0 * info.get("keyspace_hits", 0)) /
-                    max(1, info.get("keyspace_hits", 0) + info.get("keyspace_misses", 0)),
-                    1,
-                )
-            ),
         },
         "pipeline": {
-            "players_online":  player_count,
+            "players_online":  len(players),
             "events_in_list":  events_in_list,
             "sidecar_blocked": blocked,
             "ops_per_sec":     info.get("instantaneous_ops_per_sec", 0),
