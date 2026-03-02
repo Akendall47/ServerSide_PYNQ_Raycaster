@@ -32,6 +32,7 @@ from protocol import (
     NODE_SIZE,
     PKT_REGISTER,
     FLAG_TAGGED,
+    FLAG_MATCH_END,
 )
 import struct
 
@@ -39,13 +40,16 @@ TAG_RADIUS       = 20.0  # units
 MATCH_PLAYERS    = 2
 MAX_PLAYERS      = 2
 TAGS_TO_WIN      = 2     # two tags end the match
-TAG_FLASH_S      = 1.5   # clear FLAG_TAGGED after 1.5s so runner can be tagged again
-MATCH_END_HOLD_S = 0.5   # broadcast FLAG_TAGGED for 0.5s (a few ticks to guarantee delivery)
+TAG_FLASH_S      = 0.3   # keep FLAG_TAGGED visible for 0.3s (enough for nodes to see it)
+MATCH_END_HOLD_S = 0.5   # broadcast FLAG_TAGGED for 0.5s on final tag
 LOCKOUT_S        = 0.5   # reject re-registration for 0.5s after match ends
-# Grace period: ignore proximity for this many ticks after match start.
-# Prevents instant tag when both nodes register before sending real positions.
-GRACE_TICKS      = 10    # 0.5s at 20 Hz — nodes register with real positions now
+# Grace period after each tag reset — players are teleported to spawn so need
+# a moment before proximity detection resumes.
+GRACE_TICKS      = 10    # 0.5s at 20 Hz
 # Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.11 rad/tick)
+# Spawn positions mirror node_simulator.py: angle = player_id-1 * π/2, radius = 50
+ORBIT_RADIUS     = 50.0
+SPAWN_ANGLES     = [0.0, math.pi / 2]   # player_id 1 → angle 0, player_id 2 → angle π/2
 
 class GameTick:
     def __init__(self, packet_queue, broadcast_queue, write_queue, tick_rate=20):
@@ -180,6 +184,17 @@ class GameTick:
             self.match_tick += 1
         # await self._check_shooting()   # TODO: wire to C++ is_visible()
 
+    def _reset_positions(self):
+        """Teleport all players back to spawn and restart grace period."""
+        for p in self.players.values():
+            idx   = p["player_id"] - 1          # player_id 1→0, 2→1
+            angle = SPAWN_ANGLES[idx] if idx < len(SPAWN_ANGLES) else 0.0
+            p["x"]     = ORBIT_RADIUS * math.cos(angle)
+            p["y"]     = ORBIT_RADIUS * math.sin(angle)
+            p["angle"] = angle
+        self.match_tick = 0   # restart grace period so proximity check pauses
+        print(f"[T2] positions reset to spawn, grace period restarted")
+
     def _clear_tag_flash(self):
         """Clear FLAG_TAGGED after TAG_FLASH_S so the runner can be tagged again."""
         if self.tag_flash_at is None or self.match_ended:
@@ -239,6 +254,9 @@ class GameTick:
                         self.tag_flash_at = time.monotonic() + TAG_FLASH_S
                         print(f"[T2] P{tagged['player_id']} tagged (dist={dist:.2f}) "
                               f"— tag {self.tag_count}/{TAGS_TO_WIN}")
+                        # Reset all players to spawn so they aren't still in contact
+                        # after the flash clears — prevents instant double-tag.
+                        self._reset_positions()
                         await self._push_event({
                             "event":     "player_tagged",
                             "player_id": tagged["player_id"],
@@ -257,6 +275,9 @@ class GameTick:
         if self.tag_count >= TAGS_TO_WIN:
             self.match_ended  = True
             self.match_end_at = time.monotonic() + MATCH_END_HOLD_S
+            # Set FLAG_MATCH_END on all players so nodes know this is the final tag
+            for p in self.players.values():
+                p["flags"] |= FLAG_MATCH_END
             print(f"[T2] match ended — runner tagged {self.tag_count}x "
                   f"(clearing players in {MATCH_END_HOLD_S}s)")
             await self._push_event({

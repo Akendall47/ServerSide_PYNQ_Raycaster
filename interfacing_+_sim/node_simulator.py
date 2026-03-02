@@ -35,6 +35,7 @@ from protocol import (
     PKT_REGISTER,
     FLAG_SHOOTING,
     FLAG_TAGGED,
+    FLAG_MATCH_END,
 )
 
 # How long to wait after restart signal before re-registering.
@@ -135,9 +136,12 @@ def run_node(server_ip, server_port, player_id, node_index,
                     pkt_type, _, _, players = unpack_server_packet(data)
                     if pkt_type == PKT_GAME_STATE:
                         for p in players:
-                            if p["flags"] & FLAG_TAGGED:
-                                print(f"{tag} P{p['player_id']} TAGGED — stopping")
+                            if p["flags"] & FLAG_MATCH_END:
+                                print(f"{tag} P{p['player_id']} TAGGED (final) — stopping")
                                 playing = False
+                            elif p["flags"] & FLAG_TAGGED:
+                                print(f"{tag} P{p['player_id']} TAGGED (intermediate) — resetting angle")
+                                angle = node_index * math.pi * 2 / 4
                 except socket.timeout:
                     break
                 except Exception as e:

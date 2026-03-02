@@ -24,8 +24,9 @@ PKT_ACK          = 0x0030   # server → node:  confirms registration
 
 # ── Flags bitmask (uint8 flags field) ─────────────────────────────────────────
 
-FLAG_SHOOTING = 0x01   # player fired this tick
-FLAG_TAGGED   = 0x02   # player has been tagged : game over signal
+FLAG_SHOOTING   = 0x01   # player fired this tick
+FLAG_TAGGED     = 0x02   # player has been tagged this tick (intermediate or final)
+FLAG_MATCH_END  = 0x04   # set on final tag only — node should stop and wait for restart
 
 # ── Wire format ───────────────────────────────────────────────────────────────
 #
