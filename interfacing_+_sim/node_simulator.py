@@ -38,8 +38,8 @@ from protocol import (
 )
 
 # How long to wait after restart signal before re-registering.
-# Covers server's MATCH_END_HOLD_S (1s) + LOCKOUT_S (3s) with margin.
-RESTART_DELAY_S = 4.5
+# Must exceed server's MATCH_END_HOLD_S (0.5s) + LOCKOUT_S (0.5s).
+RESTART_DELAY_S = 1.5
 
 TICK_HZ      = 20
 TICK_INTERVAL = 1.0 / TICK_HZ
@@ -58,7 +58,7 @@ def run_node(server_ip, server_port, player_id, node_index,
 
     # ── movement params (vary by node_index) ──────────────────────────────────
     radius         = 50.0
-    rotation_speed = 0.05 + node_index * 0.03
+    rotation_speed = 0.05 + node_index * 0.06  # runner=0.05, tagger=0.11 rad/tick
     shoot_freq     = 20  + node_index * 10
     angle          = node_index * math.pi * 2 / 4   # spread starting positions
 

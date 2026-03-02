@@ -38,14 +38,14 @@ import struct
 TAG_RADIUS       = 20.0  # units
 MATCH_PLAYERS    = 2
 MAX_PLAYERS      = 2
-TAGS_TO_WIN      = 1     # one tag ends the match
-TAG_FLASH_S      = 0.0   # no flash needed with TAGS_TO_WIN=1
-MATCH_END_HOLD_S = 2.0   # broadcast FLAG_TAGGED for 2s so nodes reliably see it
-LOCKOUT_S        = 3.0   # reject re-registration for 3s after match ends
+TAGS_TO_WIN      = 2     # two tags end the match
+TAG_FLASH_S      = 1.5   # clear FLAG_TAGGED after 1.5s so runner can be tagged again
+MATCH_END_HOLD_S = 0.5   # broadcast FLAG_TAGGED for 0.5s (a few ticks to guarantee delivery)
+LOCKOUT_S        = 0.5   # reject re-registration for 0.5s after match ends
 # Grace period: ignore proximity for this many ticks after match start.
-# Prevents instant tag when both nodes register at (0,0) before sending real positions.
-GRACE_TICKS      = 40    # 2s at 20 Hz — enough for nodes to reach their orbits
-# Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.08 rad/tick)
+# Prevents instant tag when both nodes register before sending real positions.
+GRACE_TICKS      = 10    # 0.5s at 20 Hz — nodes register with real positions now
+# Roles: player 1 = RUNNER (speed 0.05 rad/tick), player 2 = TAGGER (speed 0.11 rad/tick)
 
 class GameTick:
     def __init__(self, packet_queue, broadcast_queue, write_queue, tick_rate=20):
