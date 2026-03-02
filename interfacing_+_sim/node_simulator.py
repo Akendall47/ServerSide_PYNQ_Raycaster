@@ -5,22 +5,16 @@ node_simulator.py
 Fake PYNQ node for testing the server without hardware.
 
 Runs on your laptop and sends UDP packets to the EC2 server, impersonating
-a real PYNQ board. 
+a real PYNQ board.
 
-The nodes have different movements depending on node index. 
-
-Useful for:
-  - Testing server code before deploying to hardware
-  - Debugging packet format issues
-  - Load testing with multiple simulated nodes
+State machine (per node):
+  PLAYING  → sends position at 20 Hz, reads game state
+           → on FLAG_TAGGED in any broadcast: print GAME OVER, → WAITING
+  WAITING  → sends nothing, polls Redis pub/sub for restart signal
+           → on game:control restart: sleep 4.5s (server lockout), → PLAYING
 
 Usage:
-    python3 node_simulator.py <server_ip> [port] [max_ticks] --nodes [number of nodes]
-
-Example:
-    python3 node_simulator.py 52.1.2.3 9000 100 --nodes 2
-
-
+    python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
 """
 
 import socket
@@ -32,326 +26,210 @@ import json
 try:
     import redis as redislib
 except ImportError:
-    redislib = None  # redis not installed — restart signal falls back to keyboard only
+    redislib = None
+
 from protocol import (
     pack_node_packet,
     unpack_server_packet,
-    PKT_STATE_UPDATE,
-    PKT_REGISTER,
     PKT_GAME_STATE,
+    PKT_REGISTER,
     FLAG_SHOOTING,
-    FLAG_TAGGED
+    FLAG_TAGGED,
 )
 
+# How long to wait after restart signal before re-registering.
+# Covers server's MATCH_END_HOLD_S (1s) + LOCKOUT_S (3s) with margin.
+RESTART_DELAY_S = 4.5
 
-class NodeSimulator:
-    def __init__(self, server_ip, server_port=9000, player_id=1, node_index=0):
-        """
-        Initialise the node simulator.
-        
-        Args:
-            server_ip: IP address of the EC2 server
-            server_port: UDP port the server listens on (default: 9000)
-            player_id: This node's player ID (default: 1)
-            node_index: Index of this node (0, 1, 2, ...) for varied behavior
-        """
-        self.server_addr = (server_ip, server_port)
-        self.player_id = player_id
-        self.node_index = node_index
-        self.seq = 0
-        self.tag_after     = None  # if set to int, force a local tag after N ticks
-        self.server_id     = None  # assigned by server on first GAME_STATE (position in player list)
-        self.tick = 0
-        self.running = False
-        
-        # Vary behavior based on node index
-        self.x = 0.0
-        self.y = 0.0
-        self.angle = 0.0
-        
-        # All nodes share the same radius so their paths intersect and tag fires.
-        # Different rotation speeds mean they lap each other repeatedly.
-        self.radius          = 50.0
-        self.rotation_speed  = 0.05 + (node_index * 0.03)  # node 0: 0.05, node 1: 0.08
-        self.shoot_frequency = 20 + (node_index * 10)
+TICK_HZ      = 20
+TICK_INTERVAL = 1.0 / TICK_HZ
 
-        # Spread starting angles so they don't begin on top of each other
-        self.angle = (node_index * math.pi * 2 / 4)
-        
-        # Socket
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(0.05)  
-        
-        print(f"[NODE {self.player_id}] Initialised (index={node_index}). "
-              f"Radius={self.radius:.1f}, Speed={self.rotation_speed:.3f}, "
-              f"Shoot frequency={self.shoot_frequency}. Server: {server_ip}:{server_port}")
-    
-    def register(self):
-        """Send REGISTER packet to server."""
-        packet = pack_node_packet(PKT_REGISTER, seq=0, x=0, y=0, angle=0, flags=0)
-        self.sock.sendto(packet, self.server_addr)
-        print(f"[NODE {self.player_id}] REGISTER sent")
-        self.seq = 1
-    
-    def send_state_update(self):
-        """Send STATE_UPDATE packet with current position."""
-        # Update position (walk in a circle)
-        self.angle += self.rotation_speed
-        self.x = self.radius * math.cos(self.angle)
-        self.y = self.radius * math.sin(self.angle)
-        
-        # Occasionally shoot (based on node's shooting frequency)
-        flags = FLAG_SHOOTING if (self.tick % self.shoot_frequency == 0) else 0
 
-        # If we've been forced to tag ourselves locally, send tagged flag
-        if self.tag_after is not None and self.tick >= self.tag_after:
-            flags = flags | FLAG_TAGGED
-        
-        packet = pack_node_packet(
-            PKT_STATE_UPDATE,
-            seq=self.seq,
-            x=self.x,
-            y=self.y,
-            angle=self.angle,
-            flags=flags
-        )
-        
-        self.sock.sendto(packet, self.server_addr)
-        
-        if self.tick % 20 == 0:  # Print every 20 ticks (1 second at 20 Hz)
-            print(f"[NODE {self.player_id}] Tick {self.tick:4d} | "
-                  f"Seq {self.seq:5d} | "
-                  f"Pos ({self.x:7.2f}, {self.y:7.2f}) | "
-                  f"Angle {self.angle:7.3f} | "
-                  f"Flags {flags}")
-        
-        self.seq = (self.seq + 1) & 0xFFFF  # Wrap at 65535
-    
-    def receive_game_state(self):
-        """Drain all available GAME_STATE packets this tick. Stop on FLAG_TAGGED."""
-        while True:
-            try:
-                data, addr = self.sock.recvfrom(1024)
-                pkt_type, seq, timestamp, players = unpack_server_packet(data)
+def run_node(server_ip, server_port, player_id, node_index,
+             redis_host, redis_port, max_ticks=None):
+    """
+    Single node loop. Runs forever (or until max_ticks) in the calling thread.
 
-                if pkt_type == PKT_GAME_STATE:
-                    if self.tick % 20 == 0:
-                        print(f"[NODE {self.player_id}] ← GAME_STATE: "
-                              f"seq={seq}, {len(players)} players")
+    State machine:
+      playing=True  → register + send position each tick
+      playing=False → wait for pub/sub restart signal, then re-enter playing
+    """
+    server_addr = (server_ip, server_port)
 
-                    for player in players:
-                        if player['flags'] & FLAG_TAGGED:
-                            tagged_id = player['player_id']
-                            print(f"[NODE {self.player_id}] P{tagged_id} TAGGED — match over")
-                            self.close()
-                            return
-            except socket.timeout:
-                break  # no more packets waiting this tick
-            except Exception as e:
-                print(f"[NODE {self.player_id}] Error receiving: {e}")
-                break
-    
-    def _run_one_game(self, duration_seconds=None, max_ticks=None):
-        """Run a single game until tagged or limits hit. Returns True if tagged (play again prompt),
-        False if interrupted or hard-stopped."""
-        self.running = True
-        self.tick    = 0
-        self.seq     = 0
+    # ── movement params (vary by node_index) ──────────────────────────────────
+    radius         = 50.0
+    rotation_speed = 0.05 + node_index * 0.03
+    shoot_freq     = 20  + node_index * 10
+    angle          = node_index * math.pi * 2 / 4   # spread starting positions
 
-        # Re-open socket (closed at end of previous game)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(0.05)
+    tag = f"[NODE {player_id}]"
 
-        self.register()
-        time.sleep(0.1)
-
-        tick_interval = 1.0 / 20.0
-        start_time    = time.time()
-        tagged_out    = False
-
+    # ── Redis pub/sub (optional) ───────────────────────────────────────────────
+    ps = None
+    if redislib:
         try:
-            while self.running:
-                tick_start = time.time()
-
-                if duration_seconds and (time.time() - start_time) > duration_seconds:
-                    break
-                if max_ticks and self.tick >= max_ticks:
-                    break
-
-                self.receive_game_state()
-                if not self.running:   # receive_game_state() called close() on tag
-                    tagged_out = True
-                    break
-
-                self.send_state_update()
-
-                if self.tag_after is not None and self.tick >= self.tag_after:
-                    print(f"[NODE {self.player_id}] (local) GAME OVER: forced tag after {self.tag_after} ticks")
-                    tagged_out = True
-                    break
-
-                elapsed    = time.time() - tick_start
-                sleep_time = max(0, tick_interval - elapsed)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-
-                self.tick += 1
-
-        except KeyboardInterrupt:
-            print(f"\n[NODE {self.player_id}] Interrupted")
-            return False
-        finally:
-            self.sock.close()
-
-        return tagged_out
-
-    def run(self, duration_seconds=None, max_ticks=None, redis_host="127.0.0.1", redis_port=6379):
-        """Run games in a loop. After game over, waits for 'Restart' button in dashboard
-        (Redis pub/sub on game:control) or keyboard Enter — whichever comes first."""
-        ps = None  # pubsub handle — created once, reused across games
-        try:
-            if redislib:
-                rc = redislib.Redis(host=redis_host, port=redis_port, decode_responses=True)
-                rc.ping()
-                ps = rc.pubsub(ignore_subscribe_messages=True)
-                ps.subscribe("game:control")
-                print(f"[NODE {self.player_id}] Subscribed to game:control "
-                      f"({redis_host}:{redis_port})")
+            rc = redislib.Redis(host=redis_host, port=redis_port,
+                                decode_responses=True)
+            rc.ping()
+            ps = rc.pubsub(ignore_subscribe_messages=True)
+            ps.subscribe("game:control")
+            print(f"{tag} subscribed to game:control ({redis_host}:{redis_port})")
         except Exception as e:
-            print(f"[NODE {self.player_id}] Redis unavailable ({e}) — keyboard-only restart")
+            print(f"{tag} Redis unavailable ({e}) — restart requires Ctrl+C and re-run")
             ps = None
 
-        try:
-            while True:
-                tagged = self._run_one_game(duration_seconds, max_ticks)
-                if not tagged:
-                    break
+    # ── main loop ─────────────────────────────────────────────────────────────
+    sock    = None
+    playing = False   # start in WAITING so we register cleanly on first entry
+    seq     = 0
+    tick    = 0
 
-                print(f"\n[NODE {self.player_id}] ── GAME OVER ──")
-                print(f"[NODE {self.player_id}] Waiting for dashboard ▶ RESTART button...")
-
-                # Drain any messages that arrived during the match (stale publishes)
-                game_over_time = time.time()
+    try:
+        while True:
+            # ── Enter PLAYING: open socket, register ──────────────────────────
+            if not playing:
                 if ps:
-                    drained = 0
+                    # drain stale messages from the match just ended
                     while ps.get_message():
-                        drained += 1
-                    print(f"[NODE {self.player_id}] drain complete: {drained} stale message(s) cleared")
-
-                # Wait for restart: pub/sub message only.
-                # Keyboard fallback deliberately removed — tmux panes have a real
-                # PTY so isatty()=True, meaning any accidental Enter would restart.
-                # Dashboard ▶ RESTART button is the sole trigger.
-                restarting = False
-                while not restarting:
-                    if ps:
+                        pass
+                    print(f"{tag} waiting for dashboard ▶ RESTART...")
+                    # block-poll until restart signal
+                    while True:
                         msg = ps.get_message()
-                        if msg:
-                            print(f"[NODE {self.player_id}] pub/sub msg: {msg}")
-                            if msg["type"] == "message":
-                                try:
-                                    cmd = json.loads(msg["data"])
-                                    if cmd.get("cmd") == "restart":
-                                        delay = time.time() - game_over_time
-                                        print(f"[NODE {self.player_id}] Restart from dashboard! ({delay:.1f}s after game over)")
-                                        restarting = True
-                                except Exception:
-                                    pass
-                    else:
-                        # No Redis — block on stdin (only reaches here if Redis unavailable)
-                        try:
-                            input("    Press Enter to restart: ")
-                            restarting = True
-                        except EOFError:
-                            time.sleep(1.0)
+                        if msg and msg["type"] == "message":
+                            try:
+                                if json.loads(msg["data"]).get("cmd") == "restart":
+                                    print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
+                                    time.sleep(RESTART_DELAY_S)
+                                    break
+                            except Exception:
+                                pass
+                        time.sleep(0.1)
+                else:
+                    # no Redis — just wait here; user must Ctrl+C and re-run
+                    print(f"{tag} no Redis — Ctrl+C and re-run to restart")
+                    while True:
+                        time.sleep(1)
 
-                    if not restarting:
-                        time.sleep(0.1)  # 10 Hz poll — low CPU while waiting
+                # open fresh socket for the new game
+                if sock:
+                    sock.close()
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.settimeout(0.05)
 
-                if not restarting:
+                # register
+                pkt = pack_node_packet(PKT_REGISTER, seq=0, x=0, y=0, angle=0, flags=0)
+                sock.sendto(pkt, server_addr)
+                print(f"{tag} REGISTER sent")
+                seq     = 1
+                tick    = 0
+                playing = True
+
+            # ── one PLAYING tick ──────────────────────────────────────────────
+            tick_start = time.time()
+
+            # read all queued game-state packets
+            game_over = False
+            while True:
+                try:
+                    data, _ = sock.recvfrom(1024)
+                    pkt_type, _, _, players = unpack_server_packet(data)
+                    if pkt_type == PKT_GAME_STATE:
+                        for p in players:
+                            if p["flags"] & FLAG_TAGGED:
+                                print(f"{tag} P{p['player_id']} TAGGED — game over")
+                                game_over = True
+                except socket.timeout:
                     break
-                # Wait for server lockout to expire before re-registering.
-                # Server clears players after MATCH_END_HOLD_S (1s) then locks out
-                # for LOCKOUT_S (3s). We sleep 4.5s to be safely past both windows.
-                print(f"[NODE {self.player_id}] Restarting in 4.5s (waiting for server lockout)...")
-                time.sleep(4.5)
-                print(f"[NODE {self.player_id}] Restarting...\n")
+                except Exception as e:
+                    print(f"{tag} recv error: {e}")
+                    break
 
-        except KeyboardInterrupt:
-            pass
-        finally:
-            if ps:
-                ps.close()
-            print(f"[NODE {self.player_id}] Closed after {self.tick} ticks")
-    
-    def close(self):
-        """Signal the game loop to stop. Socket is closed by _run_one_game's finally block."""
-        self.running = False
+            if game_over:
+                playing = False
+                # close socket — server will clear the player after hold+lockout
+                sock.close()
+                sock = None
+                print(f"{tag} ── GAME OVER ──")
+                continue   # go back to top → WAITING state
+
+            # send position update
+            angle += rotation_speed
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            flags = FLAG_SHOOTING if (tick % shoot_freq == 0) else 0
+
+            pkt = pack_node_packet(0x0001, seq=seq, x=x, y=y, angle=angle, flags=flags)
+            sock.sendto(pkt, server_addr)
+
+            if tick % TICK_HZ == 0:
+                print(f"{tag} tick={tick:4d} seq={seq:5d} "
+                      f"pos=({x:7.2f},{y:7.2f}) angle={angle:7.3f} flags={flags}")
+
+            seq  = (seq + 1) & 0xFFFF
+            tick += 1
+
+            if max_ticks and tick >= max_ticks:
+                print(f"{tag} max_ticks {max_ticks} reached, stopping")
+                break
+
+            elapsed = time.time() - tick_start
+            sleep   = max(0.0, TICK_INTERVAL - elapsed)
+            if sleep:
+                time.sleep(sleep)
+
+    except KeyboardInterrupt:
+        print(f"\n{tag} interrupted")
+    finally:
+        if sock:
+            sock.close()
+        if ps:
+            ps.close()
+        print(f"{tag} stopped at tick {tick}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Simulate PYNQ nodes (UDP clients)')
-    parser.add_argument('server_ip', help='EC2 server IP or hostname')
-    parser.add_argument('port', nargs='?', type=int, default=9000, help='UDP port (default: 9000)')
-    parser.add_argument('max_ticks', nargs='?', type=int, default=None, help='Stop after N ticks (optional)')
-    parser.add_argument('--tag-after', '-t', type=int, default=None,
-                        help='Force a local TAG after N ticks (prints GAME OVER and stops)')
-    parser.add_argument('--player-id', '-p', type=int, default=1,
-                        help='Local label only — NOT sent on the wire. Server assigns real IDs by connection order.')
-    parser.add_argument('--nodes', '-n', type=int, default=1, help='Number of nodes to simulate (default: 1)')
-    parser.add_argument('--node-index', type=int, default=None,
-                        help='Override node_index for orbit speed/start angle (default: 0,1,2... per node)')
-    parser.add_argument('--redis-host', default='127.0.0.1',
-                        help='Redis host for restart signal (default: 127.0.0.1)')
-    parser.add_argument('--redis-port', type=int, default=6380,
-                        help='Redis port for restart signal (default: 6380, SSH tunnel to EC2)')
+    parser = argparse.ArgumentParser(description="Simulate PYNQ nodes (UDP clients)")
+    parser.add_argument("server_ip")
+    parser.add_argument("port",       nargs="?", type=int, default=9000)
+    parser.add_argument("max_ticks",  nargs="?", type=int, default=None)
+    parser.add_argument("--nodes",      "-n", type=int, default=1)
+    parser.add_argument("--node-index",       type=int, default=None,
+                        help="Override node_index (default: 0,1,2... per node)")
+    parser.add_argument("--player-id",  "-p", type=int, default=1,
+                        help="Starting player_id label (local only)")
+    parser.add_argument("--redis-host",       default="127.0.0.1")
+    parser.add_argument("--redis-port",       type=int, default=6380)
     args = parser.parse_args()
 
-    server_ip = args.server_ip
-    server_port = args.port
-    max_ticks = args.max_ticks
-    num_nodes = args.nodes
+    print(f"server={args.server_ip}:{args.port}  nodes={args.nodes}  "
+          f"redis={args.redis_host}:{args.redis_port}  "
+          f"max_ticks={args.max_ticks or 'unlimited'}")
 
-    print(f"Starting node simulator...")
-    print(f"Server: {server_ip}:{server_port}")
-    print(f"Number of nodes: {num_nodes}")
-    print(f"Max ticks: {max_ticks if max_ticks else 'unlimited'}")
-    if args.tag_after is not None:
-        print(f"Will force local TAG after {args.tag_after} ticks")
-    print()
-
-    # Create and start all nodes
-    nodes = []
     threads = []
-    
-    for i in range(num_nodes):
-        player_id = args.player_id + i
-        node_index = args.node_index if args.node_index is not None else i
-        node = NodeSimulator(server_ip, server_port, player_id=player_id, node_index=node_index)
-        if args.tag_after is not None:
-            node.tag_after = args.tag_after
-        nodes.append(node)
-        
-        # Run each node in its own thread
-        thread = threading.Thread(target=node.run, kwargs={
-            'max_ticks': max_ticks,
-            'redis_host': args.redis_host,
-            'redis_port': args.redis_port,
-        })
-        thread.daemon = False
-        threads.append(thread)
-        thread.start()
-    
-    # Wait for all threads to complete
+    for i in range(args.nodes):
+        t = threading.Thread(
+            target=run_node,
+            kwargs=dict(
+                server_ip   = args.server_ip,
+                server_port = args.port,
+                player_id   = args.player_id + i,
+                node_index  = args.node_index if args.node_index is not None else i,
+                redis_host  = args.redis_host,
+                redis_port  = args.redis_port,
+                max_ticks   = args.max_ticks,
+            ),
+            daemon=False,
+        )
+        threads.append(t)
+        t.start()
+
     try:
-        for thread in threads:
-            thread.join()
+        for t in threads:
+            t.join()
     except KeyboardInterrupt:
-        print("\nInterrupted by user, shutting down all nodes...")
-        for node in nodes:
-            node.close()
+        print("\nshutting down...")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
