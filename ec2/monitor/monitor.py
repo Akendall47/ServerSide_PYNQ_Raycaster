@@ -184,7 +184,6 @@ def collect_state():
     events_raw = r.lrange("game:monitor-events", 0, 49)
     parsed     = [json.loads(e) for e in events_raw if e]
     match_events = current_match_events(parsed)
-    events_in_list = r.llen("game:seda-events")
     matches = poll_dynamodb()
 
     n_clients = _as_int(clients.get("connected_clients", 0))
@@ -217,7 +216,7 @@ def collect_state():
         },
         "pipeline": {
             "players_online":  len(players),
-            "events_in_list":  events_in_list,
+            "match_events":    len(match_events),
             "sidecar_blocked": blocked,
             "ops_per_sec":     info.get("instantaneous_ops_per_sec", 0),
             "ddb_matches":     len(matches),

@@ -303,9 +303,9 @@
 
   <!-- Event counter -->
   <div style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; padding-left:16px;">
-    <div style="font-size:9px;color:#333;letter-spacing:1px;">EVENTS IN REDIS LIST</div>
+    <div style="font-size:9px;color:#333;letter-spacing:1px;">EVENTS THIS MATCH</div>
     <div style="font-size:18px;color:#00d4ff;font-weight:bold;" id="pp-events">—</div>
-    <div style="font-size:9px;color:#333;">game:seda-events</div>
+    <div style="font-size:9px;color:#333;">match flow</div>
   </div>
 
 </div>
@@ -335,8 +335,8 @@
       <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
       <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
       <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
-      <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
-      <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
+      <div class="metric-row"><span>pub/sub</span><span id="r-pubsub">—</span></div>
+      <div class="metric-row"><span>monitor load</span><span id="r-poll">—</span></div>
       <div class="metric-note" id="redis-note">measuring live Redis load...</div>
     </div>
 
@@ -503,8 +503,8 @@ function updateRedis(redis) {
   document.getElementById('r-mem').textContent     = redis.mem_used;
   document.getElementById('r-clients').textContent = redis.connected_clients;
   document.getElementById('r-blocked').textContent = redis.blocked_clients;
-  document.getElementById('r-hits').textContent    = redis.keyspace_hits;
-  document.getElementById('r-misses').textContent  = redis.keyspace_misses;
+  document.getElementById('r-pubsub').textContent  = redis.pubsub_clients;
+  document.getElementById('r-poll').textContent    = `${redis.monitor_cmds_per_sec}/s`;
 
   const parts = [];
   if (redis.blocked_clients > 0) parts.push(`${redis.blocked_clients} blocked`);
@@ -523,7 +523,7 @@ function updatePipeline(pipeline) {
   document.getElementById('pp-players').textContent = pipeline.players_online;
   document.getElementById('pp-ops').textContent     = pipeline.ops_per_sec;
   document.getElementById('pp-blocked').textContent = pipeline.sidecar_blocked;
-  document.getElementById('pp-events').textContent  = pipeline.events_in_list;
+  document.getElementById('pp-events').textContent  = pipeline.match_events;
   document.getElementById('pp-ddb').textContent     = pipeline.ddb_matches;
 }
 
