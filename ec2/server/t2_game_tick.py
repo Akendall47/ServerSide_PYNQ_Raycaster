@@ -136,8 +136,9 @@ class GameTick:
         p["x"]     = x
         p["y"]     = y
         p["angle"] = angle
-        # Client cannot set FLAG_TAGGED — server owns that bit
-        p["flags"] = (p["flags"] & FLAG_TAGGED) | (flags & ~FLAG_TAGGED)
+        # Client cannot set server-owned flag bits
+        SERVER_FLAGS = FLAG_TAGGED | FLAG_MATCH_END
+        p["flags"] = (p["flags"] & SERVER_FLAGS) | (flags & ~SERVER_FLAGS)
 
     def _register_player(self, addr):
         if self.lockout_until and time.monotonic() < self.lockout_until:
