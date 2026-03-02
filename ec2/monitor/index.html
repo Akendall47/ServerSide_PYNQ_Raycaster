@@ -358,8 +358,11 @@
         <button class="control-btn stop" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
         <button class="control-btn restart" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
         <button class="control-btn restart" onclick="sendControl('restart', 'start match')">Start Match</button>
+        <button class="control-btn start" onclick="sendControl('nodes_auto', 'nodes auto mode')">Nodes Auto</button>
+        <button class="control-btn restart" onclick="sendControl('nodes_manual', 'nodes manual mode')">Nodes Manual</button>
       </div>
-      <div class="metric-note">EC2 services are controlled here. Node simulators still run locally via `dev.sh`.</div>
+      <div class="metric-note">EC2 services are controlled here. Node simulators still run locally via `dev.sh`, but their mode can be switched over Redis.</div>
+      <div class="metric-note">For manual mode, focus the relevant tmux pane before using arrow keys.</div>
       <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
     </div>
 

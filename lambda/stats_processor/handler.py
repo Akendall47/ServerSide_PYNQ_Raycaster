@@ -81,16 +81,19 @@ def update_meta_record(match_id: str, fields: dict):
 
 def game_compute_summary(events: list, message: dict):
     """Hook: derive the game-specific summary from the replay stream."""
+    snapshot_frames = sum(1 for event in events if event.get("event") == "state_snapshot")
+    match_events = [event for event in events if event.get("event") != "state_snapshot"]
     summary = {
-        "summary_event_count": len(events) or int(message.get("event_count", 0) or 0),
-        "summary_tag_events": sum(1 for event in events if event.get("event") == "player_tagged"),
+        "summary_event_count": len(match_events) or int(message.get("event_count", 0) or 0),
+        "summary_snapshot_frames": snapshot_frames or int(message.get("replay_frame_count", 0) or 0),
+        "summary_tag_events": sum(1 for event in match_events if event.get("event") == "player_tagged"),
         "summary_winner": message.get("winner") or "unknown",
     }
 
     if summary["summary_tag_events"] == 0:
         summary["summary_tag_events"] = int(message.get("tag_count", 0) or 0)
 
-    for event in reversed(events):
+    for event in reversed(match_events):
         if event.get("event") == "match_end" and event.get("winner"):
             summary["summary_winner"] = event["winner"]
             break

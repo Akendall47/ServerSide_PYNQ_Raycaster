@@ -29,6 +29,7 @@ import redis
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 EVENT_KEY = os.environ.get("EVENT_KEY", "game:seda-events")
+REPLAY_KEY = os.environ.get("REPLAY_KEY", "game:seda-replay")
 
 DYNAMO_TABLE = os.environ.get("DYNAMO_TABLE", "pynq-raycaster-seda-matches")
 AWS_REGION = os.environ.get("AWS_REGION", "eu-west-2")
@@ -110,6 +111,16 @@ def record_match_event(event: dict, recorded_at: str):
     current_match_events.append(payload)
 
 
+def count_state_snapshots(events=None):
+    rows = current_match_events if events is None else events
+    return sum(1 for event in rows if event.get("event") == "state_snapshot")
+
+
+def count_match_events(events=None):
+    rows = current_match_events if events is None else events
+    return len(rows) - count_state_snapshots(rows)
+
+
 def replay_key_for(match_id: str, started_at: str):
     prefix = S3_REPLAY_PREFIX or "replays"
     started_dt = parse_iso(started_at) or utc_now()
@@ -177,7 +188,8 @@ def publish_match_end(match_id: str, ended_at: str, replay_key: str, extra_paylo
         "table": DYNAMO_TABLE,
         "region": AWS_REGION,
         "ended_at": ended_at,
-        "event_count": len(current_match_events),
+        "event_count": count_match_events(),
+        "replay_frame_count": count_state_snapshots(),
         "s3_bucket": S3_BUCKET or None,
         "replay_key": replay_key,
     }
@@ -321,6 +333,15 @@ def game_on_match_end(event: dict):
     }
 
 
+def game_on_state_snapshot(event: dict):
+    """Hook: authoritative world-state frame for replay playback."""
+    replay_event = dict(event)
+    replay_event["tag_count"] = game_tag_count
+    return {
+        "replay_event": replay_event,
+    }
+
+
 # ── Pipeline Event Handlers ──────────────────────────────────────────────────
 
 def handle_match_start(event: dict):
@@ -372,7 +393,8 @@ def handle_match_end(event: dict):
     meta_fields = {
         "status": "completed",
         "end_time": ended_at,
-        "event_count": len(current_match_events),
+        "event_count": count_match_events(),
+        "replay_frame_count": count_state_snapshots(),
         **end_payload["meta_fields"],
     }
 
@@ -398,20 +420,30 @@ def handle_match_end(event: dict):
     reset_match_state()
 
 
+def handle_state_snapshot(event: dict):
+    if not has_active_match():
+        return
+
+    recorded_at = utc_now_iso()
+    snapshot_payload = game_on_state_snapshot(event)
+    record_match_event(snapshot_payload["replay_event"], recorded_at)
+
+
 # ── Event Dispatch ────────────────────────────────────────────────────────────
 
 HANDLERS = {
     "match_start": handle_match_start,
     "player_tagged": handle_player_tagged,
     "match_end": handle_match_end,
+    "state_snapshot": handle_state_snapshot,
 }
 
 # ── Main Loop ─────────────────────────────────────────────────────────────────
 
-print(f"Waiting on '{EVENT_KEY}' (BRPOP — zero CPU until event arrives)...")
+print(f"Waiting on '{EVENT_KEY}' / '{REPLAY_KEY}' (BRPOP — zero CPU until event arrives)...")
 
 while True:
-    result = r.brpop(EVENT_KEY, timeout=0)
+    result = r.brpop([EVENT_KEY, REPLAY_KEY], timeout=0)
     if result is None:
         continue
 

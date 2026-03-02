@@ -21,12 +21,13 @@ The current sidecar uploads one compressed NDJSON replay file per completed matc
 s3://fpga-raycaster-data/replays/year=YYYY/month=MM/{match_id}.ndjson.gz
 ```
 
-Each line is one JSON event with a `recorded_at` timestamp. For the current game this is the lightweight match event stream:
+Each line is one JSON event with a `recorded_at` timestamp. For the current game this now includes:
 - `match_start`
+- `state_snapshot`
 - `player_tagged`
 - `match_end`
 
-This is not yet a full per-tick movement replay. It is the post-match event log for the MVP pipeline.
+`state_snapshot` rows are the authoritative server view of each player at that moment, so the replay file can now drive actual world-state playback instead of only high-level event playback.
 
 ## Plug-In Points
 

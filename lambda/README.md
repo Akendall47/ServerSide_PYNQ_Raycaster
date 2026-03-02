@@ -50,11 +50,12 @@ lambda/
 
 The handler:
 - loads the replay file from S3
-- counts total events and tag events
+- counts gameplay events, state-snapshot frames, and tag events
 - recomputes duration from the replay timestamps when available
 - updates the `META` row with:
   - `summary_processed_at`
   - `summary_event_count`
+  - `summary_snapshot_frames`
   - `summary_tag_events`
   - `summary_winner`
   - `summary_duration_ms`

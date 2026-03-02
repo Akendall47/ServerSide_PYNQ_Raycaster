@@ -50,6 +50,7 @@ GRACE_TICKS      = 10    # 0.5s at 20 Hz
 # Spawn positions mirror node_simulator.py: angle = player_id-1 * π/2, radius = 50
 ORBIT_RADIUS     = 50.0
 SPAWN_ANGLES     = [0.0, math.pi / 2]   # player_id 1 → angle 0, player_id 2 → angle π/2
+REPLAY_KEY       = "game:seda-replay"
 
 class GameTick:
     def __init__(self, packet_queue, broadcast_queue, write_queue, tick_rate=20):
@@ -321,6 +322,30 @@ class GameTick:
                 "mapping": {"x": round(p["x"], 4), "y": round(p["y"], 4),
                             "angle": round(p["angle"], 4), "flags": p["flags"]},
             })
+        if self.match_started and self.players:
+            self.write_queue.put({
+                "op": "lpush",
+                "key": REPLAY_KEY,
+                "value": json.dumps(self._build_state_snapshot()),
+            })
+
+    def _build_state_snapshot(self):
+        players = []
+        for p in sorted(self.players.values(), key=lambda item: item["player_id"]):
+            players.append({
+                "player_id": p["player_id"],
+                "x": round(p["x"], 4),
+                "y": round(p["y"], 4),
+                "angle": round(p["angle"], 4),
+                "flags": p["flags"],
+            })
+        return {
+            "event": "state_snapshot",
+            "server_tick": self.tick_count,
+            "match_tick": self.match_tick,
+            "match_ended": self.match_ended,
+            "players": players,
+        }
 
     async def _push_event(self, event: dict):
         self.write_queue.put({              # SimpleQueue.put() — no await

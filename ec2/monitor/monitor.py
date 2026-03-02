@@ -217,6 +217,14 @@ def handle_control_command(cmd: str):
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
         _service_message = "restart signal sent to node simulators"
+    elif cmd == "nodes_auto":
+        payload = json.dumps({"cmd": "set_mode", "mode": "auto"})
+        r.publish("game:control", payload)
+        _service_message = "node simulators switched to auto mode"
+    elif cmd == "nodes_manual":
+        payload = json.dumps({"cmd": "set_mode", "mode": "manual"})
+        r.publish("game:control", payload)
+        _service_message = "node simulators switched to manual mode"
     elif cmd == "start_server":
         _service_message = _start_service("server")
     elif cmd == "stop_server":
