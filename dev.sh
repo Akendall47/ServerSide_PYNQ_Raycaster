@@ -20,13 +20,19 @@ EC2="ubuntu@18.175.238.148"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 
-# Warn if local commits haven't been pushed yet
+# Block if there are uncommitted changes or unpushed commits — EC2 must match local exactly.
+if ! git -C "$REPO" diff --quiet || ! git -C "$REPO" diff --cached --quiet; then
+  echo "!!! UNCOMMITTED changes detected — commit and push first:"
+  git -C "$REPO" status --short
+  echo "    git add -p && git commit -m '...' && git push && ./dev.sh"
+  exit 1
+fi
 UNPUSHED=$(git -C "$REPO" log --oneline @{u}..HEAD 2>/dev/null | wc -l)
 if [ "$UNPUSHED" -gt 0 ]; then
-  echo "!!! WARNING: $UNPUSHED unpushed commit(s) — EC2 pull will miss them. Push first!"
+  echo "!!! $UNPUSHED unpushed commit(s) — EC2 pull will miss them:"
+  git -C "$REPO" log --oneline @{u}..HEAD
   echo "    git push && ./dev.sh"
-  read -rp "    Continue anyway? [y/N] " confirm
-  [[ "$confirm" =~ ^[Yy]$ ]] || exit 1
+  exit 1
 fi
 
 # Kill stale tmux session
