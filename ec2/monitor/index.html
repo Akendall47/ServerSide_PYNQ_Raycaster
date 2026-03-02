@@ -337,18 +337,14 @@
       <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
       <div class="metric-row"><span>keyspace hits</span><span id="r-hits">—</span></div>
       <div class="metric-row"><span>keyspace misses</span><span id="r-misses">—</span></div>
-      <div class="metric-note">
-        <b style="color:#888">ops/sec:</b> ~150–200 normal — game server ~100 (2 players × 20Hz × 2–3 cmds) + monitor ~50 (5 INFO/LRANGE calls × 10Hz)<br>
-        <b style="color:#888">clients 4:</b> T4 RedisWriter · Sidecar · Monitor · redis-cli<br>
-        <b style="color:#888">blocked 1:</b> sidecar sleeping on BRPOP — wakes instantly when an event is pushed
-      </div>
+      <div class="metric-note" id="redis-note">measuring live Redis load...</div>
     </div>
 
     <!-- DynamoDB matches -->
     <div class="panel">
       <h2>DynamoDB — recent matches</h2>
       <div id="match-list"><span style="color:#333">loading...</span></div>
-      <div class="ddb-note">polled every 5s · pynq-raycaster-seda-matches</div>
+      <div class="ddb-note">full META scan every 2s · sorted by latest timestamp</div>
     </div>
 
     <!-- Event log -->
@@ -509,6 +505,17 @@ function updateRedis(redis) {
   document.getElementById('r-blocked').textContent = redis.blocked_clients;
   document.getElementById('r-hits').textContent    = redis.keyspace_hits;
   document.getElementById('r-misses').textContent  = redis.keyspace_misses;
+
+  const parts = [];
+  if (redis.blocked_clients > 0) parts.push(`${redis.blocked_clients} blocked`);
+  if (redis.pubsub_clients > 0) parts.push(`${redis.pubsub_clients} pub/sub`);
+  if (redis.direct_clients > 0) parts.push(`${redis.direct_clients} direct`);
+  const breakdown = parts.length ? parts.join(' + ') : 'no active connections';
+
+  let note = `monitor polls Redis at ${redis.monitor_push_hz} Hz (~${redis.monitor_cmds_per_sec} commands/sec from this page). `;
+  note += `Clients ${redis.connected_clients} = ${breakdown}. `;
+  note += `Blocked is usually the sidecar on BRPOP; pub/sub clients are usually node simulators waiting for restart.`;
+  document.getElementById('redis-note').textContent = note;
 }
 
 function updatePipeline(pipeline) {

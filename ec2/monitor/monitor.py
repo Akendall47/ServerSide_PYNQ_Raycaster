@@ -31,6 +31,7 @@ REDIS_HOST   = "127.0.0.1"
 REDIS_PORT   = 6379
 HTTP_PORT    = 8080
 PUSH_RATE_HZ = 20   # push to browser at 20 Hz (match game tick rate)
+DDB_POLL_INTERVAL_S = 2.0
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
 AWS_REGION   = "eu-west-2"
@@ -45,23 +46,39 @@ dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
 _ddb_cache      = []
 _ddb_last_fetch = 0.0
 
+def _as_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 def poll_dynamodb():
     global _ddb_cache, _ddb_last_fetch
     now = time.monotonic()
-    if now - _ddb_last_fetch < 5.0:
+    if now - _ddb_last_fetch < DDB_POLL_INTERVAL_S:
         return _ddb_cache
     try:
-        # Limit applies per page before filtering, so use a large value to ensure
-        # we get enough META records back after the FilterExpression is applied.
-        resp = dyndb.scan(
-            FilterExpression="record_type = :rt",
-            ExpressionAttributeValues={":rt": "META"},
-            ProjectionExpression="match_id, #s, #ts",
-            ExpressionAttributeNames={"#s": "status", "#ts": "timestamp"},
-            Limit=100,
-        )
-        items = sorted(resp.get("Items", []),
-                       key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
+        # Without a GSI on timestamp, the only correct "recent matches" view is
+        # to scan all META rows, then sort locally. The table is still small.
+        items = []
+        last_evaluated_key = None
+        while True:
+            kwargs = {
+                "FilterExpression": "record_type = :rt",
+                "ExpressionAttributeValues": {":rt": "META"},
+                "ProjectionExpression": "match_id, #s, #ts",
+                "ExpressionAttributeNames": {"#s": "status", "#ts": "timestamp"},
+            }
+            if last_evaluated_key:
+                kwargs["ExclusiveStartKey"] = last_evaluated_key
+
+            resp = dyndb.scan(**kwargs)
+            items.extend(resp.get("Items", []))
+            last_evaluated_key = resp.get("LastEvaluatedKey")
+            if not last_evaluated_key:
+                break
+
+        items = sorted(items, key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
         _ddb_cache = [
             {"match_id": i["match_id"],
              "status":   i.get("status", "?"),
@@ -160,7 +177,7 @@ def collect_state():
     info    = r.info("stats")
     mem     = r.info("memory")
     clients = r.info("clients")
-    persist = r.info("persistence")
+    client_rows = r.client_list()
 
     # game:monitor-events is written by T4 alongside game:seda-events but
     # never drained by the sidecar — so every event is visible here.
@@ -168,9 +185,18 @@ def collect_state():
     parsed     = [json.loads(e) for e in events_raw if e]
     match_events = current_match_events(parsed)
     events_in_list = r.llen("game:seda-events")
+    matches = poll_dynamodb()
 
-    n_clients = clients.get("connected_clients", 0)
-    blocked   = clients.get("blocked_clients", 0)
+    n_clients = _as_int(clients.get("connected_clients", 0))
+    blocked   = _as_int(clients.get("blocked_clients", 0))
+    pubsub_clients = sum(
+        1 for row in client_rows
+        if _as_int(row.get("sub", 0)) > 0 or _as_int(row.get("psub", 0)) > 0
+    )
+    direct_clients = max(0, n_clients - blocked - pubsub_clients)
+
+    player_probe_reads = min(9, len(players) + 1)
+    monitor_cmds_per_push = player_probe_reads + 6  # 3x INFO + CLIENT LIST + LRANGE + LLEN
 
     return {
         "players": players,
@@ -183,16 +209,21 @@ def collect_state():
             # blocked=1 is normal: sidecar sleeping on BRPOP waiting for next event
             "keyspace_hits":     info.get("keyspace_hits", 0),
             "keyspace_misses":   info.get("keyspace_misses", 0),
+            "pubsub_clients":    pubsub_clients,
+            "direct_clients":    direct_clients,
+            "monitor_push_hz":   PUSH_RATE_HZ,
+            "monitor_cmds_per_push": monitor_cmds_per_push,
+            "monitor_cmds_per_sec": monitor_cmds_per_push * PUSH_RATE_HZ,
         },
         "pipeline": {
             "players_online":  len(players),
             "events_in_list":  events_in_list,
             "sidecar_blocked": blocked,
             "ops_per_sec":     info.get("instantaneous_ops_per_sec", 0),
-            "ddb_matches":     len(_ddb_cache),
+            "ddb_matches":     len(matches),
         },
         "events":  match_events[:20],   # newest-first, current match only
-        "matches": poll_dynamodb(),
+        "matches": matches,
     }
 
 # ── WebSocket handler ──────────────────────────────────────────────────────────

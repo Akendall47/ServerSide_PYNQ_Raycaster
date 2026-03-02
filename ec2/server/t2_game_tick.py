@@ -26,6 +26,7 @@ import math
 import json
 import sys
 import os
+import struct
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'interfacing_+_sim'))
 from protocol import (
@@ -34,7 +35,6 @@ from protocol import (
     FLAG_TAGGED,
     FLAG_MATCH_END,
 )
-import struct
 
 TAG_RADIUS       = 20.0  # units
 MATCH_PLAYERS    = 2
