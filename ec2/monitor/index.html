@@ -159,6 +159,28 @@
   .metric-row { display: flex; justify-content: space-between; margin-bottom: 5px; color: #aaa; }
   .metric-row span:last-child { color: #eee; font-weight: bold; }
   .metric-note { font-size: 10px; color: #555; margin-top: 3px; margin-bottom: 4px; line-height: 1.5; }
+  .control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .control-grid .wide { grid-column: span 2; }
+  .control-btn {
+    padding: 6px 8px;
+    background: #171717;
+    color: #ddd;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .control-btn:hover { border-color: #00d4ff55; color: #fff; }
+  .control-btn.start { border-color: #00ff8844; color: #baffd8; }
+  .control-btn.stop { border-color: #ff666644; color: #ffd0d0; }
+  .control-btn.restart { border-color: #ffaa0044; color: #ffe0a6; }
 
   table { width: 100%; border-collapse: collapse; }
   th { color: #666; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
@@ -210,7 +232,6 @@
   <span id="status" class="disconnected">● DISCONNECTED</span>
   <span id="game-chip">no game</span>
   <span id="fps"></span>
-  <button id="restart-btn" onclick="sendRestart()" style="margin-left:auto;padding:4px 14px;background:#1a2a1a;color:#00ff88;border:1px solid #00ff8866;border-radius:4px;cursor:pointer;font-size:11px;letter-spacing:1px;">▶ RESTART</button>
 </header>
 
 <!-- ═══ SEDA Pipeline Strip ═══════════════════════════════════════════════ -->
@@ -318,6 +339,23 @@
   </div>
 
   <div class="side">
+
+    <!-- EC2 controls -->
+    <div class="panel">
+      <h2>EC2 Controls</h2>
+      <div class="metric-row"><span>server</span><span id="svc-server">—</span></div>
+      <div class="metric-row"><span>sidecar</span><span id="svc-sidecar">—</span></div>
+      <div class="metric-row"><span>monitor</span><span id="svc-monitor">—</span></div>
+      <div class="control-grid">
+        <button class="control-btn start" onclick="sendControl('start_server', 'start server')">Start Server</button>
+        <button class="control-btn stop" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+        <button class="control-btn start" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+        <button class="control-btn stop" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+        <button class="control-btn restart wide" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+        <button class="control-btn restart wide" onclick="sendControl('restart', 'restart match')">Restart Match</button>
+      </div>
+      <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
+    </div>
 
     <!-- Players -->
     <div class="panel">
@@ -527,6 +565,26 @@ function updatePipeline(pipeline) {
   document.getElementById('pp-ddb').textContent     = pipeline.ddb_matches;
 }
 
+function updateServices(services) {
+  if (!services) return;
+
+  const applyState = (id, svc) => {
+    const el = document.getElementById(id);
+    if (!svc) {
+      el.textContent = '—';
+      el.style.color = '#888';
+      return;
+    }
+    el.textContent = svc.running ? `running (${svc.pid_count})` : 'stopped';
+    el.style.color = svc.running ? '#00ff88' : '#ff6666';
+  };
+
+  applyState('svc-server', services.server);
+  applyState('svc-sidecar', services.sidecar);
+  applyState('svc-monitor', services.monitor);
+  document.getElementById('svc-note').textContent = services.last_action || 'controls run on EC2 only; node simulators still start locally';
+}
+
 function updateMatches(matches) {
   const el = document.getElementById('match-list');
   if (!matches || matches.length === 0) {
@@ -581,13 +639,13 @@ function updateEvents(events) {
 // ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
 let ws = null;
-function sendRestart() {
+function sendControl(cmd, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({cmd: 'restart', nodes: 2}));
-    const btn = document.getElementById('restart-btn');
-    btn.textContent = '✓ SENT';
-    setTimeout(() => { btn.textContent = '▶ RESTART'; }, 1500);
+    ws.send(JSON.stringify({cmd}));
+    document.getElementById('svc-note').textContent = `${label} requested...`;
+    return;
   }
+  document.getElementById('svc-note').textContent = 'websocket disconnected';
 }
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
@@ -600,6 +658,7 @@ function connect() {
     latestState = state;
     updatePlayers(state.players);
     updateRedis(state.redis);
+    updateServices(state.services);
     updatePipeline(state.pipeline);
     updateMatches(state.matches);
     updateEvents(state.events);

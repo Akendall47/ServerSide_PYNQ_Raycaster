@@ -22,6 +22,10 @@
 import asyncio
 import json
 import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
 import time
 import redis as redislib
 import boto3
@@ -32,9 +36,24 @@ REDIS_PORT   = 6379
 HTTP_PORT    = 8080
 PUSH_RATE_HZ = 20   # push to browser at 20 Hz (match game tick rate)
 DDB_POLL_INTERVAL_S = 2.0
+SERVICE_POLL_INTERVAL_S = 1.0
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
 AWS_REGION   = "eu-west-2"
+REPO_ROOT    = Path(__file__).resolve().parents[2]
+
+SERVICE_SPECS = {
+    "server": {
+        "script": REPO_ROOT / "ec2" / "server" / "server.py",
+        "pattern": "ec2/server/server.py",
+        "log": Path("/tmp/seda-server.log"),
+    },
+    "sidecar": {
+        "script": REPO_ROOT / "ec2" / "sidecar" / "sidecar.py",
+        "pattern": "ec2/sidecar/sidecar.py",
+        "log": Path("/tmp/seda-sidecar.log"),
+    },
+}
 
 # ── Connections ────────────────────────────────────────────────────────────────
 
@@ -45,6 +64,9 @@ dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
 
 _ddb_cache      = []
 _ddb_last_fetch = 0.0
+_service_cache  = {}
+_service_last_fetch = 0.0
+_service_message = "controls run on EC2 only; node simulators still start locally"
 
 def _as_int(value, default=0):
     try:
@@ -89,6 +111,133 @@ def poll_dynamodb():
     except Exception as e:
         print(f"[monitor] DynamoDB poll error: {e}")
     return _ddb_cache
+
+def _service_pids(name: str):
+    spec = SERVICE_SPECS[name]
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid=,args="],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return []
+
+    if result.returncode != 0:
+        print(f"[monitor] ps failed for {name}: {result.stderr.strip()}")
+        return []
+
+    pids = []
+    for line in result.stdout.splitlines():
+        try:
+            pid_text, cmd = line.strip().split(None, 1)
+            pid = int(pid_text)
+        except ValueError:
+            continue
+        except IndexError:
+            continue
+        if pid != os.getpid() and spec["pattern"] in cmd:
+            pids.append(pid)
+    return pids
+
+def poll_services(force: bool = False):
+    global _service_cache, _service_last_fetch
+    now = time.monotonic()
+    if not force and now - _service_last_fetch < SERVICE_POLL_INTERVAL_S:
+        return _service_cache
+
+    server_pids = _service_pids("server")
+    sidecar_pids = _service_pids("sidecar")
+    _service_cache = {
+        "server": {
+            "running": bool(server_pids),
+            "pid_count": len(server_pids),
+        },
+        "sidecar": {
+            "running": bool(sidecar_pids),
+            "pid_count": len(sidecar_pids),
+        },
+        "monitor": {
+            "running": True,
+            "pid_count": 1,
+        },
+        "last_action": _service_message,
+    }
+    _service_last_fetch = now
+    return _service_cache
+
+def _start_service(name: str):
+    spec = SERVICE_SPECS[name]
+    pids = _service_pids(name)
+    if pids:
+        return f"{name} already running"
+
+    log_handle = open(spec["log"], "ab")
+    try:
+        subprocess.Popen(
+            [sys.executable, str(spec["script"])],
+            cwd=str(REPO_ROOT),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        log_handle.close()
+
+    time.sleep(0.2)
+    return f"{name} started"
+
+def _stop_service(name: str):
+    pids = _service_pids(name)
+    if not pids:
+        return f"{name} already stopped"
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if not _service_pids(name):
+            return f"{name} stopped"
+        time.sleep(0.05)
+
+    for pid in _service_pids(name):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return f"{name} killed"
+
+def handle_control_command(cmd: str):
+    global _service_message
+
+    if cmd == "restart":
+        payload = json.dumps({"cmd": "restart"})
+        r.publish("game:control", payload)
+        _service_message = "restart signal sent to node simulators"
+    elif cmd == "start_server":
+        _service_message = _start_service("server")
+    elif cmd == "stop_server":
+        _service_message = _stop_service("server")
+    elif cmd == "start_sidecar":
+        _service_message = _start_service("sidecar")
+    elif cmd == "stop_sidecar":
+        _service_message = _stop_service("sidecar")
+    elif cmd == "restart_stack":
+        _stop_service("sidecar")
+        _stop_service("server")
+        time.sleep(0.2)
+        _start_service("server")
+        time.sleep(0.2)
+        _start_service("sidecar")
+        _service_message = "stack restarted"
+    else:
+        _service_message = f"unknown command: {cmd}"
+
+    poll_services(force=True)
+    return _service_message
 
 # ── Current-match event tracking ───────────────────────────────────────────────
 #
@@ -195,7 +344,7 @@ def collect_state():
     direct_clients = max(0, n_clients - blocked - pubsub_clients)
 
     player_probe_reads = min(9, len(players) + 1)
-    monitor_cmds_per_push = player_probe_reads + 6  # 3x INFO + CLIENT LIST + LRANGE + LLEN
+    monitor_cmds_per_push = player_probe_reads + 5  # 3x INFO + CLIENT LIST + LRANGE
 
     return {
         "players": players,
@@ -214,6 +363,7 @@ def collect_state():
             "monitor_cmds_per_push": monitor_cmds_per_push,
             "monitor_cmds_per_sec": monitor_cmds_per_push * PUSH_RATE_HZ,
         },
+        "services": poll_services(),
         "pipeline": {
             "players_online":  len(players),
             "match_events":    len(match_events),
@@ -245,10 +395,10 @@ async def ws_handler(request):
                 msg = await asyncio.wait_for(ws.receive(), timeout=1 / PUSH_RATE_HZ)
                 if msg.type == web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
-                    if data.get("cmd") == "restart":
-                        payload = json.dumps({"cmd": "restart"})
-                        r.publish("game:control", payload)
-                        print(f"[monitor] restart signal → Redis game:control (pub/sub)")
+                    cmd = data.get("cmd")
+                    if cmd:
+                        result = await asyncio.to_thread(handle_control_command, cmd)
+                        print(f"[monitor] command {cmd}: {result}")
             except asyncio.TimeoutError:
                 pass  # normal — no message from browser this tick
             except Exception:
