@@ -1,47 +1,35 @@
-// ec2/game_logic/map_loader.cpp
+// game_logic/map_loader.cpp — load text map files into tile arrays.
 
 #include "map_loader.h"
 #include <fstream>
-#include <iostream>
-#include <string>
+#include <stdexcept>
 
-namespace MapLoader {
-
-MapData load(const std::string& path) {
-    MapData result;
+bool load_map(const std::string& path, std::vector<uint8_t>& tiles,
+              int& width, int& height) {
     std::ifstream f(path);
-    if (!f.is_open()) {
-        std::cerr << "[map_loader] cannot open: " << path << "\n";
-        return result;
-    }
+    if (!f) return false;
 
+    std::vector<std::vector<uint8_t>> rows;
     std::string line;
     while (std::getline(f, line)) {
-        // Strip trailing CR (Windows line endings)
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
         if (line.empty()) continue;
-
-        // First row sets the expected width
-        if (result.width == 0) {
-            result.width = static_cast<int>(line.size());
-        } else if (static_cast<int>(line.size()) != result.width) {
-            std::cerr << "[map_loader] row width mismatch at row "
-                      << result.height << " (expected " << result.width
-                      << ", got " << line.size() << ")\n";
-            return MapData{};   // return empty on malformed input
-        }
-
-        for (char c : line) {
-            result.tiles.push_back(c == '#' ? 1u : 0u);
-        }
-        result.height++;
+        std::vector<uint8_t> row;
+        for (char c : line)
+            row.push_back(c == '#' ? 1 : 0);
+        rows.push_back(std::move(row));
     }
 
-    std::cout << "[map_loader] loaded " << path
-              << "  " << result.width << "x" << result.height << "\n";
-    return result;
+    if (rows.empty()) return false;
+    width  = static_cast<int>(rows[0].size());
+    height = static_cast<int>(rows.size());
+    tiles.clear();
+    tiles.reserve(width * height);
+    for (auto& r : rows)
+        tiles.insert(tiles.end(), r.begin(), r.end());
+    return true;
 }
 
-}   // namespace MapLoader
+Map make_map_view(const std::vector<uint8_t>& tiles, int width, int height,
+                  float tile_scale) {
+    return Map{tiles.data(), width, height, tile_scale};
+}
