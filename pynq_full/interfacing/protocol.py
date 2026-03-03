@@ -1,15 +1,5 @@
-# pynq_full/interfacing/protocol.py
-#
-# Single source of truth for the UDP packet format.
-#
-# This file is THE contract between the PYNQ node and the Python server.
-# If you change a field, size, or order here you MUST update the server-side unpack
-# logic in pynq_full/ec2/server/t2_game_tick.py to match. The asserts below will catch
-# size mismatches at startup.
-#
-# Used by:
-#   pynq_full/interfacing/   : PYNQ board code
-#   pynq_full/ec2/server/    : EC2 server (via sys.path insert)
+# pynq_full/interfacing/protocol.py — UDP packet format (node ↔ server).
+# Asserts catch size mismatches at startup. Used by PYNQ board code and EC2 server.
 
 import struct
 import time
@@ -96,21 +86,14 @@ assert MAP_HEADER_SIZE == 4, f"MapHeader must be 4 bytes, got {MAP_HEADER_SIZE}"
 # ── Pack helpers (build outgoing packets) ─────────────────────────────────────
 
 def pack_map_packet(seq, width, height, tile_scale, tiles):
-    """
-    Pack a PKT_MAP packet for sending to a node after registration.
-    tiles: flat bytes or bytearray of width*height values (0=empty, 1=wall), row-major.
-    Returns ready-to-send bytes.
-    """
+    """Build PKT_MAP: 8-byte header + 4-byte MapHeader + tiles (0=empty, 1=wall)."""
     timestamp = int(time.time() * 1000) & 0xFFFFFFFF
     header    = struct.pack(HEADER_FMT, PKT_MAP, seq & 0xFFFF, timestamp)
     map_hdr   = struct.pack(MAP_HEADER_FMT, width & 0xFF, height & 0xFF, tile_scale & 0xFF)
     return header + map_hdr + bytes(tiles)
 
 def pack_node_packet(pkt_type, seq, x, y, angle, flags=0):
-    """
-    Pack a NodePacket for sending to the server.
-    Returns 24 bytes ready to pass to socket.sendto().
-    """
+    """Pack a 24-byte NodePacket for sending to the server."""
     timestamp = int(time.time() * 1000) & 0xFFFFFFFF
     return struct.pack(NODE_FMT, pkt_type, seq & 0xFFFF, timestamp,
                        float(x), float(y), float(angle), flags & 0xFF)
@@ -118,20 +101,13 @@ def pack_node_packet(pkt_type, seq, x, y, angle, flags=0):
 # ── Unpack helpers (decode incoming packets) ──────────────────────────────────
 
 def unpack_header(data):
-    """
-    Unpack the 8-byte server header from a received packet.
-    Returns (pkt_type, seq, timestamp).
-    """
+    """Unpack the 8-byte server header. Returns (pkt_type, seq, timestamp)."""
     if len(data) < HEADER_SIZE:
         raise ValueError(f"Packet too short for header: {len(data)} bytes")
     return struct.unpack(HEADER_FMT, data[:HEADER_SIZE])
 
 def unpack_player_entries(payload):
-    """
-    Unpack all PlayerEntry records from the payload portion of a GAME_STATE packet
-    (i.e. data after the 8-byte header).
-    Returns a list of dicts: [{"player_id", "x", "y", "angle", "flags"}, ...]
-    """
+    """Unpack PlayerEntry records from the post-header payload of a GAME_STATE packet."""
     players = []
     n = len(payload) // PLAYER_SIZE
     for i in range(n):
@@ -147,10 +123,7 @@ def unpack_player_entries(payload):
     return players
 
 def unpack_map_packet(data):
-    """
-    Unpack a PKT_MAP packet received by a node.
-    Returns (width, height, tile_scale, tiles) where tiles is a bytearray.
-    """
+    """Unpack a PKT_MAP packet. Returns (width, height, tile_scale, tiles bytearray)."""
     if len(data) < HEADER_SIZE + MAP_HEADER_SIZE:
         raise ValueError(f"PKT_MAP too short: {len(data)} bytes")
     width, height, tile_scale = struct.unpack_from(MAP_HEADER_FMT, data, HEADER_SIZE)
@@ -159,10 +132,7 @@ def unpack_map_packet(data):
     return width, height, tile_scale, tiles
 
 def unpack_server_packet(data):
-    """
-    Unpack a full server → node packet.
-    Returns (pkt_type, seq, timestamp, players_list).
-    """
+    """Unpack a full server→node packet. Returns (pkt_type, seq, timestamp, players)."""
     pkt_type, seq, timestamp = unpack_header(data)
     players = unpack_player_entries(data[HEADER_SIZE:])
     return pkt_type, seq, timestamp, players

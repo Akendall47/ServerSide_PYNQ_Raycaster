@@ -1,19 +1,5 @@
-#
-# SEDA sidecar: BRPOP game:seda-events → generic post-match pipeline.
-#
-# Architecture:
-#   1. Generic pipeline:
-#      - reads events from Redis
-#      - writes match rows to DynamoDB
-#      - uploads replay files to S3
-#      - publishes match_end to SNS
-#   2. Game hooks:
-#      - define what a match_start / mid-match event / match_end means
-#      - shape the DynamoDB rows and SNS payload extras for this game mode
-#
-# The idea is "plug and play": keep the pipeline stable, swap the game hooks.
-#
-# Run on EC2: python3 ec2/sidecar/sidecar.py
+# ec2/sidecar/sidecar.py — BRPOP game:seda-events → DynamoDB / S3 / SNS pipeline.
+# Game hooks (game_on_*) define match-specific behaviour; pipeline logic stays fixed.
 
 import gzip
 import json

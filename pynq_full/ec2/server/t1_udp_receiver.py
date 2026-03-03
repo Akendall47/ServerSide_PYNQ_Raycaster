@@ -1,19 +1,5 @@
-# ec2/server/udp_receiver.py
-#
-# T1 : UDPReceiver
-#
-# Listens on UDP port 9000. On each incoming packet, pushes a RawPacket
-# dict onto packet_queue for T2 (GameTick) to process.
-#
-# This stage does NO packet parsing : it just receives raw bytes and
-# passes them downstream. Parsing happens in T2.
-#
-# Queue output: {"data": bytes, "addr": (ip, port)}
-#
-# bind() must be called before run() so that server.py can pass
-# self.transport to T3 Broadcaster — both share the port-9000 socket
-# so that broadcast replies arrive at the client from EC2:9000,
-# matching the NAT mapping the node's outbound sendto created.
+# ec2/server/t1_udp_receiver.py — T1 UDPReceiver: raw UDP → packet_queue.
+# Shares port-9000 socket with T3 so broadcasts come from EC2:9000 (matches NAT).
 
 import asyncio
 import socket
@@ -27,7 +13,6 @@ class UDPReceiverProtocol(asyncio.DatagramProtocol):
         self.queue = queue
 
     def datagram_received(self, data: bytes, addr: tuple):
-        # TODO: Possibly : add rate limiting per sender IP here (flood protection)
         self.queue.put_nowait({"data": data, "addr": addr})
 
     def error_received(self, exc: Exception):

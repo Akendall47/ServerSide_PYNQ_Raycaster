@@ -1,23 +1,6 @@
-# ec2/monitor/monitor.py
-#
-# Live monitor server — runs on EC2 alongside the SEDA stack.
-#
-# Serves index.html over HTTP on port 8080, and pushes live game state
-# to the browser over WebSocket on the same port (/ws).
-#
-# Data sources:
-#   Redis (local):   HGET player:1/2, INFO stats/memory/clients, LRANGE game:seda-events
-#   DynamoDB:        scan last 5 matches (polled every 5s, not every tick)
-#
-# No changes to T1/T2/T3/T4 required.
-#
-# Run on EC2:
-#   source ~/venv/bin/activate
-#   pip install aiohttp
-#   python3 ec2/monitor/monitor.py
-#
-# Access from laptop (via SSH tunnel set up by dev.sh):
-#   http://localhost:8080
+# ec2/monitor/monitor.py — live monitor, HTTP+WebSocket on port 8080.
+# Reads player state from Redis, match history from DynamoDB.
+# Access via SSH tunnel set up by pynq_dev.sh: http://localhost:8080
 
 import asyncio
 import gzip
@@ -360,8 +343,6 @@ def collect_state():
     clients = r.info("clients")
     client_rows = r.client_list()
 
-    # game:monitor-events is written by T4 alongside game:seda-events but
-    # never drained by the sidecar — so every event is visible here.
     events_raw = r.lrange("game:monitor-events", 0, 49)
     parsed     = [json.loads(e) for e in events_raw if e]
     match_events = current_match_events(parsed)
@@ -383,10 +364,8 @@ def collect_state():
         "redis": {
             "ops_per_sec":       info.get("instantaneous_ops_per_sec", 0),
             "mem_used":          mem.get("used_memory_human", "?"),
-            # clients breakdown: server(T4) + sidecar + monitor + redis-cli = 4
             "connected_clients": n_clients,
-            "blocked_clients":   blocked,
-            # blocked=1 is normal: sidecar sleeping on BRPOP waiting for next event
+            "blocked_clients":   blocked,   # 1 is normal: sidecar on BRPOP
             "keyspace_hits":     info.get("keyspace_hits", 0),
             "keyspace_misses":   info.get("keyspace_misses", 0),
             "pubsub_clients":    pubsub_clients,

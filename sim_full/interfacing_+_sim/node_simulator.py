@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
 """
-node_simulator.py
+node_simulator.py — fake PYNQ node for testing without hardware.
 
-Fake PYNQ node for testing the server without hardware.
-
-Runs on your laptop and sends UDP packets to the EC2 server, impersonating
-a real PYNQ board.
-
-State machine (per node):
-  PLAYING  → sends position at 20 Hz, reads game state
-           → on FLAG_TAGGED in any broadcast: print GAME OVER, → WAITING
-  WAITING  → sends nothing, polls Redis pub/sub for restart signal
-           → on game:control restart: sleep 4.5s (server lockout), → PLAYING
-
-Usage:
-    python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
+State machine: PLAYING (send position @ 20 Hz) ↔ WAITING (on FLAG_TAGGED, wait for restart).
+Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
 """
 
 import socket
@@ -154,27 +143,18 @@ def apply_control_command(tag: str, command: dict, current_mode: str, node_index
 
 def run_node(server_ip, server_port, player_id, node_index,
              redis_host, redis_port, max_ticks=None, mode="auto"):
-    """
-    Single node loop. Runs forever (or until max_ticks) in the calling thread.
-
-    State machine:
-      playing=True  → register + send position each tick
-      playing=False → wait for pub/sub restart signal, then re-enter playing
-    """
     server_addr = (server_ip, server_port)
 
-    # ── movement params (vary by node_index) ──────────────────────────────────
     radius         = ARENA_RADIUS
     rotation_speed = 0.05 + node_index * 0.06  # runner=0.05, tagger=0.11 rad/tick
     shoot_freq     = 20  + node_index * 10
-    angle          = node_index * math.pi * 2 / 4   # spread starting positions
+    angle          = node_index * math.pi * 2 / 4
     x              = radius * math.cos(angle)
     y              = radius * math.sin(angle)
 
     tag = f"[NODE {player_id}]"
 
-    # ── Redis pub/sub (optional) ───────────────────────────────────────────────
-    ps = None
+    ps = None  # Redis pub/sub (optional)
     if redislib:
         try:
             rc = redislib.Redis(host=redis_host, port=redis_port,
@@ -187,9 +167,8 @@ def run_node(server_ip, server_port, player_id, node_index,
             print(f"{tag} Redis unavailable ({e}) — restart requires Ctrl+C and re-run")
             ps = None
 
-    # ── main loop ─────────────────────────────────────────────────────────────
-    sock              = None
-    playing           = False   # start in WAITING so first game requires explicit RESTART
+    sock    = None
+    playing = False   # start in WAITING; first game needs explicit RESTART
     seq               = 0
     tick              = 0
     normalized_mode = normalize_mode(mode)

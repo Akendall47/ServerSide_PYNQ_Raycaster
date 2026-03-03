@@ -1,23 +1,6 @@
-# ec2/monitor/monitor.py
-#
-# Live monitor server — runs on EC2 alongside the SEDA stack.
-#
-# Serves index.html over HTTP on port 8080, and pushes live game state
-# to the browser over WebSocket on the same port (/ws).
-#
-# Data sources:
-#   Redis (local):   HGET player:1/2, INFO stats/memory/clients, LRANGE game:seda-events
-#   DynamoDB:        scan last 5 matches (polled every 5s, not every tick)
-#
-# No changes to T1/T2/T3/T4 required.
-#
-# Run on EC2:
-#   source ~/venv/bin/activate
-#   pip install aiohttp
-#   python3 ec2/monitor/monitor.py
-#
-# Access from laptop (via SSH tunnel set up by dev.sh):
-#   http://localhost:8080
+# ec2/monitor/monitor.py — live monitor, HTTP+WebSocket on port 8080.
+# Reads player state from Redis, match history from DynamoDB.
+# Access via SSH tunnel set up by sim_dev.sh: http://localhost:8080
 
 import asyncio
 import gzip

@@ -1,32 +1,6 @@
-# ec2/server/t4_redis_writer.py
-#
-# T4 : RedisWriter  —  runs as a dedicated OS thread, NOT an asyncio coroutine.
-#
-# Why a thread here?
-#   Redis HSET/LPUSH calls take 1-5ms over the network. Inside the asyncio event
-#   loop that latency would briefly stall T2 and T3 on every await. Moving T4 to
-#   its own thread means Redis latency is fully isolated — the event loop never
-#   waits for it. This is the one stage where threading beats asyncio.
-#
-# Thread-safety:
-#   asyncio.Queue is NOT thread-safe for get()/put() from a thread directly.
-#   Instead we use queue.SimpleQueue (stdlib, fully thread-safe) as the hand-off.
-#   T2 puts items onto write_queue (a SimpleQueue) from the event loop;
-#   T4's thread blocks on write_queue.get() — zero CPU while idle.
-#
-# Pipeline batching:
-#   Every tick T2 pushes one HSET per player. Rather than executing each as a
-#   separate round-trip, _drain() collects everything currently on the queue,
-#   batches all HSETs into a single redis.pipeline().execute() call, then handles
-#   any LPUSHes individually (rare events — no benefit batching them).
-#   On localhost this saves ~0.05ms per extra player; on ElastiCache (~0.5ms RTT)
-#   it becomes meaningful immediately.
-#
-# Queue input (from T2):
-#   {"op": "hset",  "key": str, "mapping": dict}  : player position, every tick
-#   {"op": "lpush", "key": str, "value":   str}   : match event (match_start etc.)
-#
-# Requires: pip install redis
+# ec2/server/t4_redis_writer.py — T4 RedisWriter, runs as an OS thread.
+# Isolated from the event loop so Redis latency never stalls T2/T3.
+# Batches per-tick HSETs into one pipeline; executes LPUSHes individually.
 
 import threading
 import queue

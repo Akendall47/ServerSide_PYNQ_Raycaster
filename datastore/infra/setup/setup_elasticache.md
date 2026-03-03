@@ -31,5 +31,14 @@ REDIS_HOST=your-cluster.abc123.euw2.cache.amazonaws.com
 REDIS_PORT=6379
 ```
 
+## Current Status — Not Yet Wired
+
+The server currently runs Redis on **EC2 localhost:6379** (installed directly on the instance).
+`t4_redis_writer.py` hardcodes `127.0.0.1:6379` and does not read from `.env`.
+
+ElastiCache is the production upgrade path but is **not active**.
+To switch: update `REDIS_HOST` / `REDIS_PORT` in `t4_redis_writer.py` and `sidecar.py`, and
+ensure the EC2 security group can reach the ElastiCache security group on TCP 6379.
+
 ## Key Schema
 See `redis/README.md`.

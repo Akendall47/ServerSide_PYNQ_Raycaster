@@ -1,24 +1,9 @@
-# ec2/server/t2_game_tick.py
+# ec2/server/t2_game_tick.py — T2 GameTick: authoritative game loop at 20 Hz.
 #
-# T2 : GameTick
-#
-# The authoritative game loop. Runs at a fixed tick rate (20 Hz = every 50ms).
-# Each tick:
-#   1. Drain all packets from packet_queue
-#   2. Deserialise and update player state (handles REGISTER + STATE_UPDATE)
-#   3. Run game logic: proximity / tag detection
-#   4. Push merged state to broadcast_queue  (→ T3)
-#   5. Push player state to write_queue      (→ T4 Redis HSET)
-#   6. Push match events to write_queue      (→ T4 Redis LPUSH)
-#
-# Metrics printed every 20 ticks (1 second):
-#   tick | players | tick_ms | pkt_q | bcast_q | write_q
-#
-# Queue input:  {"data": bytes, "addr": (ip, port)}
-
-# Queue output: {"op": "hset",  "key": str, "mapping": dict}  → write_queue
-#               {"op": "lpush", "key": str, "value":   str}   → write_queue
-#               {"data": bytes, "targets": [(ip, port), ...]} → broadcast_queue
+# Queues:
+#   in:  packet_queue    {"data": bytes, "addr": (ip, port)}
+#   out: broadcast_queue {"data": bytes, "targets": [(ip,port),...]}
+#   out: write_queue     {"op": "hset"|"lpush"|"del", "key": str, ...}
 
 import asyncio
 import time
@@ -27,7 +12,6 @@ import json
 import sys
 import os
 import struct
-import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'interfacing'))
 from protocol import (
@@ -126,11 +110,9 @@ class GameTick:
     # ── Redis control channel ─────────────────────────────────────────────────
 
     async def _listen_control(self):
-        """Subscribe to game:control (Redis pub/sub) in a background thread.
-        Handles set_map — reloads map data; takes effect on next registration."""
+        """Subscribe to game:control; handles set_map (reloads map for next registration)."""
         try:
             import redis as redislib
-            loop = asyncio.get_event_loop()
 
             def _blocking_subscribe():
                 global _MAP_WIDTH, _MAP_HEIGHT, _MAP_TILES, _MAP_NAME
@@ -289,17 +271,6 @@ class GameTick:
             asyncio.ensure_future(self._push_event({"event": "match_aborted"}))
 
     # ── Game logic ────────────────────────────────────────────────────────────
-    #
-    # _tick() dispatches to separate game-mode methods.
-    # Each method is responsible for one mechanic and can be added/removed
-    # independently as the game evolves.
-    #
-    # Current mechanics:
-    #   _check_proximity() : tag game — players within TAG_RADIUS get tagged
-    #
-    # Future mechanics (TODO):
-    #   _check_shooting()  : line-of-sight hit detection using C++ is_visible()
-    #   _check_match_end() : win condition (all tagged, time limit, score, etc.)
 
     async def _tick(self):
         await self._check_match_end_hold()
@@ -308,7 +279,6 @@ class GameTick:
         self._clear_tag_flash()
         if self.match_started and not self.match_ended:
             self.match_tick += 1
-        # await self._check_shooting()   # TODO: wire to C++ is_visible()
 
     def _reset_positions(self):
         """Teleport all players back to spawn and restart grace period."""
@@ -365,12 +335,7 @@ class GameTick:
             for j in range(i + 1, len(players)):
                 p1, p2 = players[i], players[j]
 
-                # Generic: compute straight-line distance between this pair
                 dist = math.sqrt((p1["x"] - p2["x"])**2 + (p1["y"] - p2["y"])**2)
-
-                # Tag game rule: when a player enters another's hitbox (dist < TAG_RADIUS),
-                # the runner (lower player_id = slower orbit) gets tagged by the tagger
-                # (higher player_id = faster orbit, speed 0.08 vs 0.05).
                 if dist < TAG_RADIUS:
                     tagged = p1 if p1["player_id"] < p2["player_id"] else p2
                     # Only register a new tag if flash has cleared (no double-counting)
@@ -431,13 +396,6 @@ class GameTick:
         })
 
     # ── Redis writes ──────────────────────────────────────────────────────────
-    #
-    # All writes go onto write_queue → T4 handles them async, never blocking T2.
-    #
-    # HSET  player:<id>  {x,y,angle,flags}  — every tick, overwrites previous
-    # LPUSH game:seda-events  <json>         — only on events (match_start etc.)
-    # BRPOP game:seda-events                 — sidecar blocks here, wakes on LPUSH
-    #                                           - sidecar writes event to DynamoDB
 
     async def _push_redis_writes(self):
         for p in self.players.values():
