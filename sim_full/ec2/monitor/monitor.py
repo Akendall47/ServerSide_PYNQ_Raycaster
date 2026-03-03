@@ -29,12 +29,12 @@ REPO_ROOT    = Path(__file__).resolve().parents[3]
 SERVICE_SPECS = {
     "server": {
         "script": REPO_ROOT / "sim_full" / "ec2" / "server" / "server.py",
-        "pattern": "sim_full/ec2/server/server.py",
+        "pattern": "server.py",
         "log": Path("/tmp/seda-server.log"),
     },
     "sidecar": {
         "script": REPO_ROOT / "sim_full" / "ec2" / "sidecar" / "sidecar.py",
-        "pattern": "sim_full/ec2/sidecar/sidecar.py",
+        "pattern": "sidecar.py",
         "log": Path("/tmp/seda-sidecar.log"),
     },
 }

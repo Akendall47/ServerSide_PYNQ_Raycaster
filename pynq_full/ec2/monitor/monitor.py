@@ -30,12 +30,12 @@ MAPS_DIR     = REPO_ROOT / "pynq_full" / "ec2" / "maps"
 SERVICE_SPECS = {
     "server": {
         "script": REPO_ROOT / "pynq_full" / "ec2" / "server" / "server.py",
-        "pattern": "pynq_full/ec2/server/server.py",
+        "pattern": "server.py",
         "log": Path("/tmp/pynq-server.log"),
     },
     "sidecar": {
         "script": REPO_ROOT / "pynq_full" / "ec2" / "sidecar" / "sidecar.py",
-        "pattern": "pynq_full/ec2/sidecar/sidecar.py",
+        "pattern": "sidecar.py",
         "log": Path("/tmp/pynq-sidecar.log"),
     },
 }
