@@ -118,7 +118,18 @@ class GameTick:
             # Accept starting position from REGISTER so player doesn't sit at (0,0)
             # until the first STATE_UPDATE arrives.
             p["x"], p["y"], p["angle"] = x, y, angle
+            p["last_seq"] = seq   # reset sequence baseline on (re-)registration
             return
+
+        # Sequence validation: reject stale, replayed, or out-of-order packets.
+        # 16-bit half-window: delta in [1, 0x7FFF] means newer; handles wraparound.
+        last = p["last_seq"]
+        if last is not None:
+            delta = (seq - last) & 0xFFFF
+            if delta == 0 or delta > 0x7FFF:
+                return  # duplicate or older than last accepted
+        p["last_seq"] = seq
+
         p["x"]     = x
         p["y"]     = y
         p["angle"] = angle
@@ -138,6 +149,7 @@ class GameTick:
         self.players[addr] = {
             "player_id": player_id,
             "x": 0.0, "y": 0.0, "angle": 0.0, "flags": 0,
+            "last_seq": None,   # set on first packet; used for sequence validation
         }
         print(f"[T2] registered player {player_id} from {addr} "
               f"(total: {len(self.players)})")
