@@ -67,6 +67,18 @@ def poll_dynamodb():
     now = time.monotonic()
     if now - _ddb_last_fetch < DDB_POLL_INTERVAL_S:
         return _ddb_cache
+
+    # Redis cache: written by sidecar on match_end — O(1), no AWS cost.
+    # Fall through to DynamoDB scan only on a fresh instance with no cached matches.
+    try:
+        cached = r.lrange("game:recent-matches", 0, 4)
+        if cached:
+            _ddb_cache = [json.loads(entry) for entry in cached]
+            _ddb_last_fetch = now
+            return _ddb_cache
+    except Exception as e:
+        print(f"[monitor] Redis recent-matches read error: {e}")
+
     try:
         # Without a GSI on timestamp, the only correct "recent matches" view is
         # to scan all META rows, then sort locally. The table is still small.

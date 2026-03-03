@@ -552,6 +552,23 @@ def handle_match_end(event: dict):
     except Exception as exc:
         print(f"DynamoDB update failed for {current_match_id}: {exc}")
 
+    # Cache a compact summary in Redis so the monitor can skip the DynamoDB scan.
+    # LPUSH keeps newest-first; LTRIM caps at 5 entries.
+    try:
+        summary = {
+            "match_id":        current_match_id,
+            "status":          "completed",
+            "timestamp":       current_match_started_at[:19].replace("T", " "),
+            "has_replay":      bool(replay_key),
+            "replay_frames":   count_state_snapshots(),
+            "has_state_replay": count_state_snapshots() > 0,
+        }
+        r.lpush("game:recent-matches", json.dumps(summary, separators=(",", ":")))
+        r.ltrim("game:recent-matches", 0, 4)
+        print(f"Redis: cached summary for {current_match_id} in game:recent-matches")
+    except Exception as exc:
+        print(f"Redis recent-matches write failed: {exc}")
+
     sns_fields = dict(end_payload["sns_fields"])
     if match_duration is not None:
         sns_fields["duration_ms"] = match_duration
