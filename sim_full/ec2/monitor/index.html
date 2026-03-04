@@ -566,23 +566,6 @@ function drawArena(players) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Distance line
-  if (players.length >= 2) {
-    const [ax,ay] = worldToCanvas(players[0].x, players[0].y);
-    const [bx,by] = worldToCanvas(players[1].x, players[1].y);
-    const dx = players[1].x - players[0].x;
-    const dy = players[1].y - players[0].y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const close = dist <= TAG_RADIUS;
-    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
-    ctx.strokeStyle = close ? 'rgba(255,68,68,0.7)' : 'rgba(255,255,255,0.08)';
-    ctx.setLineDash([4,4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
-    const mx = (ax+bx)/2, my = (ay+by)/2;
-    ctx.fillStyle = close ? '#ff6666' : '#444';
-    ctx.font = '11px Courier New';
-    ctx.fillText(`${dist.toFixed(1)}u`, mx+4, my-4);
-  }
-
   const now = performance.now();
   // Expire finished animations even if a player key disappears briefly.
   for (const playerId of Object.keys(tagFlash)) {
@@ -606,22 +589,48 @@ function drawArena(players) {
     });
   }
 
+  const drawPoseById = {};
+  players.forEach((p) => {
+    const flashStart = tagFlash[p.id];
+    const t = (flashStart !== undefined) ? Math.min((now - flashStart) / TAG_ANIM_MS, 1.0) : null;
+    const isAnimating = t !== null && t < 1.0;
+    const frozenPose = (isAnimating && tagPos[p.id]) ? tagPos[p.id] : null;
+    drawPoseById[p.id] = {
+      x: frozenPose ? frozenPose.x : p.x,
+      y: frozenPose ? frozenPose.y : p.y,
+      angle: frozenPose ? frozenPose.angle : p.angle,
+      t,
+      isAnimating,
+    };
+  });
+
+  // Distance line follows frozen draw poses, so it stays in sync with flash hold.
+  if (players.length >= 2) {
+    const a = drawPoseById[players[0].id];
+    const b = drawPoseById[players[1].id];
+    const [ax,ay] = worldToCanvas(a.x, a.y);
+    const [bx,by] = worldToCanvas(b.x, b.y);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const close = dist <= TAG_RADIUS;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
+    ctx.strokeStyle = close ? 'rgba(255,68,68,0.7)' : 'rgba(255,255,255,0.08)';
+    ctx.setLineDash([4,4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    const mx = (ax+bx)/2, my = (ay+by)/2;
+    ctx.fillStyle = close ? '#ff6666' : '#444';
+    ctx.font = '11px Courier New';
+    ctx.fillText(`${dist.toFixed(1)}u`, mx+4, my-4);
+  }
+
   players.forEach((p, i) => {
     const colour  = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
     const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
 
     prevFlags[p.id] = tagged;
 
-    // How far through the tag animation are we? (0→1 over TAG_ANIM_MS)
-    const flashStart = tagFlash[p.id];
-    const t = (flashStart !== undefined) ? Math.min((now - flashStart) / TAG_ANIM_MS, 1.0) : null;
-    const isAnimating = t !== null && t < 1.0;
-
-    // Use frozen position while animating so the shockwave stays at the tag point
-    const frozenPose = (isAnimating && tagPos[p.id]) ? tagPos[p.id] : null;
-    const drawX = frozenPose ? frozenPose.x : p.x;
-    const drawY = frozenPose ? frozenPose.y : p.y;
-    const drawAngle = frozenPose ? frozenPose.angle : p.angle;
+    const pose = drawPoseById[p.id] || { x: p.x, y: p.y, angle: p.angle, t: null, isAnimating: false };
+    const { x: drawX, y: drawY, angle: drawAngle, t, isAnimating } = pose;
     const [cx,cy] = worldToCanvas(drawX, drawY);
 
     // Hitbox ring — pulses red while tagged
