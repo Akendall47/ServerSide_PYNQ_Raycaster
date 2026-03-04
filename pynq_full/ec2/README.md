@@ -47,3 +47,23 @@ UDP -> T1 -> T2 -> T3 -> clients
 - the monitor is live
 - replay capture and S3 playback are live
 - Lambda post-match processing is live
+
+---
+
+## Tick Rate / Latency Optimisations
+
+Tick rate (`TICK_RATE` in `server.py`) is a one-line change. The server loop has plenty of
+headroom (~0.02ms per tick). The real bottleneck is **network latency**, not Hz.
+
+PYNQ boards on physical ethernet to the same router skip WSL NAT entirely — that's where
+60 Hz becomes genuinely felt vs the current WSL simulator setup.
+
+**Optimisations worth implementing:**
+
+- **Client-side prediction** — node moves locally each tick without waiting for server
+  confirmation; server corrects only if it disagrees. Eliminates perceived lag. Standard in
+  all modern multiplayer (Quake, Source engine). Highest impact improvement available.
+- **Interpolation** — FPGA renders smoothly between the last two server positions instead of
+  snapping on each update. Costs one tick of added latency, removes visual jitter entirely.
+- **Decouple Redis writes from tick rate** — T4 currently writes every tick. At 128+ Hz
+  that's 256+ writes/sec. Write every N ticks or on state-change only to keep Redis load flat.
