@@ -83,8 +83,9 @@ class GameTick:
         self.lockout_until = None
         self.tag_count     = 0
         self.tag_flash_at  = None
-        self.tick_count    = 0
-        self.match_tick    = 0      # ticks since match started (for grace period)
+        self.tick_count      = 0
+        self.match_tick      = 0      # ticks since match started (for grace period)
+        self._force_end_flag = False  # set by force_end game:control command
 
     async def run(self):
         print(f"[T2 GameTick] running at {1/self.interval:.0f} Hz")
@@ -127,7 +128,9 @@ class GameTick:
                     except Exception:
                         continue
                     cmd = data.get("cmd")
-                    if cmd == "set_map":
+                    if cmd == "force_end":
+                        self._force_end_flag = True
+                    elif cmd == "set_map":
                         map_name = data.get("map", "level1")
                         maps_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'maps')
                         path     = os.path.join(maps_dir, f"{map_name}.txt")
@@ -374,15 +377,18 @@ class GameTick:
         giving nodes time to receive the final FLAG_TAGGED broadcast before going idle.
         """
         if not self.match_started or self.match_ended:
+            self._force_end_flag = False
             return
-        if self.tag_count >= TAGS_TO_WIN:
+        forced = self._force_end_flag
+        self._force_end_flag = False
+        if forced or self.tag_count >= TAGS_TO_WIN:
             self.match_ended  = True
             self.match_end_at = time.monotonic() + MATCH_END_HOLD_S
             # Set FLAG_MATCH_END on all players so nodes know this is the final tag
             for p in self.players.values():
                 p["flags"] |= FLAG_MATCH_END
-            print(f"[T2] match ended — runner tagged {self.tag_count}x "
-                  f"(clearing players in {MATCH_END_HOLD_S}s)")
+            reason = "force_end" if forced else f"runner tagged {self.tag_count}x"
+            print(f"[T2] match ended — {reason} (clearing players in {MATCH_END_HOLD_S}s)")
             await self._push_event({
                 "event": "match_end", "winner": "tagger",
                 "tag_count": self.tag_count,

@@ -219,7 +219,10 @@ def handle_control_command(cmd: str):
         r.publish("game:control", payload)
         return f"node {node_index + 1} switched to {mode} mode"
 
-    if cmd == "restart":
+    if cmd == "force_end":
+        r.publish("game:control", json.dumps({"cmd": "force_end"}))
+        _service_message = "force_end sent — match will end this tick"
+    elif cmd == "restart":
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
         _service_message = "restart signal sent to node simulators"

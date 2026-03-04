@@ -411,7 +411,7 @@
         <button class="control-btn start" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
         <button class="control-btn stop" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
         <button class="control-btn restart" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
-        <button class="control-btn restart" onclick="sendControl('restart', 'start match')">Start Match</button>
+        <button id="match-toggle-btn" class="control-btn restart" onclick="toggleMatch()">Start Match</button>
       </div>
       <div class="metric-note" style="margin-top:8px">Node 1</div>
       <div class="control-stack">
@@ -797,6 +797,16 @@ function updateMatches(matches) {
     chip.textContent = `last: ${matches[0].match_id.replace(/^match-/, '')}`;
     chip.className = '';
   }
+  const btn = document.getElementById('match-toggle-btn');
+  if (btn) {
+    if (active) {
+      btn.textContent = 'Force End Match';
+      btn.className = 'control-btn stop';
+    } else {
+      btn.textContent = 'Start Match';
+      btn.className = 'control-btn restart';
+    }
+  }
   const matchSignature = JSON.stringify(matches.map(m => [m.match_id, m.status, m.timestamp]));
   if (matchSignature !== lastMatchListSignature) {
     el.innerHTML = matches.map(m => `
@@ -859,6 +869,14 @@ function updateEvents(events) {
 // ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
 let ws = null;
+function toggleMatch() {
+  const btn = document.getElementById('match-toggle-btn');
+  if (btn && btn.textContent.includes('Force End')) {
+    sendControl('force_end', 'force end match');
+  } else {
+    sendControl('restart', 'start match');
+  }
+}
 function sendControl(cmd, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
