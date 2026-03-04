@@ -504,7 +504,8 @@ let renderCount = 0, renderLastTime = performance.now();
 
 // ── Tag animation state ─────────────────────────────────────────────────────
 const tagFlash  = {};   // { playerId: DOMHighResTimeStamp } — when tag started
-const tagPos    = {};   // { playerId: {x, y} } — frozen world position during animation
+const tagPos    = {};   // { playerId: {x, y, angle} } — frozen pose during animation
+const lastLivePos = {}; // { playerId: {x, y, angle} } — previous server pose
 const prevFlags = {};   // { playerId: bool } — detect rising edge of FLAG_TAGGED
 const TAG_ANIM_MS = 800;
 let lastMatchListSignature = '';
@@ -583,15 +584,32 @@ function drawArena(players) {
   }
 
   const now = performance.now();
+  // Expire finished animations even if a player key disappears briefly.
+  for (const playerId of Object.keys(tagFlash)) {
+    if ((now - tagFlash[playerId]) >= TAG_ANIM_MS) {
+      delete tagFlash[playerId];
+      delete tagPos[playerId];
+    }
+  }
+
+  // Server can set FLAG_TAGGED and reset to spawn in the same tick.
+  // Latch everyone at their previous live pose so the freeze shows the actual tag point.
+  const tagStartedThisFrame = players.some((p) => {
+    const tagged = (p.flags & 0x06) !== 0; // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
+    return tagged && !prevFlags[p.id];
+  });
+  if (tagStartedThisFrame) {
+    players.forEach((p) => {
+      const frozen = lastLivePos[p.id] || p;
+      tagFlash[p.id] = now;
+      tagPos[p.id] = { x: frozen.x, y: frozen.y, angle: frozen.angle };
+    });
+  }
+
   players.forEach((p, i) => {
     const colour  = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
     const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
 
-    // Detect rising edge — freeze position at the moment of tag
-    if (tagged && !prevFlags[p.id]) {
-      tagFlash[p.id] = now;
-      tagPos[p.id]   = { x: p.x, y: p.y };
-    }
     prevFlags[p.id] = tagged;
 
     // How far through the tag animation are we? (0→1 over TAG_ANIM_MS)
@@ -599,16 +617,11 @@ function drawArena(players) {
     const t = (flashStart !== undefined) ? Math.min((now - flashStart) / TAG_ANIM_MS, 1.0) : null;
     const isAnimating = t !== null && t < 1.0;
 
-    // Only clear frozen state once the timer has fully expired — not when flag drops.
-    // The server resets positions before TAG_ANIM_MS is up, so we must hold the freeze
-    // until the animation is done, then let live positions take over.
-    if (!isAnimating && tagFlash[p.id] !== undefined) {
-      delete tagFlash[p.id]; delete tagPos[p.id];
-    }
-
     // Use frozen position while animating so the shockwave stays at the tag point
-    const drawX = (isAnimating && tagPos[p.id]) ? tagPos[p.id].x : p.x;
-    const drawY = (isAnimating && tagPos[p.id]) ? tagPos[p.id].y : p.y;
+    const frozenPose = (isAnimating && tagPos[p.id]) ? tagPos[p.id] : null;
+    const drawX = frozenPose ? frozenPose.x : p.x;
+    const drawY = frozenPose ? frozenPose.y : p.y;
+    const drawAngle = frozenPose ? frozenPose.angle : p.angle;
     const [cx,cy] = worldToCanvas(drawX, drawY);
 
     // Hitbox ring — pulses red while tagged
@@ -629,7 +642,7 @@ function drawArena(players) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(p.angle)*15, cy + Math.sin(p.angle)*15);
+    ctx.lineTo(cx + Math.cos(drawAngle)*15, cy + Math.sin(drawAngle)*15);
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
@@ -637,14 +650,18 @@ function drawArena(players) {
     const dotR = isAnimating
       ? dotBase + 4 * Math.sin(t * Math.PI)   // smooth bump then back
       : tagged ? dotBase + 2 : dotBase;
+    const animT = t ?? 0;
     ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2);
-    ctx.fillStyle = tagged ? `rgb(${200 + Math.round(55*(1-t))},${Math.round(34*(1-t))},${Math.round(34*(1-t))})` : colour;
+    ctx.fillStyle = tagged ? `rgb(${200 + Math.round(55*(1-animT))},${Math.round(34*(1-animT))},${Math.round(34*(1-animT))})` : colour;
     ctx.fill();
 
     // Label
     const role = (p.id === 1) ? 'runner' : 'tagger';
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Courier New';
     ctx.fillText(`P${p.id} ${role}`, cx+10, cy-6);
+
+    // Cache the latest live server pose for edge-triggered freeze latching.
+    lastLivePos[p.id] = { x: p.x, y: p.y, angle: p.angle };
   });
 }
 
@@ -916,10 +933,8 @@ function connect() {
   };
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
-    // Clear tag animation state at match start so rising edge fires cleanly
+    // New match boundary: reset edge detector, but keep active flash animations alive.
     if (state.events && state.events.length > 0 && state.events[0].event === 'match_start') {
-      for (const k of Object.keys(tagFlash))  delete tagFlash[k];
-      for (const k of Object.keys(tagPos))    delete tagPos[k];
       for (const k of Object.keys(prevFlags)) delete prevFlags[k];
     }
     latestState = state;
