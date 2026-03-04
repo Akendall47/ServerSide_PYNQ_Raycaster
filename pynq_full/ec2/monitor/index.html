@@ -516,7 +516,7 @@ let renderCount = 0, renderLastTime = performance.now();
 const tagFlash  = {};   // { playerId: DOMHighResTimeStamp } — when tag started
 const tagPos    = {};   // { playerId: {x, y} } — frozen world position during animation
 const prevFlags = {};   // { playerId: bool } — detect rising edge of FLAG_TAGGED
-const TAG_ANIM_MS = 600;  // shockwave expands over 600 ms then fades out
+const TAG_ANIM_MS = 800;  // shockwave expands over 800 ms then fades out
 let lastMatchListSignature = '';
 let lastReplayListSignature = '';
 let replayLoading = false;
@@ -989,6 +989,12 @@ function connect() {
   };
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
+    // Clear tag animation state at match start so rising edge fires cleanly
+    if (state.events && state.events.length > 0 && state.events[0].event === 'match_start') {
+      for (const k of Object.keys(tagFlash))  delete tagFlash[k];
+      for (const k of Object.keys(tagPos))    delete tagPos[k];
+      for (const k of Object.keys(prevFlags)) delete prevFlags[k];
+    }
     latestState = state;
     if (!replayState.active) updatePlayers(state.players);
     updateRedis(state.redis);
