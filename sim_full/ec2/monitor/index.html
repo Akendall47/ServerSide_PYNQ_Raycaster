@@ -501,6 +501,11 @@ const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
 let latestState    = null;
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
 let renderCount = 0, renderLastTime = performance.now();
+
+// ── Tag animation state ─────────────────────────────────────────────────────
+const tagFlash  = {};
+const prevFlags = {};
+const TAG_ANIM_MS = 600;
 let lastMatchListSignature = '';
 let lastReplayListSignature = '';
 let replayLoading = false;
@@ -576,15 +581,36 @@ function drawArena(players) {
     ctx.fillText(`${dist.toFixed(1)}u`, mx+4, my-4);
   }
 
+  const now = performance.now();
   players.forEach((p, i) => {
     const [cx,cy] = worldToCanvas(p.x, p.y);
     const colour  = PLAYER_COLOURS[i % PLAYER_COLOURS.length];
     const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
 
-    // Hitbox ring (TAG_RADIUS)
+    // Detect rising edge of tag flag to record flash start time
+    if (tagged && !prevFlags[p.id]) tagFlash[p.id] = now;
+    if (!tagged)                    delete tagFlash[p.id];
+    prevFlags[p.id] = tagged;
+
+    // How far through the tag animation are we? (0→1 over TAG_ANIM_MS)
+    const flashStart = tagFlash[p.id];
+    const t = (flashStart !== undefined) ? Math.min((now - flashStart) / TAG_ANIM_MS, 1.0) : null;
+    const isAnimating = t !== null;
+
+    // Hitbox ring — pulses red while tagged
     ctx.beginPath(); ctx.arc(cx, cy, tagPx, 0, Math.PI*2);
-    ctx.strokeStyle = tagged ? 'rgba(255,68,68,0.55)' : 'rgba(255,255,255,0.07)';
+    ctx.strokeStyle = tagged ? `rgba(255,68,68,${0.3 + 0.25 * Math.sin(now / 120)})` : 'rgba(255,255,255,0.07)';
     ctx.lineWidth = tagged ? 2 : 1; ctx.stroke();
+
+    // Expanding shockwave ring on tag
+    if (isAnimating) {
+      const wave   = tagPx * (1 + t * 1.6);        // expands outward
+      const alpha  = (1 - t) * 0.9;                 // fades out
+      ctx.beginPath(); ctx.arc(cx, cy, wave, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(255,100,100,${alpha})`;
+      ctx.lineWidth = 2.5 * (1 - t);
+      ctx.stroke();
+    }
 
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
@@ -592,16 +618,16 @@ function drawArena(players) {
     ctx.lineTo(cx + Math.cos(p.angle)*15, cy + Math.sin(p.angle)*15);
     ctx.stroke();
 
-    // Player dot
-    const dotR = tagged ? 9 : 6;
+    // Player dot — smoothly scales up on tag
+    const dotBase = 6;
+    const dotR = isAnimating
+      ? dotBase + 4 * Math.sin(t * Math.PI)   // smooth bump then back
+      : tagged ? dotBase + 2 : dotBase;
     ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2);
-    ctx.fillStyle = tagged ? '#ff2222' : colour; ctx.fill();
-    if (tagged) {
-      ctx.strokeStyle = '#ff8888'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, cy, dotR+3, 0, Math.PI*2); ctx.stroke();
-    }
+    ctx.fillStyle = tagged ? `rgb(${200 + Math.round(55*(1-t))},${Math.round(34*(1-t))},${Math.round(34*(1-t))})` : colour;
+    ctx.fill();
 
-    // Keep label text stable so tag events do not cause visual jumping.
+    // Label
     const role = (p.id === 1) ? 'runner' : 'tagger';
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Courier New';
     ctx.fillText(`P${p.id} ${role}`, cx+10, cy-6);
