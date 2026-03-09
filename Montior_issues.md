@@ -15,6 +15,8 @@
 - clarify how ghosts work -- ie node spawns?? 
 
 
-- make UI nicer 
+- make UI nicer, general - maybe have multiple panels - control vs analytics 
 
 - check is bit collection working 
+
+- will also need to check PYNQ syncing - ie real tests
