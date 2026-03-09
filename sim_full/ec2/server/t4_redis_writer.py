@@ -1,6 +1,13 @@
-# ec2/server/t4_redis_writer.py — T4 RedisWriter, runs as an OS thread.
-# Isolated from the event loop so Redis latency never stalls T2/T3.
-# Batches per-tick HSETs into one pipeline; executes LPUSHes individually.
+# t4_redis_writer.py — T4 RedisWriter: write_queue → Redis, runs as an OS thread.
+#
+# Role in the SEDA pipeline:
+#   Consumes write_queue entries (hset / lpush / del) and persists them to Redis.
+#   Running in its own thread keeps Redis latency from blocking the asyncio loop.
+#
+# Batching strategy:
+#   Block on queue.get() until at least one item arrives, then drain everything
+#   available with get_nowait(). All HSETs in the batch go through one pipeline
+#   round-trip; LPUSHes (events) are executed individually for clear error visibility.
 
 import threading
 import queue
@@ -8,21 +15,24 @@ import queue
 REDIS_HOST = "127.0.0.1"   # change to ElastiCache endpoint on real EC2
 REDIS_PORT = 6379
 
+
+# Owns the Redis connection and the drain/flush loop; started as a daemon thread
 class RedisWriter:
+
     def __init__(self, write_queue: queue.SimpleQueue):
         # write_queue is a stdlib SimpleQueue — thread-safe, no asyncio needed
-        self.queue  = write_queue
-        self.client = None
+        self.queue   = write_queue
+        self.client  = None
         self._thread = threading.Thread(target=self._run, daemon=True,
                                         name="T4-RedisWriter")
 
+    # Start the T4 thread — called from server.py before the event loop starts
     def start(self):
-        """Start the T4 thread. Called from server.py instead of await writer.run()."""
         self._thread.start()
         print("[T4 RedisWriter] thread started")
 
+    # Thread entry point: connect to Redis then loop forever processing batches
     def _run(self):
-        """Thread entry point. Connects to Redis then processes queue in batches."""
         try:
             import redis as redislib
             self.client = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT,
@@ -44,8 +54,8 @@ class RedisWriter:
                     break
             self._flush(msgs)
 
+    # Separate msgs by op-type, then execute DELs → HSET pipeline → LPUSHes
     def _flush(self, msgs: list):
-        """Batch all HSETs into one pipeline; execute LPUSHes individually."""
         hsets  = [m for m in msgs if m.get("op") == "hset"]
         lpushs = [m for m in msgs if m.get("op") == "lpush"]
         dels   = [m for m in msgs if m.get("op") == "del"]
@@ -54,6 +64,7 @@ class RedisWriter:
         for m in other:
             print(f"[T4] unknown op: {m}")
 
+        # DELs: clean up stale player keys when a node disconnects
         if dels and self.client:
             try:
                 self.client.delete(*[m["key"] for m in dels])
@@ -61,7 +72,7 @@ class RedisWriter:
             except Exception as e:
                 print(f"[T4] DEL failed: {e}")
 
-        # Pipeline: bundle all per-tick player position writes into one round-trip
+        # HSETs: bundle all per-tick player position writes into one round-trip
         if hsets and self.client:
             try:
                 pipe = self.client.pipeline(transaction=False)
@@ -74,7 +85,7 @@ class RedisWriter:
             for m in hsets:
                 print(f"[T4] would HSET {m['key']} {m['mapping']}")
 
-        # Events are rare — execute individually so errors are visible per-event
+        # LPUSHes: events are rare — execute individually so errors are visible per-event
         for m in lpushs:
             if self.client:
                 try:

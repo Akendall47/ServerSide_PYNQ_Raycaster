@@ -25,10 +25,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 from protocol import (
+    # constants
+    MOVEMENT_MODE_INTENT_WITH_PREDICTION,
     PKT_REGISTER, PKT_ACK, PKT_GAME_STATE, PKT_MAP, PKT_HEARTBEAT,
     FLAG_TAGGED, FLAG_MATCH_END,
     HEADER_SIZE, HEADER_FMT, PLAYER_SIZE, PLAYER_FMT,
-    pack_node_packet, unpack_header, unpack_player_entries, unpack_map_packet,
+    # functions
+    client_input_flags, pack_node_packet, unpack_header, unpack_player_entries, unpack_map_packet,
 )
 
 # ── Display constants ─────────────────────────────────────────────────────────
@@ -76,7 +79,7 @@ COLOUR_WALL    = (180, 150, 100)   # tan; brightness scaled by distance
 
 
 def _try_import_pynq():
-    """Import pynq and pynq.lib.video; return (pynq, video) or (None, None)."""
+    # Import pynq and pynq.lib.video — returns (pynq, video) or (None, None) if unavailable
     try:
         import pynq
         from pynq.lib import video
@@ -86,10 +89,9 @@ def _try_import_pynq():
 
 
 class HardwareContext:
-    """Wraps PYNQ overlay, AXI-Lite IP, BRAM, and HDMI output.
+    # Wraps PYNQ overlay, AXI-Lite IP, BRAM, and HDMI output.
+    # Falls back to software rendering + no-op register writes if not on a PYNQ board.
 
-    Falls back to software rendering + no-op register writes if not on a PYNQ board.
-    """
 
     def __init__(self, overlay_path: str):
         pynq, video = _try_import_pynq()
@@ -128,7 +130,7 @@ class HardwareContext:
             self.frame = None
 
     def write_player_regs(self, x: float, y: float, angle: float):
-        """Write player position to AXI-Lite raycaster registers."""
+        # Write player position to AXI-Lite raycaster registers
         if self.rc_ip is None:
             return
         self.rc_ip.write(REG_PLAYER_X,     struct.unpack('<I', struct.pack('<f', x))[0])
@@ -136,7 +138,7 @@ class HardwareContext:
         self.rc_ip.write(REG_PLAYER_ANGLE, struct.unpack('<I', struct.pack('<f', angle))[0])
 
     def write_map_to_bram(self, width: int, height: int, tiles: bytes):
-        """Write map tiles to BRAM (one 32-bit word per tile)."""
+        # Write map tiles to BRAM (one 32-bit word per tile)
         if self.bram is None:
             print(f"[HW] BRAM not available — map tiles not written")
             return
@@ -145,7 +147,7 @@ class HardwareContext:
         print(f"[HW] wrote {len(tiles)} tiles to BRAM ({width}x{height})")
 
     def present_frame(self, frame_data):
-        """Copy rendered frame into VDMA buffer and present it on HDMI."""
+        # Copy rendered frame into VDMA buffer and present it on HDMI
         if self.hdmi is None or self.frame is None:
             return
         self.frame[:] = frame_data
@@ -158,7 +160,7 @@ class HardwareContext:
 
 def _cast_rays(x: float, y: float, angle: float, map_w: int, map_h: int,
                tiles: bytearray, tile_scale: int):
-    """Return list of (distance, hit_side) for each screen column."""
+    # Return list of (distance, hit_side) for each screen column
     results = []
     ray_angle = angle - FOV / 2.0
     d_angle   = FOV / NUM_RAYS
@@ -213,7 +215,7 @@ def _cast_rays(x: float, y: float, angle: float, map_w: int, map_h: int,
 
 
 def render_frame_software(x, y, angle, map_w, map_h, tiles, tile_scale):
-    """Render a full frame as a H×W×3 uint8 numpy array (software path)."""
+    # Render a full frame as a H×W×3 uint8 numpy array (software path)
     try:
         import numpy as np
     except ImportError:
@@ -253,10 +255,12 @@ class PYNQNode:
         self.y           = 0.0
         self.angle       = 0.0
         self.orbit_angle = 0.0   # angular position on orbit circle
-        self.flags       = 0
+        self.server_flags = 0
+        self.input_flags  = 0
         self.seq         = 0
         self.registered  = False
         self.match_ended = False
+        self.movement_mode = MOVEMENT_MODE_INTENT_WITH_PREDICTION
 
         # Map state
         self.map_w      = 0
@@ -268,7 +272,7 @@ class PYNQNode:
         self.peer_x     = 0.0
         self.peer_y     = 0.0
         self.peer_angle = 0.0
-        self.peer_flags = 0
+        self.peer_server_flags = 0
 
         # asyncio transport
         self.transport  = None
@@ -303,17 +307,17 @@ class PYNQNode:
             players = unpack_player_entries(data[HEADER_SIZE:])
             for p in players:
                 if p["player_id"] == self.player_id:
-                    self.flags = p["flags"]
-                    if self.flags & FLAG_TAGGED:
+                    self.server_flags = p["flags"]
+                    if self.server_flags & FLAG_TAGGED:
                         print(f"[Node] P{self.player_id} tagged!")
-                    if self.flags & FLAG_MATCH_END:
+                    if self.server_flags & FLAG_MATCH_END:
                         print(f"[Node] match ended")
                         self.match_ended = True
                 else:
                     self.peer_x     = p["x"]
                     self.peer_y     = p["y"]
                     self.peer_angle = p["angle"]
-                    self.peer_flags = p["flags"]
+                    self.peer_server_flags = p["flags"]
 
     def error_received(self, exc):
         print(f"[Node] UDP error: {exc}")
@@ -332,15 +336,20 @@ class PYNQNode:
     # ── Send helpers ───────────────────────────────────────────────────────
 
     def _send_register(self):
-        pkt = pack_node_packet(PKT_REGISTER, self.seq, self.x, self.y, self.angle)
+        pkt = pack_node_packet(
+            PKT_REGISTER, self.seq, self.x, self.y, self.angle,
+            movement_mode=self.movement_mode,
+        )
         self.seq += 1
         self.transport.sendto(pkt, self.server_addr)
 
     def _send_state(self):
         if not self.registered:
             return
+        self.input_flags = client_input_flags(shooting=False)
         pkt = pack_node_packet(PKT_HEARTBEAT if self.match_ended else 0x0001,
-                               self.seq, self.x, self.y, self.angle, self.flags)
+                               self.seq, self.x, self.y, self.angle, self.input_flags,
+                               movement_mode=self.movement_mode)
         self.seq += 1
         self.transport.sendto(pkt, self.server_addr)
 

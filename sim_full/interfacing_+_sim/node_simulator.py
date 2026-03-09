@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""
-node_simulator.py — fake PYNQ node for testing without hardware.
-
-State machine: PLAYING (send position @ 20 Hz) ↔ WAITING (on FLAG_TAGGED, wait for restart).
-Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
-"""
+# node_simulator.py — fake PYNQ node for testing without hardware.
+#
+# State machine: PLAYING (send position @ 20 Hz) ↔ WAITING (on FLAG_TAGGED, wait for restart).
+# Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
 
 import socket
 import time
@@ -26,13 +24,13 @@ except ImportError:
     tty = None
 
 from protocol import (
-    pack_node_packet,
-    unpack_server_packet,
-    PKT_GAME_STATE,
-    PKT_REGISTER,
-    FLAG_SHOOTING,
-    FLAG_TAGGED,
-    FLAG_MATCH_END,
+    # constants
+    PKT_GAME_STATE, PKT_REGISTER,
+    MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+    FLAG_SHOOTING, FLAG_TAGGED, FLAG_MATCH_END,
+    # functions
+    client_input_flags, decode_flag_names, decode_movement_mode,
+    pack_node_packet, unpack_server_packet,
 )
 
 # How long to wait after restart signal before re-registering.
@@ -47,7 +45,7 @@ MANUAL_MOVE_STEP = 4.0
 
 
 class ManualController:
-    """Non-blocking arrow-key reader for one simulator process."""
+    # Non-blocking arrow-key reader for one simulator process
 
     def __init__(self):
         if termios is None or tty is None or not sys.stdin.isatty():
@@ -246,8 +244,11 @@ def run_node(server_ip, server_port, player_id, node_index,
                 angle = node_index * math.pi * 2 / 4
                 x = radius * math.cos(angle)
                 y = radius * math.sin(angle)
-                pkt = pack_node_packet(PKT_REGISTER, seq=0,
-                                       x=x, y=y, angle=angle, flags=0)
+                pkt = pack_node_packet(
+                    PKT_REGISTER, seq=0,
+                    x=x, y=y, angle=angle, flags=0,
+                    movement_mode=MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+                )
                 sock.sendto(pkt, server_addr)
                 print(f"{tag} REGISTER sent at ({x:.1f},{y:.1f})")
                 seq     = 1
@@ -281,11 +282,14 @@ def run_node(server_ip, server_port, player_id, node_index,
                     pkt_type, _, _, players = unpack_server_packet(data)
                     if pkt_type == PKT_GAME_STATE:
                         for p in players:
+                            state_names = ",".join(
+                                decode_flag_names(p["flags"], direction="server_to_client")
+                            ) or "none"
                             if p["flags"] & FLAG_MATCH_END:
-                                print(f"{tag} P{p['player_id']} TAGGED (final) — stopping")
+                                print(f"{tag} P{p['player_id']} state={state_names} — stopping")
                                 playing = False
                             elif p["flags"] & FLAG_TAGGED:
-                                print(f"{tag} P{p['player_id']} TAGGED (intermediate) — resetting position")
+                                print(f"{tag} P{p['player_id']} state={state_names} — resetting position")
                                 angle = node_index * math.pi * 2 / 4
                                 x = radius * math.cos(angle)
                                 y = radius * math.sin(angle)
@@ -304,19 +308,27 @@ def run_node(server_ip, server_port, player_id, node_index,
             if normalized_mode == "manual":
                 actions = manual_controller.read_actions() if manual_controller else []
                 x, y, angle, shoot_now = apply_manual_actions(x, y, angle, actions)
-                flags = FLAG_SHOOTING if shoot_now else 0
+                input_flags = client_input_flags(shooting=shoot_now)
             else:
                 angle += rotation_speed
                 x = radius * math.cos(angle)
                 y = radius * math.sin(angle)
-                flags = FLAG_SHOOTING if (tick % shoot_freq == 0) else 0
+                input_flags = client_input_flags(shooting=(tick % shoot_freq == 0))
 
-            pkt = pack_node_packet(0x0001, seq=seq, x=x, y=y, angle=angle, flags=flags)
+            pkt = pack_node_packet(
+                0x0001, seq=seq, x=x, y=y, angle=angle, flags=input_flags,
+                movement_mode=MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            )
             sock.sendto(pkt, server_addr)
 
             if tick % TICK_HZ == 0:
+                input_names = ",".join(
+                    decode_flag_names(input_flags, direction="client_to_server")
+                ) or "none"
                 print(f"{tag} tick={tick:4d} seq={seq:5d} "
-                      f"pos=({x:7.2f},{y:7.2f}) angle={angle:7.3f} flags={flags} mode={normalized_mode}")
+                      f"pos=({x:7.2f},{y:7.2f}) angle={angle:7.3f} "
+                      f"input={input_names} movement={decode_movement_mode(MOVEMENT_MODE_INTENT_WITH_PREDICTION)} "
+                      f"mode={normalized_mode}")
 
             seq  = (seq + 1) & 0xFFFF
             tick += 1
