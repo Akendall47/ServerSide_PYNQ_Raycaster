@@ -16,3 +16,5 @@
 
 
 - make UI nicer 
+
+- check is bit collection working 
