@@ -511,6 +511,8 @@ const ORBIT_RADIUS   = 50.0;   // must match t2_game_tick.py ORBIT_RADIUS
 const WORLD_LIMIT    = ORBIT_RADIUS + TAG_RADIUS + 10.0;  // 80u total safe view
 const TILE_SCALE     = 8;      // world units per tile — must match MAP_TILE_SCALE
 const PLAYER_COLLISION_RADIUS = 2.5;
+const FLAG_TAGGED    = 0x02;
+const FLAG_MATCH_END = 0x04;
 const MAP_VIEW_PAD  = 24;
 const ORBIT_VIEW_PAD = 36;
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
@@ -641,12 +643,14 @@ function worldToCanvas(wx, wy) {
 function drawArena(players, bits, bitsMask) {
   ctx.clearRect(0, 0, W, H);
 
-  // Grid
-  ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 8; i++) {
-    const x = W/8*i, y = H/8*i;
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  if (!_showMap) {
+    // Grid only helps in orbit view; it makes map mode feel busier than it is.
+    ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      const x = W/8*i, y = H/8*i;
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    }
   }
 
   // Origin axes
@@ -658,7 +662,7 @@ function drawArena(players, bits, bitsMask) {
   const [,,sc] = worldToCanvas(0,0);
   const tagPx  = TAG_RADIUS * sc;
   const tilePx = (mapData?.tile_scale || TILE_SCALE) * sc;
-  const bodyBase = Math.max(3.5, Math.min(PLAYER_COLLISION_RADIUS * sc, tilePx * 0.42));
+  const bodyBase = Math.max(3.0, Math.min(PLAYER_COLLISION_RADIUS * sc * 0.85, tilePx * 0.28));
   const arrowLen = Math.max(bodyBase + 6, 12);
 
   // Tile map (when map data available and map view is on)
@@ -716,7 +720,7 @@ function drawArena(players, bits, bitsMask) {
   // Server can set FLAG_TAGGED and reset to spawn in the same tick.
   // Latch everyone at their previous live pose so the freeze shows the actual tag point.
   const tagStartedThisFrame = players.some((p) => {
-    const tagged = (p.flags & 0x06) !== 0; // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
+    const tagged = (p.flags & FLAG_TAGGED) !== 0;
     return tagged && !prevFlags[p.id];
   });
   if (tagStartedThisFrame) {
@@ -764,7 +768,8 @@ function drawArena(players, bits, bitsMask) {
   players.forEach((p, i) => {
     const isGhost = (p.flags & FLAG_GHOST) !== 0;
     const colour  = isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length];
-    const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
+    const tagged  = (p.flags & FLAG_TAGGED) !== 0;
+    const matchEnded = (p.flags & FLAG_MATCH_END) !== 0;
 
     prevFlags[p.id] = tagged;
 
@@ -774,8 +779,11 @@ function drawArena(players, bits, bitsMask) {
 
     // Hitbox ring — pulses red while tagged
     ctx.beginPath(); ctx.arc(cx, cy, tagPx, 0, Math.PI*2);
-    ctx.strokeStyle = tagged ? `rgba(255,68,68,${0.3 + 0.25 * Math.sin(now / 120)})` : 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = tagged ? 2 : 1; ctx.stroke();
+    ctx.strokeStyle = tagged
+      ? `rgba(255,68,68,${0.3 + 0.25 * Math.sin(now / 120)})`
+      : matchEnded ? 'rgba(255,180,64,0.35)' : 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = tagged ? 2 : (matchEnded ? 1.5 : 1);
+    ctx.stroke();
 
     // Expanding shockwave ring on tag
     if (isAnimating) {
@@ -799,7 +807,9 @@ function drawArena(players, bits, bitsMask) {
       : tagged ? bodyBase + 1.5 : bodyBase;
     const animT = t ?? 0;
     ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2);
-    ctx.fillStyle = tagged ? `rgb(${200 + Math.round(55*(1-animT))},${Math.round(34*(1-animT))},${Math.round(34*(1-animT))})` : colour;
+    ctx.fillStyle = tagged
+      ? `rgb(${200 + Math.round(55*(1-animT))},${Math.round(34*(1-animT))},${Math.round(34*(1-animT))})`
+      : matchEnded ? '#c89845' : colour;
     ctx.fill();
 
     // Label
@@ -842,12 +852,14 @@ function updatePlayers(players) {
     dist = Math.sqrt(dx*dx + dy*dy).toFixed(1) + 'u';
   }
   players.forEach((p, i) => {
-    const tagged  = (p.flags & 0x06) !== 0;   // FLAG_TAGGED=0x02 | FLAG_MATCH_END=0x04
+    const tagged  = (p.flags & FLAG_TAGGED) !== 0;
+    const matchEnded = (p.flags & FLAG_MATCH_END) !== 0;
     const isGhost = (p.flags & FLAG_GHOST) !== 0;
     const colour  = isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length];
     const tr = document.createElement('tr');
     const role      = isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger';
     const roleColour = isGhost ? '#666' : (p.id === 1) ? '#888' : '#ffaa00';
+    const statusText = tagged ? '★ TAGGED' : (matchEnded ? 'MATCH END' : '—');
     tr.innerHTML = `
       <td class="pid" style="color:${colour}">P${p.id}</td>
       <td style="color:${roleColour};font-size:10px">${role}</td>
@@ -855,7 +867,7 @@ function updatePlayers(players) {
       <td>${p.y.toFixed(1)}</td>
       <td>${(p.angle * 180/Math.PI).toFixed(0)}°</td>
       <td>${i === 0 ? dist : ''}</td>
-      <td class="${tagged ? 'tagged' : ''}">${tagged ? '★ TAGGED' : '—'}</td>
+      <td class="${tagged ? 'tagged' : ''}">${statusText}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1095,9 +1107,18 @@ function connect() {
   };
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
-    // New match boundary: reset edge detector, but keep active flash animations alive.
+    // New match boundary: drop any previous round's tag/match-end visual state.
     if (state.events && state.events.length > 0 && state.events[0].event === 'match_start') {
       for (const k of Object.keys(prevFlags)) delete prevFlags[k];
+      for (const k of Object.keys(tagFlash)) delete tagFlash[k];
+      for (const k of Object.keys(tagPos)) delete tagPos[k];
+      for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
+    }
+    if (!state.players || state.players.length === 0) {
+      for (const k of Object.keys(prevFlags)) delete prevFlags[k];
+      for (const k of Object.keys(tagFlash)) delete tagFlash[k];
+      for (const k of Object.keys(tagPos)) delete tagPos[k];
+      for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
     }
     latestState = state;
     if (!replayState.active) updatePlayers(state.players);

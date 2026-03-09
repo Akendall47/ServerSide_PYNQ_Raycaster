@@ -343,6 +343,61 @@ def test_sim_packet_handler_requires_register_for_unknown_addr():
         assert addr in state.players
 
 
+def test_sim_register_does_not_override_authoritative_spawn_on_match_start():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+
+        state = match_state_mod.MatchState()
+        map_state = {
+            "width": 0,
+            "height": 0,
+            "tile_scale": 8,
+            "tiles": bytearray(),
+            "bits": [],
+            "spawn_positions": [(-24.0, -24.0), (24.0, 24.0)],
+        }
+        handler = packet_handler_mod.PacketHandler(
+            state,
+            asyncio.Queue(),
+            queue.SimpleQueue(),
+            map_state,
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_event=lambda event: None,
+        )
+
+        handler._process_packet({
+            "data": protocol.pack_node_packet(
+                protocol.PKT_REGISTER,
+                0,
+                0.0,
+                0.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": ("runner", 1),
+        })
+        handler._process_packet({
+            "data": protocol.pack_node_packet(
+                protocol.PKT_REGISTER,
+                0,
+                0.0,
+                0.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": ("tagger", 2),
+        })
+
+        assert state.match_started is True
+        assert state.players[("runner", 1)]["x"] == -24.0
+        assert state.players[("runner", 1)]["y"] == -24.0
+        assert state.players[("tagger", 2)]["x"] == 24.0
+        assert state.players[("tagger", 2)]["y"] == 24.0
+
+
 def test_sim_restart_command_clears_players_and_backlog():
     with sim_import_context():
         protocol = importlib.import_module("protocol")

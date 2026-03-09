@@ -97,7 +97,8 @@ class PacketHandler:
         p["last_seen"] = time.monotonic()
 
         if pkt_type == PKT_REGISTER:
-            p["x"], p["y"], p["angle"] = x, y, angle
+            if not self.state.match_started or p["player_id"] == 0:
+                p["x"], p["y"], p["angle"] = x, y, angle
             p["last_seq"] = seq
             p["movement_mode"] = movement_mode
             p["protocol_version"] = protocol_version
