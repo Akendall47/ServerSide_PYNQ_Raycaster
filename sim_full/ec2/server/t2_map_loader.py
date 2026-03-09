@@ -13,6 +13,7 @@ _HERE     = os.path.dirname(__file__)
 _MAPS_DIR = os.path.normpath(os.path.join(_HERE, '..', '..', '..', 'pynq_full', 'ec2', 'maps'))
 
 DEFAULT_MAP_PATH = os.path.join(_MAPS_DIR, 'chase.txt')
+SPAWN_MARKERS = {str(index): index - 1 for index in range(1, 6)}
 
 
 def cell_to_world(col: int, row: int, width: int, height: int, tile_scale: int):
@@ -83,6 +84,31 @@ def resolve_walkable_world(map_state: dict,
     return low_x, low_y
 
 
+def _cell_open_score(width: int, height: int, tiles: bytearray, col: int, row: int) -> int:
+    score = 0
+    for row_off in (-1, 0, 1):
+        for col_off in (-1, 0, 1):
+            if row_off == 0 and col_off == 0:
+                continue
+            if is_walkable_cell(width, height, tiles, col + col_off, row + row_off):
+                score += 1
+    return score
+
+
+def _default_spawn_anchors(width: int, height: int):
+    low_col = min(width - 2, max(1, int(round((width - 1) * 0.25))))
+    high_col = min(width - 2, max(1, (width - 1) - low_col))
+    low_row = min(height - 2, max(1, int(round((height - 1) * 0.25))))
+    high_row = min(height - 2, max(1, (height - 1) - low_row))
+    return [
+        (low_col, low_row),
+        (high_col, high_row),
+        (low_col, high_row),
+        (high_col, low_row),
+        (width // 2, height // 2),
+    ]
+
+
 def _nearest_walkable_cell(width: int, height: int, tiles: bytearray,
                            start_col: int, start_row: int, used: set,
                            tile_scale: int, clearance_radius: float):
@@ -109,40 +135,41 @@ def _nearest_walkable_cell(width: int, height: int, tiles: bytearray,
                 if not is_walkable_cell(width, height, tiles, col, row):
                     continue
                 dist_sq = (col - start_col) ** 2 + (row - start_row) ** 2
-                if fallback is None or dist_sq < fallback[0]:
-                    fallback = (dist_sq, col, row)
+                open_score = _cell_open_score(width, height, tiles, col, row)
+                candidate = (open_score, -dist_sq, col, row)
+                if fallback is None or candidate > fallback:
+                    fallback = candidate
                 world_x, world_y = cell_to_world(col, row, width, height, tile_scale)
                 if not is_walkable_world(map_state, world_x, world_y, clearance_radius):
                     continue
-                if best is None or dist_sq < best[0]:
-                    best = (dist_sq, col, row)
+                if best is None or candidate > best:
+                    best = candidate
         if best is not None:
-            used.add((best[1], best[2]))
-            return best[1], best[2]
+            used.add((best[2], best[3]))
+            return best[2], best[3]
     if fallback is not None:
-        used.add((fallback[1], fallback[2]))
-        return fallback[1], fallback[2]
+        used.add((fallback[2], fallback[3]))
+        return fallback[2], fallback[3]
     return None
 
 
-def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale: int):
+def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale: int,
+                          spawn_anchors=None):
     if width <= 0 or height <= 0 or not tiles:
         return []
 
-    low_col = min(width - 2, max(1, int(round((width - 1) * 0.25))))
-    high_col = min(width - 2, max(1, (width - 1) - low_col))
-    low_row = min(height - 2, max(1, int(round((height - 1) * 0.25))))
-    high_row = min(height - 2, max(1, (height - 1) - low_row))
-    anchors = [
-        (low_col, low_row),
-        (high_col, high_row),
-        (low_col, high_row),
-        (high_col, low_row),
-        (width // 2, height // 2),
-    ]
+    anchors = _default_spawn_anchors(width, height)
+    if spawn_anchors:
+        for index, anchor in enumerate(spawn_anchors[:len(anchors)]):
+            if anchor is not None:
+                anchors[index] = anchor
     used = set()
     positions = []
-    clearance_radius = max(PLAYER_COLLISION_RADIUS + 0.5, SPAWN_CLEARANCE_RADIUS)
+    clearance_radius = max(
+        tile_scale * 0.75,
+        PLAYER_COLLISION_RADIUS + 0.5,
+        SPAWN_CLEARANCE_RADIUS,
+    )
     for col, row in anchors:
         cell = _nearest_walkable_cell(
             width, height, tiles, col, row, used, tile_scale, clearance_radius
@@ -158,7 +185,7 @@ def load_map(path: str) -> dict:
     """Parse a text map file.
 
     Tile key: '#' = wall, 'B' = bit spawn (floor tile, world pos recorded),
-              anything else = empty.
+              '1'..'5' = explicit spawn anchors, anything else = empty.
     Returns dict: {width, height, tile_scale, tiles, name, bits}
       bits: list of (world_x, world_y) — centres of 'B' cells, origin at map centre.
     """
@@ -175,6 +202,7 @@ def load_map(path: str) -> dict:
         ts     = MAP_TILE_SCALE
         tiles  = bytearray()
         bits   = []
+        spawn_anchors = [None] * len(SPAWN_MARKERS)
 
         for row_idx, row in enumerate(rows):
             for col_idx, c in enumerate(row):
@@ -183,8 +211,10 @@ def load_map(path: str) -> dict:
                     world_x = (col_idx - width  / 2.0 + 0.5) * ts
                     world_y = (row_idx - height / 2.0 + 0.5) * ts
                     bits.append((world_x, world_y))
+                elif c in SPAWN_MARKERS:
+                    spawn_anchors[SPAWN_MARKERS[c]] = (col_idx, row_idx)
 
-        spawn_positions = build_spawn_positions(width, height, tiles, ts)
+        spawn_positions = build_spawn_positions(width, height, tiles, ts, spawn_anchors)
         name = os.path.splitext(os.path.basename(path))[0]
         print(f"[T2] map loaded: {path}  {width}x{height}  bits={len(bits)}")
         return {"width": width, "height": height,

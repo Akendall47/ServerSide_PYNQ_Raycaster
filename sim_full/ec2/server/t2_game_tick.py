@@ -116,6 +116,8 @@ class GameTick:
         cmd = data.get("cmd")
         if cmd == "force_end":
             self.logic._force_end_flag = True
+        elif cmd == "restart":
+            self._reset_session("restart", arm_lockout=False)
         elif cmd == "set_ghost_count":
             count = int(data.get("count", 0))
             self.packets.set_ghost_count(count)
@@ -126,24 +128,54 @@ class GameTick:
                 self._swap_map(new_map)
 
     def _swap_map(self, new_map: dict):
+        self._reset_session("map_changed", next_map=new_map, arm_lockout=False)
+
+    def _drain_asyncio_queue(self, q: asyncio.Queue) -> int:
+        drained = 0
+        while True:
+            try:
+                q.get_nowait()
+                drained += 1
+            except asyncio.QueueEmpty:
+                return drained
+
+    def _reset_session(self, reason: str, next_map: dict | None = None, arm_lockout: bool = False):
         current_players = list(self.state.players.values())
+        had_players = bool(current_players)
         was_active = self.state.match_started and not self.state.match_ended
         if was_active:
-            self.redis_io.push_event({
+            event = {
                 "event": "match_aborted",
-                "reason": "map_changed",
+                "reason": reason,
                 "game_mode": self.state.game_mode,
                 "bits_mask": self.state.bits_mask,
                 "map": self.map_state.get("name"),
-                "next_map": new_map.get("name"),
-            })
+            }
+            if next_map is not None:
+                event["next_map"] = next_map.get("name")
+            self.redis_io.push_event(event)
+
+        target_map_name = self.map_state.get("name")
+        if next_map is not None:
+            self.map_state.clear()
+            self.map_state.update(next_map)
+            target_map_name = next_map.get("name")
+        dropped_packets = self._drain_asyncio_queue(self.packet_queue)
+        dropped_broadcasts = self._drain_asyncio_queue(self.broadcast_queue)
         for player in current_players:
             self.write_queue.put({"op": "del", "key": f"player:{player['player_id']}"})
-        self.map_state.clear()
-        self.map_state.update(new_map)
-        self.state.reset_all()
+        self.state.clear_match(arm_lockout=arm_lockout)
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
-        print(f"[T2] map swapped to '{new_map.get('name')}' — state reset for new map")
+        self.logic._force_end_flag = False
+
+        action = "map swapped" if next_map is not None else "match reset"
+        print(
+            f"[T2] {action} ({reason}) — map='{target_map_name}' "
+            f"players_cleared={len(current_players)} "
+            f"packet_backlog={dropped_packets} broadcast_backlog={dropped_broadcasts}"
+        )
+        if not had_players and next_map is None:
+            print("[T2] restart requested with no active or queued players")
 
     # ── Match event callbacks ─────────────────────────────────────────────────
 

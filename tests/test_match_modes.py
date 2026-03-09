@@ -3,6 +3,7 @@ import importlib
 import queue
 import struct
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -190,6 +191,28 @@ def test_sim_map_loader_builds_walkable_spawn_positions():
             assert map_loader.is_walkable_world(map_state, x, y, clearance_radius)
 
 
+def test_sim_map_loader_uses_explicit_spawn_markers():
+    with sim_import_context():
+        map_loader = importlib.import_module("t2_map_loader")
+
+        for name in ("chase", "ghost_chase", "chase_bits", "ghost_bits"):
+            path = ROOT / "pynq_full" / "ec2" / "maps" / f"{name}.txt"
+            rows = [line.rstrip("\r\n") for line in path.read_text().splitlines() if line]
+            expected = {}
+            for row_idx, row in enumerate(rows):
+                for col_idx, cell in enumerate(row):
+                    if cell in {"1", "2", "3", "4", "5"}:
+                        expected[int(cell)] = map_loader.cell_to_world(
+                            col_idx, row_idx, len(row), len(rows), 8
+                        )
+
+            map_state = map_loader.load_map(str(path))
+
+            assert len(expected) == 5
+            for slot, world_pos in expected.items():
+                assert map_state["spawn_positions"][slot - 1] == world_pos
+
+
 def test_sim_map_loader_resolves_blocked_moves_without_leaving_walkable_space():
     with sim_import_context():
         map_loader = importlib.import_module("t2_map_loader")
@@ -215,6 +238,143 @@ def test_sim_map_loader_resolves_blocked_moves_without_leaving_walkable_space():
         assert resolved_x < 0.0
         assert resolved_y == 0.0
         assert map_loader.is_walkable_world(map_state, resolved_x, resolved_y, 0.0)
+
+
+def test_sim_match_end_hold_clears_runtime_state():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        core_logic_mod = importlib.import_module("game_logic.core_logic")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        state = match_state_mod.MatchState()
+        state.players = {
+            ("runner", 1): {"player_id": 1, "flags": 0},
+            ("tagger", 2): {"player_id": 2, "flags": 0},
+        }
+        state.match_started = True
+        state.match_ended = True
+        state.match_end_at = time.monotonic() - 0.1
+        state.match_winner = "runner"
+        state.match_end_reason = "bits_cleared"
+        state.game_mode = protocol.GAME_MODE_CHASE_BITS
+        state.bits = [[1.0, 2.0, False]]
+        state.bits_mask = 0x0001
+        state.pending_roles = {("runner", 1): 1}
+        state.tag_count = 2
+        state.tag_flash_at = time.monotonic() + 1.0
+
+        async def on_event(event):
+            return None
+
+        write_queue = queue.SimpleQueue()
+        logic = core_logic_mod.CoreLogic(
+            state,
+            write_queue,
+            on_event=on_event,
+            on_force_end_consumed=lambda: None,
+            map_state={},
+        )
+
+        asyncio.run(logic._check_match_end_hold())
+
+        assert state.players == {}
+        assert state.match_started is False
+        assert state.match_ended is False
+        assert state.match_end_at is None
+        assert state.match_winner is None
+        assert state.match_end_reason is None
+        assert state.tag_count == 0
+        assert state.tag_flash_at is None
+        assert state.bits == []
+        assert state.bits_mask == 0
+        assert state.pending_roles == {}
+        assert state.game_mode == protocol.GAME_MODE_CHASE
+        assert state.lockout_until is not None
+
+
+def test_sim_packet_handler_requires_register_for_unknown_addr():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+
+        state = match_state_mod.MatchState()
+        handler = packet_handler_mod.PacketHandler(
+            state,
+            asyncio.Queue(),
+            queue.SimpleQueue(),
+            {
+                "width": 0,
+                "height": 0,
+                "tile_scale": 8,
+                "tiles": bytearray(),
+                "spawn_positions": [],
+            },
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_event=lambda event: None,
+        )
+
+        addr = ("runner", 1)
+        handler._process_packet({
+            "data": protocol.pack_node_packet(
+                0x0001,
+                7,
+                12.0,
+                8.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": addr,
+        })
+        assert state.players == {}
+
+        handler._process_packet({
+            "data": protocol.pack_node_packet(
+                protocol.PKT_REGISTER,
+                0,
+                0.0,
+                0.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": addr,
+        })
+        assert addr in state.players
+
+
+def test_sim_restart_command_clears_players_and_backlog():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        game_tick_mod = importlib.import_module("t2_game_tick")
+
+        packet_queue = asyncio.Queue()
+        broadcast_queue = asyncio.Queue()
+        write_queue = queue.SimpleQueue()
+        game_tick = game_tick_mod.GameTick(packet_queue, broadcast_queue, write_queue)
+        game_tick.state.players = {
+            ("runner", 1): {"player_id": 1},
+            ("tagger", 2): {"player_id": 2},
+        }
+        game_tick.state.pending_roles = {("runner", 1): 1}
+        game_tick.state.match_started = True
+        game_tick.state.game_mode = protocol.GAME_MODE_CHASE_BITS
+        game_tick.state.bits = [[1.0, 2.0, True]]
+        game_tick.state.bits_mask = 0x0001
+        packet_queue.put_nowait({"data": b"stale", "addr": ("runner", 1)})
+        broadcast_queue.put_nowait({"data": b"stale", "targets": [("runner", 1)]})
+
+        game_tick._apply_control_command({"cmd": "restart"})
+
+        assert game_tick.state.players == {}
+        assert game_tick.state.match_started is False
+        assert game_tick.state.match_ended is False
+        assert game_tick.state.bits == []
+        assert game_tick.state.bits_mask == 0
+        assert game_tick.state.pending_roles == {}
+        assert packet_queue.empty()
+        assert broadcast_queue.empty()
+        assert game_tick.state.lockout_until is None
 
 
 def test_sim_ghosts_steer_without_crossing_walls():

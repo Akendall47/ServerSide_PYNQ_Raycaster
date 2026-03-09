@@ -510,6 +510,9 @@ const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
 const ORBIT_RADIUS   = 50.0;   // must match t2_game_tick.py ORBIT_RADIUS
 const WORLD_LIMIT    = ORBIT_RADIUS + TAG_RADIUS + 10.0;  // 80u total safe view
 const TILE_SCALE     = 8;      // world units per tile — must match MAP_TILE_SCALE
+const PLAYER_COLLISION_RADIUS = 2.5;
+const MAP_VIEW_PAD  = 24;
+const ORBIT_VIEW_PAD = 36;
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
 const FLAG_GHOST     = 0x08;
 
@@ -622,7 +625,7 @@ function gameModeLabel(mode) {
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy) {
-  const pad = 36;
+  const pad = (_showMap && mapData && mapData.width > 0) ? MAP_VIEW_PAD : ORBIT_VIEW_PAD;
   // In map mode use the actual map extent; fall back to orbit view extent
   const limit = (_showMap && mapData && mapData.width > 0)
     ? (mapData.width / 2) * (mapData.tile_scale || TILE_SCALE)
@@ -654,6 +657,9 @@ function drawArena(players, bits, bitsMask) {
 
   const [,,sc] = worldToCanvas(0,0);
   const tagPx  = TAG_RADIUS * sc;
+  const tilePx = (mapData?.tile_scale || TILE_SCALE) * sc;
+  const bodyBase = Math.max(3.5, Math.min(PLAYER_COLLISION_RADIUS * sc, tilePx * 0.42));
+  const arrowLen = Math.max(bodyBase + 6, 12);
 
   // Tile map (when map data available and map view is on)
   if (_showMap && mapData && mapData.tiles && mapData.tiles.length) {
@@ -784,14 +790,13 @@ function drawArena(players, bits, bitsMask) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(drawAngle)*15, cy + Math.sin(drawAngle)*15);
+    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy + Math.sin(drawAngle) * arrowLen);
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
-    const dotBase = 6;
     const dotR = isAnimating
-      ? dotBase + 4 * Math.sin(t * Math.PI)   // smooth bump then back
-      : tagged ? dotBase + 2 : dotBase;
+      ? bodyBase + (bodyBase * 0.45 * Math.sin(t * Math.PI))
+      : tagged ? bodyBase + 1.5 : bodyBase;
     const animT = t ?? 0;
     ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2);
     ctx.fillStyle = tagged ? `rgb(${200 + Math.round(55*(1-animT))},${Math.round(34*(1-animT))},${Math.round(34*(1-animT))})` : colour;
@@ -800,7 +805,7 @@ function drawArena(players, bits, bitsMask) {
     // Label
     const role = isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger';
     ctx.fillStyle = isGhost ? '#888' : '#fff'; ctx.font = 'bold 11px Courier New';
-    ctx.fillText(`P${p.id} ${role}`, cx+10, cy-6);
+    ctx.fillText(`P${p.id} ${role}`, cx + arrowLen + 4, cy - bodyBase);
 
     // Cache the latest live server pose for edge-triggered freeze latching.
     lastLivePos[p.id] = { x: p.x, y: p.y, angle: p.angle };

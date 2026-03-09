@@ -82,8 +82,9 @@ class PacketHandler:
         movement_mode    = pkt["movement_mode"]
         protocol_version = pkt["protocol_version"]
 
-        # Auto-register unknown address and capture preferred role from reserved.
         if addr not in self.state.players:
+            if pkt_type != PKT_REGISTER:
+                return
             self._register_player(
                 addr, x, y, angle,
                 preferred_role=pkt.get("reserved", ROLE_ANY),

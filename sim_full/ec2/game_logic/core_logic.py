@@ -199,16 +199,7 @@ class CoreLogic:
         print(f"[T2] match end hold expired — clearing players, lockout {LOCKOUT_S}s")
         for p in self.state.players.values():
             self.write_queue.put({"op": "del", "key": f"player:{p['player_id']}"})
-        self.state.players       = {}
-        self.state.next_id       = 1
-        self.state.tag_count     = 0
-        self.state.tag_flash_at  = None
-        self.state.match_end_at  = None
-        self.state.match_winner  = None
-        self.state.match_end_reason = None
-        self.state.match_started = False
-        self.state.match_ended   = False
-        self.state.lockout_until = time.monotonic() + LOCKOUT_S
+        self.state.clear_match(arm_lockout=True)
 
     # ── Proximity / tag detection ─────────────────────────────────────────────
     # Pairwise check — skipped during grace period so nodes reach their orbits first

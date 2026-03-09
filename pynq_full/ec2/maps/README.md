@@ -1,6 +1,7 @@
 # Maps
 
-Text format: `#` = wall, `.` = empty, `B` = bit spawn point. Row-major; all rows must be exactly
+Text format: `#` = wall, `.` = empty, `B` = bit spawn point, `1`..`5` = explicit spawn anchors.
+`1` = runner, `2` = tagger, `3`..`5` = ghost slots. Row-major; all rows must be exactly
 32 characters and there must be exactly 32 rows (FPGA BRAM constraint — see `ref_files/drivers/mapDriver.py`).
 Maps must have a solid border of `#` on all four edges — the raycaster does no bounds checking.
 Server loads `chase.txt` by default; the dashboard `set_map` command switches maps mid-session.

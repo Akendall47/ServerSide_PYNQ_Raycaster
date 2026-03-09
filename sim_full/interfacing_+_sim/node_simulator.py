@@ -37,6 +37,7 @@ from protocol import (
 # How long to wait after restart signal before re-registering.
 # Must exceed server's MATCH_END_HOLD_S (0.5s) + LOCKOUT_S (0.5s).
 RESTART_DELAY_S = 1.5
+MAP_CHANGE_REJOIN_DELAY_S = 0.25
 
 TICK_HZ      = 20
 TICK_INTERVAL = 1.0 / TICK_HZ
@@ -50,6 +51,7 @@ DEFAULT_MAP_NAME = "chase"
 MAPS_DIR = Path(__file__).resolve().parents[2] / "pynq_full" / "ec2" / "maps"
 SPAWN_ANGLES = [0.0, math.pi, math.pi / 2, 3 * math.pi / 2, math.pi / 4]
 AUTHORITATIVE_STATE_TIMEOUT_S = 0.4
+SPAWN_MARKERS = {str(index): index - 1 for index in range(1, 6)}
 
 
 def load_local_map(name: str):
@@ -68,10 +70,13 @@ def load_local_map(name: str):
     width = len(rows[0]) if rows else 0
     height = len(rows)
     tiles = bytearray()
-    for row in rows:
-        for cell in row:
+    spawn_anchors = [None] * len(SPAWN_MARKERS)
+    for row_idx, row in enumerate(rows):
+        for col_idx, cell in enumerate(row):
             tiles.append(1 if cell == "#" else 0)
-    spawn_positions = build_spawn_positions(width, height, tiles, MAP_TILE_SCALE)
+            if cell in SPAWN_MARKERS:
+                spawn_anchors[SPAWN_MARKERS[cell]] = (col_idx, row_idx)
+    spawn_positions = build_spawn_positions(width, height, tiles, MAP_TILE_SCALE, spawn_anchors)
     return {
         "name": name,
         "width": width,
@@ -89,31 +94,48 @@ def cell_to_world(col: int, row: int, width: int, height: int, tile_scale: int):
     )
 
 
-def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale: int):
-    if width <= 0 or height <= 0 or not tiles:
-        return []
+def _cell_open_score(width: int, height: int, tiles: bytearray, col: int, row: int) -> int:
+    score = 0
+    for row_off in (-1, 0, 1):
+        for col_off in (-1, 0, 1):
+            if row_off == 0 and col_off == 0:
+                continue
+            next_row = row + row_off
+            next_col = col + col_off
+            if next_row < 0 or next_col < 0 or next_row >= height or next_col >= width:
+                continue
+            if tiles[next_row * width + next_col] == 0:
+                score += 1
+    return score
 
+
+def _default_spawn_anchors(width: int, height: int):
     low_col = min(width - 2, max(1, int(round((width - 1) * 0.25))))
     high_col = min(width - 2, max(1, (width - 1) - low_col))
     low_row = min(height - 2, max(1, int(round((height - 1) * 0.25))))
     high_row = min(height - 2, max(1, (height - 1) - low_row))
-    anchors = [
+    return [
         (low_col, low_row),
         (high_col, high_row),
         (low_col, high_row),
         (high_col, low_row),
         (width // 2, height // 2),
     ]
-    clearance_radius = max(PLAYER_COLLISION_RADIUS + 0.5, SPAWN_CLEARANCE_RADIUS)
+
+
+def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale: int,
+                          spawn_anchors=None):
+    if width <= 0 or height <= 0 or not tiles:
+        return []
+
+    anchors = _default_spawn_anchors(width, height)
+    if spawn_anchors:
+        for index, anchor in enumerate(spawn_anchors[:len(anchors)]):
+            if anchor is not None:
+                anchors[index] = anchor
+    clearance_radius = max(tile_scale * 0.75, PLAYER_COLLISION_RADIUS + 0.5, SPAWN_CLEARANCE_RADIUS)
     used = set()
     positions = []
-    fallback = [
-        (1, 1),
-        (width - 2, height - 2),
-        (1, height - 2),
-        (width - 2, 1),
-        (width // 2, height // 2),
-    ]
     for anchor_col, anchor_row in anchors:
         best = None
         best_fallback = None
@@ -132,8 +154,10 @@ def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale:
                     if tiles[row * width + col]:
                         continue
                     dist_sq = (col - anchor_col) ** 2 + (row - anchor_row) ** 2
-                    if best_fallback is None or dist_sq < best_fallback[0]:
-                        best_fallback = (dist_sq, col, row)
+                    open_score = _cell_open_score(width, height, tiles, col, row)
+                    candidate = (open_score, -dist_sq, col, row)
+                    if best_fallback is None or candidate > best_fallback:
+                        best_fallback = candidate
                     world_x, world_y = cell_to_world(col, row, width, height, tile_scale)
                     if not is_walkable(
                         {
@@ -147,18 +171,16 @@ def build_spawn_positions(width: int, height: int, tiles: bytearray, tile_scale:
                         clearance_radius,
                     ):
                         continue
-                    if best is None or dist_sq < best[0]:
-                        best = (dist_sq, col, row)
+                    if best is None or candidate > best:
+                        best = candidate
             if best is not None:
                 break
         chosen = best or best_fallback
         if chosen is None:
-            index = len(positions)
-            col, row = fallback[index] if index < len(fallback) else (width // 2, height // 2)
-            positions.append(cell_to_world(col, row, width, height, tile_scale))
+            positions.append((0.0, 0.0))
             continue
-        used.add((chosen[1], chosen[2]))
-        positions.append(cell_to_world(chosen[1], chosen[2], width, height, tile_scale))
+        used.add((chosen[2], chosen[3]))
+        positions.append(cell_to_world(chosen[2], chosen[3], width, height, tile_scale))
     return positions
 
 
@@ -338,6 +360,7 @@ def run_node(server_ip, server_port, player_id, node_index,
 
     sock    = None
     playing = False   # start in WAITING; first game needs explicit RESTART
+    rejoin_at = None
     have_authoritative_state = False
     last_authoritative_state_at = 0.0
     seq               = 0
@@ -368,6 +391,15 @@ def run_node(server_ip, server_port, player_id, node_index,
                 manual_controller = None
             normalized_mode = "auto"
 
+    def load_selected_map(next_map: str):
+        nonlocal current_map_name, map_state, x, y, angle
+        nonlocal have_authoritative_state, last_authoritative_state_at
+        current_map_name = next_map
+        map_state = load_local_map(current_map_name)
+        x, y, angle = spawn_pose(map_state, node_index, radius)
+        have_authoritative_state = False
+        last_authoritative_state_at = 0.0
+
     try:
         if manual_controller:
             print(f"{tag} manual mode: arrows move/turn, space shoots")
@@ -388,13 +420,14 @@ def run_node(server_ip, server_port, player_id, node_index,
                         next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
                         switch_mode(next_mode)
                         if next_map:
-                            current_map_name = next_map
-                            map_state = load_local_map(current_map_name)
-                            x, y, angle = spawn_pose(map_state, node_index, radius)
-                            have_authoritative_state = False
-                            last_authoritative_state_at = 0.0
-                    print(f"{tag} ── GAME OVER — waiting for ▶ RESTART...")
-                    while True:
+                            load_selected_map(next_map)
+                            print(f"{tag} map switched to {current_map_name}")
+                        if should_restart:
+                            rejoin_at = time.monotonic() + RESTART_DELAY_S
+                            print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
+                    if rejoin_at is None:
+                        print(f"{tag} ── GAME OVER — waiting for ▶ RESTART...")
+                    while rejoin_at is None or time.monotonic() < rejoin_at:
                         msg = ps.get_message()
                         if msg and msg["type"] == "message":
                             try:
@@ -405,16 +438,11 @@ def run_node(server_ip, server_port, player_id, node_index,
                                 next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
                                 switch_mode(next_mode)
                                 if next_map:
-                                    current_map_name = next_map
-                                    map_state = load_local_map(current_map_name)
-                                    x, y, angle = spawn_pose(map_state, node_index, radius)
-                                    have_authoritative_state = False
-                                    last_authoritative_state_at = 0.0
+                                    load_selected_map(next_map)
                                     print(f"{tag} map switched to {current_map_name}")
                                 if should_restart:
+                                    rejoin_at = time.monotonic() + RESTART_DELAY_S
                                     print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
-                                    time.sleep(RESTART_DELAY_S)
-                                    break
                         time.sleep(0.1)
                 else:
                     print(f"{tag} no Redis — Ctrl+C and re-run to restart")
@@ -436,6 +464,7 @@ def run_node(server_ip, server_port, player_id, node_index,
                 seq     = 1
                 tick    = 0
                 playing = True
+                rejoin_at = None
                 have_authoritative_state = False
                 last_authoritative_state_at = 0.0
 
@@ -456,16 +485,17 @@ def run_node(server_ip, server_port, player_id, node_index,
                     next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
                     switch_mode(next_mode)
                     if next_map:
-                        current_map_name = next_map
-                        map_state = load_local_map(current_map_name)
-                        x, y, angle = spawn_pose(map_state, node_index, radius)
-                        have_authoritative_state = False
-                        last_authoritative_state_at = 0.0
-                        print(f"{tag} map switched to {current_map_name}")
+                        load_selected_map(next_map)
+                        rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
+                        playing = False
+                        print(f"{tag} map switched to {current_map_name} — rejoining")
+                        break
                     if should_restart:
+                        rejoin_at = time.monotonic() + RESTART_DELAY_S
                         playing = False
                         have_authoritative_state = False
                         last_authoritative_state_at = 0.0
+                        print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
                         break
 
             # receive all queued broadcasts; stop playing if FLAG_TAGGED seen

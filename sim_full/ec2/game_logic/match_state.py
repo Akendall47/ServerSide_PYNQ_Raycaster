@@ -20,22 +20,8 @@ class MatchState:
     # Clears every field — called on startup and after each match ends cleanly
 
     def reset_all(self):
-        self.players       = {}   # addr → player dict (ghost addrs use sentinel "ghost:<id>")
-        self.next_id       = 1
-        self.match_started = False
-        self.match_ended   = False
-        self.match_end_at  = None   # monotonic time when match-end hold expires
-        self.match_winner  = None
-        self.match_end_reason = None
-        self.lockout_until = None   # monotonic time until new registrations allowed
-        self.tag_count     = 0
-        self.tag_flash_at  = None   # monotonic time when FLAG_TAGGED should clear
-        self.match_tick    = 0      # ticks elapsed since match started (grace period)
-        self.game_mode     = GAME_MODE_CHASE
-        self.bits          = []     # list of [x, y, active]
-        self.bits_mask     = 0
-        self.pending_roles = {}     # addr → preferred_role from PKT_REGISTER
         self.spawn_positions = list(SPAWN_POSITIONS)
+        self.clear_match(arm_lockout=False)
 
     # ── Player position helpers ───────────────────────────────────────────────
     # Teleporting to spawn after a tag prevents immediate re-tag after flash clears
@@ -53,23 +39,26 @@ class MatchState:
     # ── Match lifecycle helpers ───────────────────────────────────────────────
     # Centralised state transitions so GameTick, PacketHandler, CoreLogic all agree
 
-    # Called when a node times out mid-match — resets state and arms lockout
-    def abort_match(self):
-        self.players       = {}
+    def clear_match(self, arm_lockout: bool):
+        self.players       = {}   # addr → player dict (ghost addrs use sentinel "ghost:<id>")
         self.next_id       = 1
         self.match_started = False
         self.match_ended   = False
-        self.match_end_at  = None
+        self.match_end_at  = None   # monotonic time when match-end hold expires
         self.match_winner  = None
         self.match_end_reason = None
         self.tag_count     = 0
-        self.tag_flash_at  = None
-        self.match_tick    = 0
+        self.tag_flash_at  = None   # monotonic time when FLAG_TAGGED should clear
+        self.match_tick    = 0      # ticks elapsed since match started (grace period)
         self.game_mode     = GAME_MODE_CHASE
-        self.bits          = []
+        self.bits          = []     # list of [x, y, active]
         self.bits_mask     = 0
-        self.pending_roles = {}
-        self.lockout_until = time.monotonic() + LOCKOUT_S
+        self.pending_roles = {}     # addr → preferred_role from PKT_REGISTER
+        self.lockout_until = time.monotonic() + LOCKOUT_S if arm_lockout else None
+
+    # Called when a node times out mid-match — resets state and arms lockout
+    def abort_match(self):
+        self.clear_match(arm_lockout=True)
 
     def set_spawn_positions(self, positions):
         self.spawn_positions = [tuple(pos) for pos in positions] if positions else list(SPAWN_POSITIONS)
