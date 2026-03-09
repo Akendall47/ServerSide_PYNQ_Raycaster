@@ -94,10 +94,9 @@ class CoreLogic:
                 "runner_id": runner["player_id"],
                 "bits_mask": self.state.bits_mask,
             })
-            # All bits collected → trigger match end next cycle
             if self.state.bits_mask == 0:
-                print("[T2] all bits collected — match ending")
-                self.state.tag_count = TAGS_TO_WIN   # satisfy _check_match_end threshold
+                await self._finish_match("runner", "bits_cleared")
+                return
 
     # ── Tag flash expiry ──────────────────────────────────────────────────────
     # Clear FLAG_TAGGED after TAG_FLASH_S so the next tag can be registered
@@ -130,6 +129,8 @@ class CoreLogic:
         self.state.tag_count     = 0
         self.state.tag_flash_at  = None
         self.state.match_end_at  = None
+        self.state.match_winner  = None
+        self.state.match_end_reason = None
         self.state.match_started = False
         self.state.match_ended   = False
         self.state.lockout_until = time.monotonic() + LOCKOUT_S
@@ -189,16 +190,34 @@ class CoreLogic:
         if not forced and self.state.tag_count < TAGS_TO_WIN:
             return
 
+        winner = self.state.match_winner or ("unknown" if forced else "tagger")
+        reason = self.state.match_end_reason or ("force_end" if forced else "runner_tagged")
+        await self._finish_match(winner, reason)
+
+    async def _finish_match(self, winner: str, reason: str):
+        if not self.state.match_started or self.state.match_ended:
+            return
+
         self.state.match_ended  = True
         self.state.match_end_at = time.monotonic() + MATCH_END_HOLD_S
+        self.state.match_winner = winner
+        self.state.match_end_reason = reason
 
-        # Mark all players so nodes can distinguish intermediate vs final tag
         for p in self.state.players.values():
             p["flags"] |= FLAG_MATCH_END
 
-        reason = "force_end" if forced else f"runner tagged {self.state.tag_count}x"
-        print(f"[T2] match ended — {reason} (clearing players in {MATCH_END_HOLD_S}s)")
+        bits_total = len(self.state.bits)
+        bits_collected = sum(1 for bit in self.state.bits if not bit[2])
+        print(
+            f"[T2] match ended — {reason} (winner={winner}, clearing players in {MATCH_END_HOLD_S}s)"
+        )
         await self._on_event({
-            "event": "match_end", "winner": "tagger",
+            "event": "match_end",
+            "winner": winner,
+            "reason": reason,
             "tag_count": self.state.tag_count,
+            "game_mode": self.state.game_mode,
+            "bits_total": bits_total,
+            "bits_collected": bits_collected,
+            "bits_mask": self.state.bits_mask,
         })

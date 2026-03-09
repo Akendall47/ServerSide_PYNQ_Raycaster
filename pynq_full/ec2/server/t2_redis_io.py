@@ -18,8 +18,9 @@ from game_logic.match_state import MatchState
 # Serialises game state for UDP broadcast and Redis persistence
 class RedisIO:
 
-    def __init__(self, state: MatchState, broadcast_queue, write_queue):
+    def __init__(self, state: MatchState, map_state, broadcast_queue, write_queue):
         self.state           = state
+        self.map_state       = map_state
         self.broadcast_queue = broadcast_queue
         self.write_queue     = write_queue
 
@@ -71,10 +72,10 @@ class RedisIO:
             "game_mode":  self.state.game_mode,
             "bits_mask":  self.state.bits_mask,
             "match_tick": match_tick,
+            "map":        self.map_state.get("name", ""),
+            "bits": json.dumps([[round(b[0], 2), round(b[1], 2)]
+                                 for b in self.state.bits]),
         }
-        if self.state.bits:
-            mapping["bits"] = json.dumps([[round(b[0], 2), round(b[1], 2)]
-                                          for b in self.state.bits])
         self.write_queue.put({"op": "hset", "key": "game:state", "mapping": mapping})
         if self.state.match_started and self.state.players:
             self.write_queue.put({
@@ -111,6 +112,11 @@ class RedisIO:
             "match_tick":   match_tick,
             "match_ended":  self.state.match_ended,
             "game_mode":    self.state.game_mode,
+            "map":          self.map_state.get("name", ""),
             "bits_mask":    self.state.bits_mask,
+            "bits": [
+                [round(bit[0], 2), round(bit[1], 2)]
+                for bit in self.state.bits
+            ],
             "players":      players,
         }

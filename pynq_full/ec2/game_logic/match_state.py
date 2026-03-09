@@ -26,6 +26,8 @@ class MatchState:
         self.match_started = False
         self.match_ended   = False
         self.match_end_at  = None   # monotonic time when match-end hold expires
+        self.match_winner  = None
+        self.match_end_reason = None
         self.lockout_until = None   # monotonic time until new registrations allowed
         self.tag_count     = 0
         self.tag_flash_at  = None   # monotonic time when FLAG_TAGGED should clear
@@ -55,9 +57,13 @@ class MatchState:
 
     # Called when a node times out mid-match — resets state and arms lockout
     def abort_match(self):
+        self.players       = {}
+        self.next_id       = 1
         self.match_started = False
         self.match_ended   = False
         self.match_end_at  = None
+        self.match_winner  = None
+        self.match_end_reason = None
         self.tag_count     = 0
         self.tag_flash_at  = None
         self.match_tick    = 0

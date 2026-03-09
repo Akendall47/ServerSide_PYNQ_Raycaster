@@ -223,6 +223,8 @@
   .event-item.player_tagged { border-left-color: #ff4444; color: #ffbbbb; }
   .event-item.match_start   { border-left-color: #00ff88; color: #bbffdd; }
   .event-item.match_end     { border-left-color: #ffaa00; color: #ffd088; background: #1a1200; }
+  .event-item.match_aborted { border-left-color: #ff6677; color: #ffd0d6; background: #1a0b0f; }
+  .event-item.bit_collected { border-left-color: #66ccff; color: #d7f3ff; background: #07141c; }
 
   /* DynamoDB matches */
   .match-row {
@@ -234,6 +236,7 @@
   .match-id { color: #554a77; font-size: 10px; }
   .match-status.in_progress { color: #ffaa00; }
   .match-status.completed   { color: #00ff88; }
+  .match-status.aborted     { color: #ff6677; }
   .match-time { color: #332a55; font-size: 10px; }
   .ddb-note { font-size: 10px; color: #2a2244; margin-top: 5px; }
   .replay-list {
@@ -598,6 +601,10 @@ function normalisePlayers(players) {
   }));
 }
 
+function gameModeLabel(mode) {
+  return Number(mode) === 1 ? 'chase_bits' : 'chase';
+}
+
 // ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy) {
   const pad = 36;
@@ -951,6 +958,7 @@ function updateServices(services) {
 function updateMatches(matches) {
   const el = document.getElementById('match-list');
   const replayEl = document.getElementById('replay-list');
+  const chip = document.getElementById('game-chip');
   if (!matches || matches.length === 0) {
     if (lastMatchListSignature !== 'empty') {
       el.innerHTML = '<span style="color:#333">no matches yet</span>';
@@ -960,22 +968,27 @@ function updateMatches(matches) {
       replayEl.innerHTML = '<button class="replay-btn empty" disabled>no recent matches</button>';
       lastReplayListSignature = 'empty';
     }
+    chip.textContent = 'no game';
+    chip.className = '';
     return;
   }
   const active = matches.find(m => m.status === 'in_progress');
-  const chip   = document.getElementById('game-chip');
+  const activeMap = latestState?.active_map || active?.map_name || _activeMapName;
+  const modeLabel = gameModeLabel(latestState?.game_mode ?? active?.game_mode ?? 0);
   if (active) {
-    chip.textContent = `game ${active.match_id.replace(/^match-/, '')}`;
+    const liveLabel = active.match_id === 'live-now' ? 'live' : active.match_id.replace(/^match-/, '');
+    chip.textContent = `${modeLabel} · ${activeMap} · ${liveLabel}`;
     chip.className = 'active';
   } else {
-    chip.textContent = `last: ${matches[0].match_id.replace(/^match-/, '')}`;
+    const lastLabel = matches[0].match_id === 'live-now' ? 'live' : matches[0].match_id.replace(/^match-/, '');
+    chip.textContent = `${modeLabel} · ${activeMap} · ${lastLabel}`;
     chip.className = '';
   }
   const matchSignature = JSON.stringify(matches.map(m => [m.match_id, m.status, m.timestamp]));
   if (matchSignature !== lastMatchListSignature) {
     el.innerHTML = matches.map(m => `
       <div class="match-row">
-        <span class="match-id">${m.match_id.replace(/^match-/, '')}</span>
+        <span class="match-id">${m.match_id === 'live-now' ? 'live' : m.match_id.replace(/^match-/, '')}</span>
         <span class="match-status ${m.status}">${m.status.replace('_', ' ')}</span>
         <span class="match-time">${m.timestamp.slice(11)}</span>
       </div>
@@ -1021,8 +1034,14 @@ function updateEvents(events) {
     const type = ev.event || 'unknown';
     let text = type;
     if (type === 'player_tagged') text = `P${ev.player_id} tagged  (dist ${ev.dist != null ? (+ev.dist).toFixed(1) : '?'}u)`;
-    else if (type === 'match_start') text = `match started  (${ev.players ?? '?'} players)`;
+    else if (type === 'bit_collected') text = `bit ${ev.bit_id ?? '?'} collected  (mask ${(ev.bits_mask ?? 0).toString(16)})`;
+    else if (type === 'match_start') {
+      const humans = ev.human_players ?? ev.players ?? '?';
+      const ghosts = ev.ghost_count ?? 0;
+      text = ghosts ? `match started  (${humans} human, ${ghosts} ghost)` : `match started  (${humans} players)`;
+    }
     else if (type === 'match_end')   text = `match ended  (winner: ${ev.winner ?? '?'})`;
+    else if (type === 'match_aborted') text = `match aborted  (${ev.reason ?? 'unknown_reason'})`;
     const when = ev.display_time || '';
     return `<div class="event-item ${type}"><span class="event-text">${text}</span><span class="event-time">${when}</span></div>`;
   }).join('');

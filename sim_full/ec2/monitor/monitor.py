@@ -34,7 +34,7 @@ SERVICE_SPECS = {
         "log": Path("/tmp/seda-server.log"),
     },
     "sidecar": {
-        "script": REPO_ROOT / "sim_full" / "ec2" / "sidecar" / "sidecar.py",
+        "script": REPO_ROOT / "sidecar" / "sidecar.py",
         "pattern": "sidecar.py",
         "log": Path("/tmp/seda-sidecar.log"),
     },
@@ -337,6 +337,33 @@ def current_match_events(raw_events: list):
     _match_event_keys = current_keys
     return _match_event_log
 
+
+def _live_match_summary(match_events: list, active_map: str, game_mode: int):
+    if not match_events:
+        return None
+
+    if any(ev.get("event") in {"match_end", "match_aborted"} for ev in match_events):
+        return None
+
+    start_event = next((ev for ev in reversed(match_events) if ev.get("event") == "match_start"), None)
+    if start_event is None:
+        return None
+
+    player_total = start_event.get("human_players", start_event.get("players", 0))
+    ghost_count = start_event.get("ghost_count", 0)
+    return {
+        "match_id": "live-now",
+        "status": "in_progress",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "has_replay": False,
+        "replay_frames": 0,
+        "has_state_replay": False,
+        "player_count": player_total,
+        "ghost_count": ghost_count,
+        "game_mode": game_mode,
+        "map_name": active_map,
+    }
+
 # ── Redis state collection ─────────────────────────────────────────────────────
 
 def collect_state():
@@ -344,7 +371,7 @@ def collect_state():
     for pid in range(1, 10):
         raw = r.hgetall(f"player:{pid}")
         if not raw:
-            break
+            continue
         players.append({
             "id":    pid,
             "x":     float(raw.get("x", 0)),
@@ -354,6 +381,7 @@ def collect_state():
         })
 
     game_raw  = r.hgetall("game:state")
+    game_mode = int(game_raw.get("game_mode", 0)) if game_raw else 0
     bits_mask = int(game_raw.get("bits_mask", 0xFFFF)) if game_raw else 0xFFFF
 
     info    = r.info("stats")
@@ -382,6 +410,20 @@ def collect_state():
                 bits_positions = ev["bits"]
                 break
 
+    active_map = _active_map
+    if game_raw and game_raw.get("map"):
+        active_map = game_raw["map"]
+    else:
+        for ev in match_events:
+            if ev.get("event") == "match_start" and ev.get("map"):
+                active_map = ev["map"]
+                break
+
+    if not any(match.get("status") == "in_progress" for match in matches):
+        live_match = _live_match_summary(match_events, active_map, game_mode)
+        if live_match is not None:
+            matches = [live_match] + matches
+
     n_clients = _as_int(clients.get("connected_clients", 0))
     blocked   = _as_int(clients.get("blocked_clients", 0))
     pubsub_clients = sum(
@@ -390,7 +432,7 @@ def collect_state():
     )
     direct_clients = max(0, n_clients - blocked - pubsub_clients)
 
-    player_probe_reads = min(9, len(players) + 1)
+    player_probe_reads = 9
     monitor_cmds_per_push = player_probe_reads + 5  # 3x INFO + CLIENT LIST + LRANGE
 
     return {
@@ -420,9 +462,10 @@ def collect_state():
         },
         "events":     match_events[:20],   # newest-first, current match only
         "matches":    matches,
+        "game_mode":  game_mode,
         "bits":       bits_positions,      # [[world_x, world_y], ...] from match_start
         "bits_mask":  bits_mask,           # bitmask of active bits this tick
-        "active_map": _active_map,         # name of the currently loaded map
+        "active_map": active_map,          # name of the currently loaded map
     }
 
 

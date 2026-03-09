@@ -83,10 +83,20 @@ def game_compute_summary(events: list, message: dict):
     """Hook: derive the game-specific summary from the replay stream."""
     snapshot_frames = sum(1 for event in events if event.get("event") == "state_snapshot")
     match_events = [event for event in events if event.get("event") != "state_snapshot"]
+    bit_events = sum(1 for event in match_events if event.get("event") == "bit_collected")
+    game_mode = message.get("game_mode")
+    if game_mode is None:
+        for event in match_events:
+            if event.get("game_mode") is not None:
+                game_mode = event.get("game_mode")
+                break
     summary = {
         "summary_event_count": len(match_events) or int(message.get("event_count", 0) or 0),
         "summary_snapshot_frames": snapshot_frames or int(message.get("replay_frame_count", 0) or 0),
         "summary_tag_events": sum(1 for event in match_events if event.get("event") == "player_tagged"),
+        "summary_bit_events": bit_events or int(message.get("bits_collected", 0) or 0),
+        "summary_bits_total": int(message.get("bits_total", 0) or 0),
+        "summary_game_mode": int(game_mode or 0),
         "summary_winner": message.get("winner") or "unknown",
     }
 

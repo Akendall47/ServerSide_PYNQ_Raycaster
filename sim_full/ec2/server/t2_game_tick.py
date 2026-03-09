@@ -21,7 +21,7 @@ import threading
 
 import redis as redislib
 
-from t2_constants import ORBIT_RADIUS, CONTROL_CHANNEL
+from t2_constants import CONTROL_CHANNEL
 from t2_map_loader import load_map, DEFAULT_MAP_PATH
 from game_logic.match_state import MatchState
 from t2_packet_handler import PacketHandler
@@ -46,7 +46,7 @@ class GameTick:
         self.state     = MatchState()
 
         # Sub-modules wired up with callbacks so they stay decoupled
-        self.redis_io = RedisIO(self.state, broadcast_queue, write_queue)
+        self.redis_io = RedisIO(self.state, self.map_state, broadcast_queue, write_queue)
         self.logic    = CoreLogic(
             self.state, write_queue,
             on_event=self._push_event,
@@ -54,6 +54,7 @@ class GameTick:
         )
         self.packets  = PacketHandler(
             self.state, packet_queue, write_queue,
+            map_state=self.map_state,
             on_match_start=self._on_match_start,
             on_match_abort=self._on_match_abort,
             on_event=self._push_event,
@@ -67,7 +68,7 @@ class GameTick:
         while True:
             tick_start = time.monotonic()
 
-            await self.packets.drain(ORBIT_RADIUS)
+            await self.packets.drain()
             await self.packets.evict_timed_out_nodes()
             await self.logic.tick()
             await self.redis_io.push_broadcast(self.tick_count)
@@ -113,14 +114,23 @@ class GameTick:
 
     def _on_match_start(self):
         bits = [[round(b[0], 2), round(b[1], 2)] for b in self.state.bits]
+        human_players = sum(1 for addr in self.state.players if not str(addr).startswith("ghost:"))
+        ghost_count = sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
         asyncio.ensure_future(self._push_event({
-            "event": "match_start", "players": 2,
+            "event": "match_start",
+            "players": len(self.state.players),
+            "human_players": human_players,
+            "ghost_count": ghost_count,
             "game_mode": self.state.game_mode,
             "bits": bits,
+            "map": self.map_state.get("name"),
         }))
 
-    def _on_match_abort(self):
-        asyncio.ensure_future(self._push_event({"event": "match_aborted"}))
+    def _on_match_abort(self, event=None):
+        payload = {"event": "match_aborted"}
+        if event:
+            payload.update(event)
+        asyncio.ensure_future(self._push_event(payload))
 
     async def _push_event(self, event: dict):
         self.redis_io.push_event(event)

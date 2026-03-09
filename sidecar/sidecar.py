@@ -506,14 +506,30 @@ def reset_match_state():
     game_reset_state()
 
 
-# ── Game Hooks: Current Tag Game ─────────────────────────────────────────────
+# ── Game Hooks: Current Match Modes ──────────────────────────────────────────
+
+GAME_MODE_CHASE = 0
+GAME_MODE_CHASE_BITS = 1
 
 game_tag_count = 0
+game_bit_count = 0
+game_bits_total = 0
+game_mode = GAME_MODE_CHASE
+game_human_players = 0
+game_ghost_count = 0
+game_map_name = None
 
 
 def game_reset_state():
-    global game_tag_count
+    global game_tag_count, game_bit_count, game_bits_total
+    global game_mode, game_human_players, game_ghost_count, game_map_name
     game_tag_count = 0
+    game_bit_count = 0
+    game_bits_total = 0
+    game_mode = GAME_MODE_CHASE
+    game_human_players = 0
+    game_ghost_count = 0
+    game_map_name = None
 
 
 def game_build_player_snapshot(player_total: int):
@@ -548,6 +564,13 @@ def game_build_player_snapshot(player_total: int):
 
 def game_on_match_start(event: dict):
     """Hook: define the META row and replay start payload for this game."""
+    global game_mode, game_bits_total, game_human_players, game_ghost_count, game_map_name
+    game_mode = int(event.get("game_mode", GAME_MODE_CHASE) or GAME_MODE_CHASE)
+    game_bits_total = len(event.get("bits", []) or [])
+    game_human_players = int(event.get("human_players", event.get("players", 0)) or 0)
+    game_ghost_count = int(event.get("ghost_count", 0) or 0)
+    game_map_name = event.get("map")
+
     player_total = int(event.get("players", 0))
     ddb_players, replay_players = game_build_player_snapshot(player_total)
 
@@ -559,6 +582,12 @@ def game_on_match_start(event: dict):
             "start_time": current_match_started_at,
             "players": ddb_players,
             "player_count": len(ddb_players),
+            "human_player_count": game_human_players,
+            "ghost_count": game_ghost_count,
+            "game_mode": game_mode,
+            "map_name": game_map_name,
+            "bits_total": game_bits_total,
+            "bits_collected": 0,
             "tag_count": 0,
             "status": "in_progress",
         },
@@ -584,19 +613,69 @@ def game_on_player_tagged(event: dict):
     }
 
 
+def game_on_bit_collected(event: dict):
+    """Hook: define the per-bit row and replay payload for bit mode."""
+    global game_bit_count
+    game_bit_count += 1
+
+    replay_event = dict(event)
+    replay_event["bit_count"] = game_bit_count
+    replay_event["tag_count"] = game_tag_count
+
+    return {
+        "record_type": f"BIT#{game_bit_count}",
+        "item_fields": {
+            "bit_id": event.get("bit_id"),
+            "runner_id": event.get("runner_id"),
+            "bits_mask": int(event.get("bits_mask", 0xFFFF)),
+        },
+        "replay_event": replay_event,
+    }
+
+
 def game_on_match_end(event: dict):
     """Hook: define final META updates and extra SNS payload fields."""
     replay_event = dict(event)
     replay_event["tag_count"] = game_tag_count
+    replay_event["bit_count"] = game_bit_count
 
     return {
         "meta_fields": {
+            "game_mode": game_mode,
+            "map_name": game_map_name,
             "tag_count": game_tag_count,
+            "bits_total": game_bits_total,
+            "bits_collected": game_bit_count,
             "winner": event.get("winner"),
+            "end_reason": event.get("reason"),
         },
         "sns_fields": {
+            "game_mode": game_mode,
+            "map_name": game_map_name,
             "tag_count": game_tag_count,
+            "bits_total": game_bits_total,
+            "bits_collected": game_bit_count,
             "winner": event.get("winner"),
+            "reason": event.get("reason"),
+        },
+        "replay_event": replay_event,
+    }
+
+
+def game_on_match_abort(event: dict):
+    """Hook: define final META updates when a match is aborted mid-flight."""
+    replay_event = dict(event)
+    replay_event["tag_count"] = game_tag_count
+    replay_event["bit_count"] = game_bit_count
+
+    return {
+        "meta_fields": {
+            "game_mode": game_mode,
+            "map_name": game_map_name,
+            "tag_count": game_tag_count,
+            "bits_total": game_bits_total,
+            "bits_collected": game_bit_count,
+            "end_reason": event.get("reason", "match_aborted"),
         },
         "replay_event": replay_event,
     }
@@ -611,6 +690,7 @@ def game_on_state_snapshot(event: dict):
     snapshot_counter += 1
     replay_event = dict(event)
     replay_event["tag_count"] = game_tag_count
+    replay_event["bit_count"] = game_bit_count
     replay_event["keyframe"] = (snapshot_counter % KEYFRAME_INTERVAL == 1)
     return {
         "replay_event": replay_event,
@@ -667,53 +747,35 @@ def handle_player_tagged(event: dict):
     print(f"DynamoDB: {tag_payload['record_type']} written")
 
 
-def handle_match_end(event: dict):
+def handle_bit_collected(event: dict):
     if not has_active_match():
-        print("match_end: no active match, ignoring")
+        print("bit_collected: no active match, ignoring")
         return
 
-    ended_at = utc_now_iso()
-    end_payload = game_on_match_end(event)
-    record_match_event(end_payload["replay_event"], ended_at)
+    recorded_at = utc_now_iso()
+    bit_payload = game_on_bit_collected(event)
+    record_match_event(bit_payload["replay_event"], recorded_at)
+    mp_append({**bit_payload["replay_event"],
+               "match_id": current_match_id,
+               "recorded_at": recorded_at})
 
-    meta_fields = {
-        "status": "completed",
-        "end_time": ended_at,
-        "event_count": count_match_events(),
-        "replay_frame_count": count_state_snapshots(),
-        **end_payload["meta_fields"],
-    }
+    table.put_item(Item={
+        "match_id": current_match_id,
+        "record_type": bit_payload["record_type"],
+        "timestamp": recorded_at,
+        **bit_payload["item_fields"],
+    })
+    print(f"DynamoDB: {bit_payload['record_type']} written")
 
-    match_duration = duration_ms(current_match_started_at, ended_at)
-    if match_duration is not None:
-        meta_fields["duration_ms"] = match_duration
 
-    # Close (or fall back to) the streaming multipart upload.
-    # mp_close() flushes remaining buffer and completes the upload; returns the S3 key.
-    # If the match was too short to produce a 5 MB part, mp_close aborts the multipart
-    # and we fall back to the standard single-shot upload.
-    replay_key = mp_close()
-    if replay_key is None:
-        replay_key = upload_replay(current_match_id, current_match_events, current_match_started_at)
-    if replay_key:
-        meta_fields["replay_s3_bucket"] = S3_BUCKET
-        meta_fields["replay_s3_key"] = replay_key
-
-    try:
-        update_meta_record(current_match_id, meta_fields)
-        print(f"DynamoDB: {current_match_id} completed")
-    except Exception as exc:
-        print(f"DynamoDB update failed for {current_match_id}: {exc}")
-
-    # Cache a compact summary in Redis so the monitor can skip the DynamoDB scan.
-    # LPUSH keeps newest-first; LTRIM caps at 5 entries.
+def _cache_recent_match(status: str, replay_key: str):
     try:
         summary = {
-            "match_id":        current_match_id,
-            "status":          "completed",
-            "timestamp":       current_match_started_at[:19].replace("T", " "),
-            "has_replay":      bool(replay_key),
-            "replay_frames":   count_state_snapshots(),
+            "match_id": current_match_id,
+            "status": status,
+            "timestamp": current_match_started_at[:19].replace("T", " "),
+            "has_replay": bool(replay_key),
+            "replay_frames": count_state_snapshots(),
             "has_state_replay": count_state_snapshots() > 0,
         }
         r.lpush("game:recent-matches", json.dumps(summary, separators=(",", ":")))
@@ -722,12 +784,79 @@ def handle_match_end(event: dict):
     except Exception as exc:
         print(f"Redis recent-matches write failed: {exc}")
 
-    sns_fields = dict(end_payload["sns_fields"])
+
+def _finalise_match(status: str, replay_event: dict, meta_fields: dict,
+                    *, sns_fields=None):
+    ended_at = utc_now_iso()
+    record_match_event(replay_event, ended_at)
+    mp_append({
+        **replay_event,
+        "match_id": current_match_id,
+        "recorded_at": ended_at,
+    })
+
+    final_meta = {
+        "status": status,
+        "end_time": ended_at,
+        "event_count": count_match_events(),
+        "replay_frame_count": count_state_snapshots(),
+        **meta_fields,
+    }
+
+    match_duration = duration_ms(current_match_started_at, ended_at)
     if match_duration is not None:
-        sns_fields["duration_ms"] = match_duration
-    publish_match_end(current_match_id, ended_at, replay_key, sns_fields)
+        final_meta["duration_ms"] = match_duration
+
+    replay_key = mp_close()
+    if replay_key is None:
+        replay_key = upload_replay(current_match_id, current_match_events, current_match_started_at)
+    if replay_key:
+        final_meta["replay_s3_bucket"] = S3_BUCKET
+        final_meta["replay_s3_key"] = replay_key
+
+    try:
+        update_meta_record(current_match_id, final_meta)
+        print(f"DynamoDB: {current_match_id} {status}")
+    except Exception as exc:
+        print(f"DynamoDB update failed for {current_match_id}: {exc}")
+
+    _cache_recent_match(status, replay_key)
+
+    if sns_fields is not None:
+        outbound = dict(sns_fields)
+        if match_duration is not None:
+            outbound["duration_ms"] = match_duration
+        publish_match_end(current_match_id, ended_at, replay_key, outbound)
+
     enforce_warm_retention()
     reset_match_state()
+
+
+def handle_match_end(event: dict):
+    if not has_active_match():
+        print("match_end: no active match, ignoring")
+        return
+
+    end_payload = game_on_match_end(event)
+    _finalise_match(
+        "completed",
+        end_payload["replay_event"],
+        end_payload["meta_fields"],
+        sns_fields=end_payload["sns_fields"],
+    )
+
+
+def handle_match_abort(event: dict):
+    if not has_active_match():
+        print("match_aborted: no active match, ignoring")
+        return
+
+    abort_payload = game_on_match_abort(event)
+    _finalise_match(
+        "aborted",
+        abort_payload["replay_event"],
+        abort_payload["meta_fields"],
+    )
 
 
 def handle_state_snapshot(event: dict):
@@ -747,7 +876,9 @@ def handle_state_snapshot(event: dict):
 HANDLERS = {
     "match_start": handle_match_start,
     "player_tagged": handle_player_tagged,
+    "bit_collected": handle_bit_collected,
     "match_end": handle_match_end,
+    "match_aborted": handle_match_abort,
     "state_snapshot": handle_state_snapshot,
 }
 

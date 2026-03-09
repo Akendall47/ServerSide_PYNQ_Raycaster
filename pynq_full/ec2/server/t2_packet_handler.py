@@ -322,6 +322,23 @@ class PacketHandler:
 
         if evicted and self.state.match_started and not self.state.match_ended:
             # Match can't continue with fewer than MATCH_PLAYERS — reset
+            remaining_humans = sum(
+                1 for addr in self.state.players
+                if not str(addr).startswith("ghost:")
+            )
+            remaining_players = list(self.state.players.values())
+            for player in remaining_players:
+                self.write_queue.put({"op": "del", "key": f"player:{player['player_id']}"})
+            abort_event = {
+                "reason": "player_evicted",
+                "game_mode": self.state.game_mode,
+                "players_remaining": remaining_humans,
+                "ghosts_remaining": sum(
+                    1 for addr in self.state.players
+                    if str(addr).startswith("ghost:")
+                ),
+                "bits_mask": self.state.bits_mask,
+            }
             print("[T2] match aborted — not enough players after eviction")
             self.state.abort_match()
-            self._on_match_abort()
+            self._on_match_abort(abort_event)

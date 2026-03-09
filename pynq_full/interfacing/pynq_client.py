@@ -27,11 +27,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 from protocol import (
     # constants
     MOVEMENT_MODE_INTENT_WITH_PREDICTION,
-    PKT_REGISTER, PKT_ACK, PKT_GAME_STATE, PKT_MAP, PKT_HEARTBEAT,
-    FLAG_TAGGED, FLAG_MATCH_END,
-    HEADER_SIZE, HEADER_FMT, PLAYER_SIZE, PLAYER_FMT,
+    PKT_REGISTER, PKT_ACK, PKT_GAME_STATE, PKT_MAP, PKT_HEARTBEAT, PKT_BITS_INIT,
+    FLAG_TAGGED, FLAG_MATCH_END, FLAG_GHOST,
+    HEADER_SIZE,
     # functions
-    client_input_flags, pack_node_packet, unpack_header, unpack_player_entries, unpack_map_packet,
+    client_input_flags, pack_node_packet, unpack_header, unpack_map_packet, unpack_server_packet,
 )
 
 # ── Display constants ─────────────────────────────────────────────────────────
@@ -261,6 +261,8 @@ class PYNQNode:
         self.registered  = False
         self.match_ended = False
         self.movement_mode = MOVEMENT_MODE_INTENT_WITH_PREDICTION
+        self.game_mode   = 0
+        self.bits_mask   = 0xFFFF
 
         # Map state
         self.map_w      = 0
@@ -303,8 +305,13 @@ class PYNQNode:
             print(f"[Node] received map {self.map_w}x{self.map_h} tile_scale={self.tile_scale}")
             self.hw.write_map_to_bram(self.map_w, self.map_h, self.tiles)
 
+        elif pkt_type == PKT_BITS_INIT:
+            # Bits only affect HUD / gameplay metadata today; the node can ignore the payload safely.
+            return
+
         elif pkt_type == PKT_GAME_STATE:
-            players = unpack_player_entries(data[HEADER_SIZE:])
+            _, _, _, self.game_mode, players, self.bits_mask = unpack_server_packet(data)
+            peer_updated = False
             for p in players:
                 if p["player_id"] == self.player_id:
                     self.server_flags = p["flags"]
@@ -313,11 +320,12 @@ class PYNQNode:
                     if self.server_flags & FLAG_MATCH_END:
                         print(f"[Node] match ended")
                         self.match_ended = True
-                else:
+                elif not peer_updated and not (p["flags"] & FLAG_GHOST):
                     self.peer_x     = p["x"]
                     self.peer_y     = p["y"]
                     self.peer_angle = p["angle"]
                     self.peer_server_flags = p["flags"]
+                    peer_updated = True
 
     def error_received(self, exc):
         print(f"[Node] UDP error: {exc}")
