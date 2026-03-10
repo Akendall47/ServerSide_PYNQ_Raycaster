@@ -69,12 +69,13 @@ def test_server_packet_roundtrip():
     timestamp = int(time.time() * 1000) & 0xFFFFFFFF
     
     header  = struct.pack('<HHI', pkt_type, seq, timestamp)
+    ext     = struct.pack('<BBH', protocol.GAME_MODE_CHASE, 2, 0)
     player1 = struct.pack('<BfffB', 1, 10.5, 20.3, 0.5, 0)
     player2 = struct.pack('<BfffB', 2, 50.0, 75.5, 2.5, protocol.FLAG_INPUT_SHOOT)
-    packet = header + player1 + player2
-    
+    packet = header + ext + player1 + player2
+
     start = time.perf_counter()
-    pkt_type_out, seq_out, timestamp_out, players = protocol.unpack_server_packet(packet)
+    pkt_type_out, seq_out, timestamp_out, game_mode_out, players, bits_mask_out = protocol.unpack_server_packet(packet)
     unpack_time = time.perf_counter() - start
     
     print(f"✓ Unpacked in {unpack_time*1e6:.2f} µs")

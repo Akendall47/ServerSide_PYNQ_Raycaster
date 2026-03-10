@@ -17,7 +17,7 @@
 # For pynq_full stack: ./pynq_dev.sh
 
 SESSION="seda"
-EC2="ubuntu@18.175.238.148"
+EC2="ubuntu@13.60.249.60"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 
