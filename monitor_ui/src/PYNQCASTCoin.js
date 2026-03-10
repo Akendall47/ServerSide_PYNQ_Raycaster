@@ -3,6 +3,104 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const ABOUT_LOGO_PATH = '/BNW_LOGO.png';
 
+function createTightLogoTexture(sourceImage) {
+  const width = sourceImage.naturalWidth || sourceImage.videoWidth || sourceImage.width;
+  const height = sourceImage.naturalHeight || sourceImage.videoHeight || sourceImage.height;
+
+  if (!width || !height) {
+    return new THREE.Texture(sourceImage);
+  }
+
+  const scanCanvas = document.createElement('canvas');
+  scanCanvas.width = width;
+  scanCanvas.height = height;
+  const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+  if (!scanCtx) {
+    return new THREE.Texture(sourceImage);
+  }
+
+  scanCtx.drawImage(sourceImage, 0, 0, width, height);
+  const imageData = scanCtx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const alpha = data[offset + 3];
+      const brightness = Math.max(data[offset], data[offset + 1], data[offset + 2]);
+      if (alpha > 8 && brightness > 12) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    minX = 0;
+    minY = 0;
+    maxX = width - 1;
+    maxY = height - 1;
+  }
+
+  const boundsWidth = maxX - minX + 1;
+  const boundsHeight = maxY - minY + 1;
+  const padding = Math.max(4, Math.round(Math.max(boundsWidth, boundsHeight) * 0.02));
+  const cropSize = Math.min(
+    Math.max(width, height),
+    Math.max(boundsWidth, boundsHeight) + padding * 2,
+  );
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  let cropX = Math.round(centerX - cropSize / 2);
+  let cropY = Math.round(centerY - cropSize / 2);
+
+  cropX = Math.max(0, Math.min(width - cropSize, cropX));
+  cropY = Math.max(0, Math.min(height - cropSize, cropY));
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = cropSize;
+  outputCanvas.height = cropSize;
+  const outputCtx = outputCanvas.getContext('2d');
+  if (!outputCtx) {
+    return new THREE.Texture(sourceImage);
+  }
+
+  outputCtx.clearRect(0, 0, cropSize, cropSize);
+  outputCtx.drawImage(
+    sourceImage,
+    cropX,
+    cropY,
+    cropSize,
+    cropSize,
+    0,
+    0,
+    cropSize,
+    cropSize,
+  );
+
+  return new THREE.CanvasTexture(outputCanvas);
+}
+
+function configureLogoTexture(texture) {
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  if ('colorSpace' in texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }
+  texture.center.set(0.5, 0.5);
+  texture.repeat.set(1, 1);
+  texture.needsUpdate = true;
+}
+
 export function mountPYNQCASTCoin(rootEl) {
   const wrap = rootEl?.querySelector('.about-sprite-wrap');
   const img = wrap?.querySelector('.about-logo-sprite');
@@ -164,10 +262,8 @@ export function mountPYNQCASTCoin(rootEl) {
     depthWrite: true,
     side: THREE.FrontSide,
   });
-  const fillMaterial = new THREE.MeshStandardMaterial({
+  const fillMaterial = new THREE.MeshBasicMaterial({
     color: 0x0a0305,
-    metalness: 0.3,
-    roughness: 0.6,
     transparent: false,
     depthWrite: true,
   });
@@ -201,24 +297,13 @@ export function mountPYNQCASTCoin(rootEl) {
 
   const textureLoader = new THREE.TextureLoader();
   frontTexture = textureLoader.load(ABOUT_LOGO_PATH, () => {
-    frontTexture.magFilter = THREE.NearestFilter;
-    frontTexture.minFilter = THREE.NearestFilter;
-    frontTexture.generateMipmaps = false;
-    if ('colorSpace' in frontTexture) {
-      frontTexture.colorSpace = THREE.SRGBColorSpace;
-    }
-    frontTexture.center.set(0.5, 0.5);
-    frontTexture.repeat.set(1, 1);
-    frontTexture.needsUpdate = true;
+    const croppedFrontTexture = createTightLogoTexture(frontTexture.image);
+    frontTexture.dispose();
+    frontTexture = croppedFrontTexture;
+    configureLogoTexture(frontTexture);
 
     backTexture = frontTexture.clone();
-    backTexture.magFilter = THREE.NearestFilter;
-    backTexture.minFilter = THREE.NearestFilter;
-    backTexture.generateMipmaps = false;
-    if ('colorSpace' in backTexture) {
-      backTexture.colorSpace = THREE.SRGBColorSpace;
-    }
-    backTexture.center.set(0.5, 0.5);
+    configureLogoTexture(backTexture);
     backTexture.repeat.set(-1, 1);
     backTexture.offset.set(1, 0);
     backTexture.needsUpdate = true;
