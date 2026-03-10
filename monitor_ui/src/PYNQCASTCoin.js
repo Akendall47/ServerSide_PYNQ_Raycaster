@@ -115,11 +115,11 @@ export function mountPYNQCASTCoin(rootEl) {
   rimLight.position.set(0, -2.5, -3);
   scene.add(rimLight);
 
-  edgeGeo = new THREE.CylinderGeometry(1.14, 1.14, 0.14, 10, 1, true);
-  frontFillGeo = new THREE.CircleGeometry(1.13, 10);
-  backFillGeo = new THREE.CircleGeometry(1.13, 10);
-  frontGeo = new THREE.CircleGeometry(1.14, 10);
-  backGeo = new THREE.CircleGeometry(1.14, 10);
+  edgeGeo = new THREE.CylinderGeometry(1.14, 1.14, 0.14, 32, 1, true);
+  frontFillGeo = new THREE.CircleGeometry(1.13, 32);
+  backFillGeo = new THREE.CircleGeometry(1.13, 32);
+  frontGeo = new THREE.CircleGeometry(1.14, 32);
+  backGeo = new THREE.CircleGeometry(1.14, 32);
 
   const edgeMaterial = new THREE.MeshStandardMaterial({
     color: 0x7d2429,
