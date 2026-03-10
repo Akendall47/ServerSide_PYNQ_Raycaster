@@ -488,42 +488,6 @@
     text-align: left;
   }
 
-  .game-runtime-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px 16px;
-  }
-
-  .game-runtime-head {
-    margin-bottom: 0;
-  }
-
-  .game-runtime-body {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px 18px;
-    flex-wrap: wrap;
-  }
-
-  .game-runtime-buttons {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .game-runtime-buttons .control-btn {
-    min-width: 220px;
-  }
-
-  .game-runtime-note {
-    margin-top: 0;
-    flex: 1 1 280px;
-    min-width: 0;
-    font-size: 18px;
-  }
-
   .game-layout {
     flex: 1;
     min-height: 0;
@@ -550,9 +514,47 @@
 
   .viewport-head-meta {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 10px;
+  }
+
+  .viewport-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .viewport-control-btn {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    line-height: 1.8;
+    padding: 10px 14px;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: transform 0.05s steps(2);
+  }
+
+  .viewport-control-btn.start {
+    background: #22c55e;
+    color: #04110a;
+    box-shadow:
+      inset -3px -3px 0 0 #15803d,
+      inset 3px 3px 0 0 #4ade80,
+      4px 4px 0 0 #000;
+  }
+
+  .viewport-control-btn.stop {
+    background: var(--coral);
+    color: #fff7f7;
+    box-shadow:
+      inset -3px -3px 0 0 var(--coral-dark),
+      inset 3px 3px 0 0 var(--coral-light),
+      4px 4px 0 0 #000;
   }
 
   .archive-toggle-btn,
@@ -595,6 +597,7 @@
       4px 4px 0 0 #000;
   }
 
+  .viewport-control-btn:active,
   .archive-toggle-btn:active,
   .archive-close-btn:active {
     transform: translate(3px, 3px);
@@ -1432,10 +1435,6 @@
       grid-column: 1 / -1;
     }
 
-    .game-runtime-body {
-      align-items: flex-start;
-    }
-
     .game-layout {
       grid-template-columns: 1fr;
     }
@@ -1516,16 +1515,6 @@
       grid-template-columns: 1fr;
     }
 
-    .game-runtime-buttons {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .game-runtime-buttons .control-btn {
-      width: 100%;
-      min-width: 0;
-    }
-
     .brand-title {
       font-size: 14px;
     }
@@ -1540,6 +1529,11 @@
     }
 
     .viewport-head-meta {
+      justify-content: flex-start;
+    }
+
+    .viewport-action-row {
+      width: 100%;
       justify-content: flex-start;
     }
 

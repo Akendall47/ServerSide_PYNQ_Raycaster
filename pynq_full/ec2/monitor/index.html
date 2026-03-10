@@ -73,34 +73,24 @@
         </div>
       </div>
 
-      <div class="panel-raised game-runtime-bar">
-        <div class="panel-head game-runtime-head">
-          <h2>Match Flow</h2>
-          <span class="micro-chip">runtime</span>
-        </div>
-        <div class="game-runtime-body">
-          <div class="game-runtime-buttons">
-            <button class="control-btn restart" type="button" onclick="sendControl('restart', 'start match')">Start Match</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
-          </div>
-          <div id="game-runtime-note" class="metric-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
-        </div>
-      </div>
-
       <div class="game-layout">
         <div class="panel-raised viewport-card">
           <div class="panel-head viewport-head">
             <h2>Raycast Arena</h2>
             <div class="viewport-head-meta">
               <span id="canvas-label" class="panel-head-note">fpga live · loading map…</span>
-              <button
-                id="archive-toggle"
-                class="archive-toggle-btn"
-                type="button"
-                aria-controls="archive-drawer"
-                aria-expanded="false"
-                onclick="toggleArchiveDrawer()"
-              >Archive</button>
+              <div class="viewport-action-row">
+                <button class="viewport-control-btn start" type="button" onclick="sendControl('restart', 'start match')">Start</button>
+                <button class="viewport-control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">End</button>
+                <button
+                  id="archive-toggle"
+                  class="archive-toggle-btn"
+                  type="button"
+                  aria-controls="archive-drawer"
+                  aria-expanded="false"
+                  onclick="toggleArchiveDrawer()"
+                >Archive</button>
+              </div>
             </div>
           </div>
           <div class="viewport-wrap">

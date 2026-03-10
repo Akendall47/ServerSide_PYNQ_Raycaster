@@ -159,10 +159,8 @@ function updatePipeline(pipeline) {
 }
 
 function setServiceNote(text) {
-  ['svc-note', 'game-runtime-note'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
-  });
+  const el = document.getElementById('svc-note');
+  if (el) el.textContent = text;
 }
 
 function updateServices(services) {
