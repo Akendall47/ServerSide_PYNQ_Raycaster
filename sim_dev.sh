@@ -17,9 +17,9 @@
 # For pynq_full stack: ./pynq_dev.sh
 
 SESSION="seda"
-EC2="ubuntu@13.60.249.60"
+EC2="ubuntu@16.171.174.8"
 REPO="$(cd "$(dirname "$0")" && pwd)"
-KEY="$REPO/raycastpair.pem"
+KEY="$REPO/TestEC2Instance.pem"
 
 if [ -t 1 ]; then
   CLR_RESET=$'\033[0m'
