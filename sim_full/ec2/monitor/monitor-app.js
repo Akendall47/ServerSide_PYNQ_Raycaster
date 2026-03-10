@@ -159,6 +159,13 @@ function updatePipeline(pipeline) {
   document.getElementById('pp-ddb').textContent     = pipeline.ddb_matches;
 }
 
+function setServiceNote(text) {
+  ['svc-note', 'game-runtime-note'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
+}
+
 function updateServices(services) {
   if (!services) return;
 
@@ -176,7 +183,7 @@ function updateServices(services) {
   applyState('svc-server', services.server);
   applyState('svc-sidecar', services.sidecar);
   applyState('svc-monitor', services.monitor);
-  document.getElementById('svc-note').textContent = services.last_action || 'controls run on EC2 only; node simulators still start locally';
+  setServiceNote(services.last_action || 'controls run on EC2 only; node simulators still start locally');
 }
 
 function describePausedPlayers(playerIds) {
@@ -317,10 +324,10 @@ let ws = null;
 function sendControl(cmd, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
-    document.getElementById('svc-note').textContent = `${label} requested...`;
+    setServiceNote(`${label} requested...`);
     return;
   }
-  document.getElementById('svc-note').textContent = 'websocket disconnected';
+  setServiceNote('websocket disconnected');
 }
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);

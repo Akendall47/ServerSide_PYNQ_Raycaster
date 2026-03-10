@@ -73,6 +73,20 @@
         </div>
       </div>
 
+      <div class="panel-raised game-runtime-bar">
+        <div class="panel-head game-runtime-head">
+          <h2>Match Flow</h2>
+          <span class="micro-chip">runtime</span>
+        </div>
+        <div class="game-runtime-body">
+          <div class="game-runtime-buttons">
+            <button class="control-btn restart" type="button" onclick="sendControl('restart', 'start match')">Start Match</button>
+            <button class="control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
+          </div>
+          <div id="game-runtime-note" class="metric-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
+        </div>
+      </div>
+
       <div class="game-layout">
         <div class="panel-raised viewport-card">
           <div class="panel-head viewport-head">
@@ -404,8 +418,8 @@
       <div class="controls-grid">
         <div class="panel-raised controls-actions">
           <div class="panel-head">
-            <h2>EC2 Stack Controls</h2>
-            <span class="micro-chip">runtime</span>
+            <h2>EC2 Service Controls</h2>
+            <span class="micro-chip">services</span>
           </div>
           <div class="control-stack">
             <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
@@ -413,8 +427,6 @@
             <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
             <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
             <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
-            <button class="control-btn restart" type="button" onclick="sendControl('restart', 'start match')">Start Match</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
           </div>
           <div class="metric-note" id="svc-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
         </div>

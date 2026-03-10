@@ -488,6 +488,42 @@
     text-align: left;
   }
 
+  .game-runtime-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .game-runtime-head {
+    margin-bottom: 0;
+  }
+
+  .game-runtime-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 18px;
+    flex-wrap: wrap;
+  }
+
+  .game-runtime-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .game-runtime-buttons .control-btn {
+    min-width: 220px;
+  }
+
+  .game-runtime-note {
+    margin-top: 0;
+    flex: 1 1 280px;
+    min-width: 0;
+    font-size: 18px;
+  }
+
   .game-layout {
     flex: 1;
     min-height: 0;
@@ -1396,6 +1432,10 @@
       grid-column: 1 / -1;
     }
 
+    .game-runtime-body {
+      align-items: flex-start;
+    }
+
     .game-layout {
       grid-template-columns: 1fr;
     }
@@ -1474,6 +1514,16 @@
     .control-pair,
     .game-sidebar {
       grid-template-columns: 1fr;
+    }
+
+    .game-runtime-buttons {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .game-runtime-buttons .control-btn {
+      width: 100%;
+      min-width: 0;
     }
 
     .brand-title {
