@@ -846,93 +846,207 @@
     word-break: break-word;
   }
 
-  .pipeline-strip {
+  .pipeline-board {
     display: flex;
-    align-items: stretch;
-    gap: 0;
-    overflow-x: auto;
-    padding-bottom: 4px;
+    flex-direction: column;
+    gap: 14px;
   }
 
-  .pipe-stage {
+  .pipeline-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    background: rgba(5, 11, 22, 0.58);
+    border: 3px solid #23456d;
+    box-shadow:
+      inset -3px -3px 0 0 #091423,
+      inset 3px 3px 0 0 #4673a4;
+  }
+
+  .pipeline-group-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .pipeline-group-title {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--cyan);
+    text-transform: uppercase;
+  }
+
+  .pipeline-group-note {
+    max-width: 560px;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    line-height: 1.15;
+    color: #c4d9f7;
+    text-align: right;
+  }
+
+  .pipeline-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) 78px minmax(0, 1fr) 88px minmax(0, 1.2fr);
+    gap: 10px;
+    align-items: center;
+  }
+
+  .pipeline-branch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+  }
+
+  .pipe-branch {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .pipeline-storage-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+  }
+
+  .pipeline-aws-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .pipe-link,
+  .pipe-branch-link {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 116px;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
   }
 
-  .pipe-stage .stage-label {
+  .pipe-link-arrow {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    color: var(--coral-light);
+    line-height: 1.2;
+  }
+
+  .pipe-link-label {
     font-family: 'Silkscreen', cursive;
-    font-size: 11px;
-    color: #96b8e0;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #a6b9d9;
     text-align: center;
+    text-transform: uppercase;
   }
 
-  .pipe-stage .stage-box {
-    min-width: 112px;
-    padding: 12px 10px;
+  .pipe-card {
+    min-height: 126px;
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     background: #0a1730;
     border: 3px solid #335f91;
     box-shadow:
       inset -3px -3px 0 0 #08162a,
       inset 3px 3px 0 0 #5a9fd4,
       4px 4px 0 0 #000;
-    text-align: center;
   }
 
-  .pipe-stage .stage-name {
+  .pipe-card-label {
+    font-family: 'Silkscreen', cursive;
+    font-size: 11px;
+    color: #96b8e0;
+    text-transform: uppercase;
+  }
+
+  .pipe-card-title {
     font-family: 'Press Start 2P', cursive;
     font-size: 9px;
     line-height: 1.8;
     color: var(--cyan);
-    margin-bottom: 6px;
   }
 
-  .pipe-stage .stage-desc,
-  .pipe-stage .stage-val {
+  .pipe-card-desc,
+  .pipe-card-val,
+  .pipe-card-metric {
     font-family: 'VT323', monospace;
     font-size: 20px;
-    line-height: 1.1;
+    line-height: 1.08;
     color: #d6e6fa;
   }
 
-  .pipe-stage .stage-val span {
+  .pipe-card-desc {
+    flex: 1;
+  }
+
+  .pipe-card-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .pipe-card-val span,
+  .pipe-card-metric span {
     font-family: 'Press Start 2P', cursive;
     font-size: 10px;
     color: var(--yellow);
   }
 
-  .pipe-queue {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0 8px;
-    min-width: 70px;
+  .pipe-card.stage-net {
+    background: #091c21;
+    border-color: #1f6a63;
+    box-shadow:
+      inset -3px -3px 0 0 #061216,
+      inset 3px 3px 0 0 #38a39a,
+      4px 4px 0 0 #000;
   }
 
-  .pipe-queue .q-arrow {
-    font-family: 'Press Start 2P', cursive;
-    font-size: 12px;
-    color: var(--coral-light);
-    line-height: 1.6;
+  .pipe-card.stage-logic {
+    background: #0a1730;
+    border-color: #335f91;
   }
 
-  .pipe-queue .q-label {
-    font-family: 'Silkscreen', cursive;
-    font-size: 10px;
-    color: #a6b9d9;
-    text-align: center;
-    text-transform: uppercase;
+  .pipe-card.stage-io {
+    background: #22180a;
+    border-color: #8d631b;
+    box-shadow:
+      inset -3px -3px 0 0 #120d05,
+      inset 3px 3px 0 0 #c99a33,
+      4px 4px 0 0 #000;
   }
 
-  .stage-net .stage-name { color: var(--green); }
-  .stage-logic .stage-name { color: var(--cyan); }
-  .stage-io .stage-name { color: var(--yellow); }
-  .stage-store .stage-name { color: var(--coral-light); }
-  .stage-ext .stage-name { color: #f3c2ff; }
+  .pipe-card.stage-store {
+    background: #241024;
+    border-color: #7f467e;
+    box-shadow:
+      inset -3px -3px 0 0 #120813,
+      inset 3px 3px 0 0 #bd77bc,
+      4px 4px 0 0 #000;
+  }
+
+  .pipe-card.stage-ext {
+    background: #17192f;
+    border-color: #5967a4;
+    box-shadow:
+      inset -3px -3px 0 0 #090c17,
+      inset 3px 3px 0 0 #90a0e3,
+      4px 4px 0 0 #000;
+  }
+
+  .pipe-card.stage-net .pipe-card-title { color: var(--green); }
+  .pipe-card.stage-logic .pipe-card-title { color: var(--cyan); }
+  .pipe-card.stage-io .pipe-card-title { color: var(--yellow); }
+  .pipe-card.stage-store .pipe-card-title { color: var(--coral-light); }
+  .pipe-card.stage-ext .pipe-card-title { color: #f3c2ff; }
 
   .match-row {
     display: flex;
@@ -1171,6 +1285,32 @@
       grid-column: 1 / -1;
     }
 
+    .pipeline-group-head {
+      flex-direction: column;
+    }
+
+    .pipeline-group-note {
+      max-width: none;
+      text-align: left;
+    }
+
+    .pipeline-main-grid,
+    .pipeline-storage-grid,
+    .pipeline-branch-grid,
+    .pipeline-aws-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .pipe-branch {
+      grid-template-columns: 1fr;
+    }
+
+    .pipe-link,
+    .pipe-branch-link {
+      flex-direction: row;
+      justify-content: flex-start;
+    }
+
     .server-health,
     .pipeline-panel,
     .storage-panel,
@@ -1231,6 +1371,10 @@
 
     .viewport-head-meta {
       justify-content: flex-start;
+    }
+
+    .pipeline-group {
+      padding: 12px;
     }
 
     .archive-drawer {
@@ -1435,127 +1579,128 @@
         <div class="panel-raised pipeline-panel">
           <div class="panel-head">
             <h2>SEDA Pipeline</h2>
-            <span class="micro-chip">throughput</span>
+            <span class="micro-chip">actual runtime</span>
           </div>
-          <div class="pipeline-strip">
-            <div class="pipe-stage">
-              <div class="stage-label">asyncio</div>
-              <div class="stage-box stage-net">
-                <div class="stage-name">T1 UDP</div>
-                <div class="stage-desc">receives datagrams</div>
-                <div class="stage-val">port <span>9000</span></div>
+          <div class="pipeline-board">
+            <div class="pipeline-group">
+              <div class="pipeline-group-head">
+                <div class="pipeline-group-title">Hot Path</div>
+                <div class="pipeline-group-note">T1, T2, and T3 share one asyncio loop. T1 and T3 reuse the same EC2:9000 socket so replies leave from the same NAT-visible source port.</div>
+              </div>
+
+              <div class="pipeline-main-grid">
+                <div class="pipe-card stage-net">
+                  <div class="pipe-card-label">clients</div>
+                  <div class="pipe-card-title">PYNQ + Node Sims</div>
+                  <div class="pipe-card-desc">register, heartbeat, and movement/input packets enter here.</div>
+                  <div class="pipe-card-val">UDP gameplay traffic</div>
+                </div>
+
+                <div class="pipe-link">
+                  <div class="pipe-link-arrow">→</div>
+                  <div class="pipe-link-label">UDP 9000</div>
+                </div>
+
+                <div class="pipe-card stage-net">
+                  <div class="pipe-card-label">asyncio</div>
+                  <div class="pipe-card-title">T1 UDPReceiver</div>
+                  <div class="pipe-card-desc">binds the socket, receives datagrams, and pushes raw packets into the tick loop.</div>
+                  <div class="pipe-card-val">ingress on shared port</div>
+                </div>
+
+                <div class="pipe-link">
+                  <div class="pipe-link-arrow">→</div>
+                  <div class="pipe-link-label">packet_queue</div>
+                </div>
+
+                <div class="pipe-card stage-logic">
+                  <div class="pipe-card-label">asyncio · 20 Hz</div>
+                  <div class="pipe-card-title">T2 GameTick</div>
+                  <div class="pipe-card-desc">owns authoritative state, resolves tags/bits, builds broadcast packets, and enqueues Redis writes.</div>
+                  <div class="pipe-card-val"><span id="pp-players">0</span> live players</div>
+                </div>
+              </div>
+
+              <div class="pipeline-branch-grid">
+                <div class="pipe-branch">
+                  <div class="pipe-branch-link">
+                    <div class="pipe-link-arrow">↓</div>
+                    <div class="pipe-link-label">broadcast_queue</div>
+                  </div>
+                  <div class="pipe-card stage-net">
+                    <div class="pipe-card-label">asyncio</div>
+                    <div class="pipe-card-title">T3 Broadcaster</div>
+                    <div class="pipe-card-desc">fans the current state back out to active nodes using the same EC2:9000 socket.</div>
+                    <div class="pipe-card-val">shared-socket UDP fan-out</div>
+                  </div>
+                </div>
+
+                <div class="pipe-branch">
+                  <div class="pipe-branch-link">
+                    <div class="pipe-link-arrow">↓</div>
+                    <div class="pipe-link-label">write_queue</div>
+                  </div>
+                  <div class="pipe-card stage-io">
+                    <div class="pipe-card-label">OS thread</div>
+                    <div class="pipe-card-title">T4 RedisWriter</div>
+                    <div class="pipe-card-desc">batches HSET writes, LPUSHes event/replay rows, and mirrors monitor events without stalling the tick.</div>
+                    <div class="pipe-card-val"><span id="pp-ops">—</span> Redis ops/s</div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">packet_queue</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">asyncio · 20 Hz</div>
-              <div class="stage-box stage-logic">
-                <div class="stage-name">T2 GameTick</div>
-                <div class="stage-desc">parse · tag · state</div>
-                <div class="stage-val"><span id="pp-players">0</span> players</div>
+            <div class="pipeline-group">
+              <div class="pipeline-group-head">
+                <div class="pipeline-group-title">Persistence Path</div>
+                <div class="pipeline-group-note">Gameplay is off this path. T4 writes local Redis first; the sidecar blocks on Redis and does DynamoDB, S3, and SNS work outside the game loop.</div>
               </div>
-            </div>
 
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">broadcast_queue</div>
-            </div>
+              <div class="pipeline-storage-grid">
+                <div class="pipe-card stage-store">
+                  <div class="pipe-card-label">hot tier</div>
+                  <div class="pipe-card-title">Redis</div>
+                  <div class="pipe-card-desc">stores `player:*`, `game:state`, `game:seda-events`, `game:seda-replay`, and the recent-match cache.</div>
+                  <div class="pipe-card-val">hashes · lists · local cache</div>
+                </div>
 
-            <div class="pipe-stage">
-              <div class="stage-label">asyncio</div>
-              <div class="stage-box stage-net">
-                <div class="stage-name">T3 Broadcast</div>
-                <div class="stage-desc">UDP fan-out</div>
-                <div class="stage-val">→ clients</div>
+                <div class="pipe-link">
+                  <div class="pipe-link-arrow">→</div>
+                  <div class="pipe-link-label">BRPOP `game:seda-events` + `game:seda-replay`</div>
+                </div>
+
+                <div class="pipe-card stage-store">
+                  <div class="pipe-card-label">process</div>
+                  <div class="pipe-card-title">Sidecar</div>
+                  <div class="pipe-card-desc">tracks the match lifecycle, streams replay chunks, writes summaries, and enforces warm-tier retention.</div>
+                  <div class="pipe-card-metrics">
+                    <div class="pipe-card-metric"><span id="pp-blocked">—</span> blocked clients</div>
+                    <div class="pipe-card-metric"><span id="pp-events">—</span> match events</div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">write_queue</div>
-            </div>
+              <div class="pipeline-aws-grid">
+                <div class="pipe-card stage-ext">
+                  <div class="pipe-card-label">AWS warm tier</div>
+                  <div class="pipe-card-title">DynamoDB</div>
+                  <div class="pipe-card-desc">stores META rows plus per-match tag/bit records for recent games.</div>
+                  <div class="pipe-card-val"><span id="pp-ddb">—</span> recent META rows</div>
+                </div>
 
-            <div class="pipe-stage">
-              <div class="stage-label">OS thread</div>
-              <div class="stage-box stage-io">
-                <div class="stage-name">T4 Redis</div>
-                <div class="stage-desc">HSET · LPUSH</div>
-                <div class="stage-val"><span id="pp-ops">—</span> ops/s</div>
-              </div>
-            </div>
+                <div class="pipe-card stage-ext">
+                  <div class="pipe-card-label">AWS cold tier</div>
+                  <div class="pipe-card-title">S3</div>
+                  <div class="pipe-card-desc">holds `.ndjson.gz` replay streams and archived DynamoDB match documents.</div>
+                  <div class="pipe-card-val">replays + DDB archive</div>
+                </div>
 
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">BRPOP wait</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">process</div>
-              <div class="stage-box stage-store">
-                <div class="stage-name">Sidecar</div>
-                <div class="stage-desc">Redis → DDB · S3 · SNS</div>
-                <div class="stage-val">blocked: <span id="pp-blocked">—</span></div>
-              </div>
-            </div>
-
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">archive · notify</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">AWS</div>
-              <div class="stage-box stage-ext">
-                <div class="stage-name">S3 Cold</div>
-                <div class="stage-desc">replays + DDB archive</div>
-                <div class="stage-val">durable object store</div>
-              </div>
-            </div>
-
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">match_end</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">AWS</div>
-              <div class="stage-box stage-store">
-                <div class="stage-name">SNS/Lambda</div>
-                <div class="stage-desc">post-match summary</div>
-                <div class="stage-val">async processing</div>
-              </div>
-            </div>
-
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">UpdateItem</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">AWS</div>
-              <div class="stage-box stage-ext">
-                <div class="stage-name">DynamoDB</div>
-                <div class="stage-desc">warm metadata index</div>
-                <div class="stage-val"><span id="pp-ddb">—</span> recent</div>
-              </div>
-            </div>
-
-            <div class="pipe-queue">
-              <div class="q-arrow">→</div>
-              <div class="q-label">this match</div>
-            </div>
-
-            <div class="pipe-stage">
-              <div class="stage-label">feed</div>
-              <div class="stage-box stage-logic">
-                <div class="stage-name">Events</div>
-                <div class="stage-desc">match flow</div>
-                <div class="stage-val"><span id="pp-events">—</span> seen</div>
+                <div class="pipe-card stage-ext">
+                  <div class="pipe-card-label">AWS async trigger</div>
+                  <div class="pipe-card-title">SNS / Lambda</div>
+                  <div class="pipe-card-desc">fires the post-match summary path when `match_end` closes out a game.</div>
+                  <div class="pipe-card-val">summary processor hook</div>
+                </div>
               </div>
             </div>
           </div>
