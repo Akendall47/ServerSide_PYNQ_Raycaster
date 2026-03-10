@@ -73,6 +73,9 @@ def _as_float(value, default=0.0):
     except (TypeError, ValueError):
         return default
 
+def _valid_map_name(value):
+    return isinstance(value, str) and bool(value) and value != "none"
+
 def poll_dynamodb():
     global _ddb_cache, _ddb_last_fetch
     now = time.monotonic()
@@ -470,12 +473,13 @@ def collect_state():
                 break
 
     active_map = _active_map
-    if game_raw and game_raw.get("map"):
+    if game_raw and _valid_map_name(game_raw.get("map")):
         active_map = game_raw["map"]
     else:
         for ev in match_events:
-            if ev.get("event") == "match_start" and ev.get("map"):
-                active_map = ev["map"]
+            event_map = ev.get("map")
+            if ev.get("event") == "match_start" and _valid_map_name(event_map):
+                active_map = event_map
                 break
 
     live_match = _live_match_summary(

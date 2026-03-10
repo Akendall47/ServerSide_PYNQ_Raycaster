@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>PYNQ Raycaster — Live Monitor</title>
+<link rel="icon" href="data:,">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Silkscreen:wght@400;700&display=swap');
 
@@ -1944,7 +1945,12 @@ const stackedFrameBuffer = [];
 let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
 
+function isValidMapName(name) {
+  return Boolean(name) && name !== 'none';
+}
+
 async function loadMap(name = 'chase') {
+  if (!isValidMapName(name)) return;
   try {
     const resp = await fetch(`/api/map/${encodeURIComponent(name)}`);
     if (!resp.ok) return;
@@ -2176,7 +2182,7 @@ function updateGameHud(state) {
 }
 
 function updateMapSelector(activeMap) {
-  if (!activeMap || activeMap === _activeMapName) return;
+  if (!isValidMapName(activeMap) || activeMap === _activeMapName) return;
   _activeMapName = activeMap;
   renderMapButtons();
   loadMap(activeMap);
@@ -2767,7 +2773,8 @@ function sendControl(cmd, label) {
   document.getElementById('svc-note').textContent = 'websocket disconnected';
 }
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
   ws.onopen = () => {
     statusEl.textContent = '● LIVE';
     statusEl.className   = 'connected';
