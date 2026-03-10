@@ -4,572 +4,1342 @@
 <meta charset="UTF-8">
 <title>PYNQ Raycaster — Live Monitor</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Silkscreen:wght@400;700&display=swap');
+
+  :root {
+    --coral: #f05252;
+    --coral-dark: #c43e3e;
+    --coral-light: #ff7a7a;
+    --bg-dark: #1a1a2e;
+    --bg-panel: #16213e;
+    --bg-card: #0f3460;
+    --bg-deep: #09111f;
+    --green: #00ff41;
+    --green-dark: #00cc33;
+    --cyan: #00d4ff;
+    --yellow: #ffd700;
+    --white: #e8e8e8;
+    --gray: #555580;
+    --px: 4px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
   body {
-    background: #0a0a12;
-    color: #dde0f0;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
+    height: 100%;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(240, 82, 82, 0.16), transparent 28%),
+      radial-gradient(circle at top right, rgba(0, 212, 255, 0.12), transparent 32%),
+      linear-gradient(180deg, #11192d 0%, var(--bg-dark) 55%, #120f24 100%);
+    color: var(--white);
+    font-family: 'VT323', monospace;
+    font-size: 22px;
     overflow: hidden;
   }
 
-  /* ── Header ── */
-  header {
-    padding: 6px 14px;
-    background: linear-gradient(90deg, #0d0d1a 0%, #110d1f 100%);
-    border-bottom: 1px solid #1e1a30;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-shrink: 0;
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.25;
+    pointer-events: none;
   }
-  header h1 { font-size: 13px; color: #a78bfa; letter-spacing: 2px; text-transform: uppercase; }
-  #status { font-size: 12px; }
-  #status.connected    { color: #00ff88; }
-  #status.disconnected { color: #ff4444; }
-  #fps { font-size: 11px; color: #443a66; margin-left: auto; }
-  #game-chip {
-    font-size: 11px; color: #665a8a;
-    background: #13111f; border: 1px solid #2a2040;
-    padding: 2px 8px; border-radius: 20px;
-  }
-  #game-chip.active { color: #ffaa00; border-color: #ffaa0055; }
-  #game-chip.paused { color: #ffd866; border-color: #ffd86666; background: #1d1708; }
-  .pause-banner {
-    flex-shrink: 0;
-    padding: 7px 14px;
-    background: linear-gradient(90deg, #211506 0%, #17110a 100%);
-    border-bottom: 1px solid #3a2a0d;
-    color: #ffd088;
-    font-size: 11px;
-    letter-spacing: 0.3px;
-  }
-  .pause-banner strong { color: #fff0c2; }
 
-  /* ── SEDA Pipeline strip ── */
-  .pipeline-strip {
-    flex-shrink: 0;
-    background: #0c0c18;
-    border-bottom: 1px solid #1a1628;
-    padding: 6px 14px;
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0, 0, 0, 0.08) 3px,
+      rgba(0, 0, 0, 0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  .app-shell {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100vh;
+    padding: 12px;
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: end;
+    padding: 16px;
+    background: var(--bg-panel);
+    border: var(--px) solid #365d90;
+    box-shadow:
+      inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #091427,
+      inset var(--px) var(--px) 0 0 #6ea4d6,
+      8px 8px 0 0 rgba(0, 0, 0, 0.5);
+  }
+
+  .brand-lockup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .brand-title {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--coral);
+    text-shadow: 0 0 10px rgba(240, 82, 82, 0.35);
+  }
+
+  .brand-sub {
+    font-family: 'Silkscreen', cursive;
+    font-size: 13px;
+    color: var(--yellow);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .top-nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .nav-tab {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    line-height: 1.8;
+    padding: 12px 20px;
+    background: var(--bg-panel);
+    border: 3px solid var(--gray);
+    color: var(--gray);
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow:
+      inset -3px -3px 0 0 #0c1830,
+      inset 3px 3px 0 0 #47658f,
+      4px 4px 0 0 #000;
+  }
+
+  .nav-tab.active {
+    background: var(--bg-card);
+    color: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow:
+      inset -3px -3px 0 0 #081c37,
+      inset 3px 3px 0 0 #29d8ff,
+      4px 4px 0 0 #000;
+  }
+
+  .top-status {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  #status,
+  #game-chip {
+    font-family: 'Silkscreen', cursive;
+    font-size: 13px;
+    line-height: 1.3;
+    padding: 8px 12px;
+    border: 2px solid var(--gray);
+    background: rgba(9, 17, 31, 0.8);
+    text-transform: uppercase;
+    min-width: 140px;
+    text-align: center;
+  }
+
+  #status.connected {
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.18);
+  }
+
+  #status.disconnected {
+    color: var(--coral-light);
+    border-color: var(--coral);
+  }
+
+  #game-chip {
+    color: var(--white);
+    border-color: #4f6fa0;
+  }
+
+  #game-chip.active {
+    color: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.18);
+  }
+
+  #game-chip.paused {
+    color: var(--yellow);
+    border-color: var(--yellow);
+    background: rgba(255, 215, 0, 0.12);
+  }
+
+  .pause-banner {
+    padding: 10px 16px;
+    background: var(--bg-panel);
+    border: var(--px) solid var(--coral);
+    outline: var(--px) solid var(--coral-dark);
+    outline-offset: var(--px);
+    color: #ffe7c2;
+    font-family: 'Silkscreen', cursive;
+    font-size: 14px;
+    line-height: 1.5;
+    box-shadow: 8px 8px 0 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .pause-banner strong {
+    color: var(--coral-light);
+  }
+
+  .page-shell {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .page {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .section-label {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--coral);
+    letter-spacing: 3px;
+    text-transform: uppercase;
     display: flex;
     align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--coral) 0px,
+      var(--coral) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  }
+
+  .panel-raised,
+  .panel-inset,
+  .panel-terminal {
+    position: relative;
+    padding: 16px;
+  }
+
+  .panel-raised {
+    background: var(--bg-card);
+    border: var(--px) solid #3a6ea5;
+    box-shadow:
+      inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #0a1e3d,
+      inset var(--px) var(--px) 0 0 #5a9fd4,
+      6px 6px 0 0 #000;
+  }
+
+  .panel-inset {
+    background: #0a0a1a;
+    border: var(--px) solid #333355;
+    box-shadow:
+      inset var(--px) var(--px) 0 0 #000,
+      inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #444466;
+  }
+
+  .panel-terminal {
+    background: #0a0f0a;
+    border: 3px solid var(--green-dark);
+    box-shadow:
+      inset 0 0 30px rgba(0,255,65,0.05),
+      0 0 10px rgba(0,255,65,0.1);
+  }
+
+  .panel-terminal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,255,65,0.03) 2px,
+      rgba(0,255,65,0.03) 4px
+    );
+    pointer-events: none;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .panel-head h2 {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--cyan);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .panel-head-note,
+  .micro-chip,
+  .status-name,
+  .node-link,
+  .canvas-micro {
+    font-family: 'Silkscreen', cursive;
+    font-size: 12px;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .micro-chip,
+  .panel-head-note {
+    color: var(--yellow);
+    border: 2px solid rgba(255, 215, 0, 0.35);
+    background: rgba(255, 215, 0, 0.08);
+    padding: 4px 8px;
+  }
+
+  .metric-note {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    line-height: 1.2;
+    color: #b7c9e8;
+    margin-top: 8px;
+  }
+
+  .hud-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .hud-card {
+    min-height: 128px;
+  }
+
+  .hud-label {
+    font-family: 'Silkscreen', cursive;
+    font-size: 12px;
+    color: var(--yellow);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .fps-stack {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+  }
+
+  #fps {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 30px;
+    line-height: 1.2;
+    color: var(--green);
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.4);
+  }
+
+  .fps-unit {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    color: var(--green);
+    margin-bottom: 4px;
+  }
+
+  .hud-value {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--white);
+  }
+
+  .hud-sub {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: #d4e9ff;
+    margin-top: 10px;
+  }
+
+  .game-layout {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) 360px;
+    gap: 12px;
+  }
+
+  .viewport-card {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .viewport-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: #050814;
+    border: var(--px) solid #183356;
+    box-shadow:
+      inset var(--px) var(--px) 0 0 #02050b,
+      inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #335c93;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  #arena {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    background: #02050b;
+    border: var(--px) solid #365d90;
+    box-shadow: 0 0 0 var(--px) #081321;
+  }
+
+  .game-sidebar {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  #frame-chart {
+    width: 100%;
+    height: auto;
+    background: #08101b;
+    border: var(--px) solid #244265;
+    box-shadow:
+      inset var(--px) var(--px) 0 0 #04080f,
+      inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #2f5f8d;
+  }
+
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .metric-row span:first-child {
+    font-family: 'Silkscreen', cursive;
+    font-size: 12px;
+    color: var(--yellow);
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  .metric-row span:last-child {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--white);
+    text-align: right;
+  }
+
+  .bits-track {
+    width: 100%;
+    height: 16px;
+    background: #0a1424;
+    border: var(--px) solid #28486f;
+    margin-top: 12px;
+  }
+
+  .bits-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--cyan) 0%, var(--yellow) 100%);
+    transition: width 0.1s steps(6);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 6px;
+  }
+
+  th {
+    font-family: 'Silkscreen', cursive;
+    font-size: 12px;
+    color: var(--yellow);
+    font-weight: 400;
+    text-align: left;
+    padding-bottom: 4px;
+  }
+
+  td {
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    color: var(--white);
+    padding: 7px 8px;
+    background: rgba(5, 11, 22, 0.72);
+    border-top: 2px solid #2a4f7f;
+    border-bottom: 2px solid #091423;
+  }
+
+  td:first-child {
+    border-left: 2px solid #2a4f7f;
+  }
+
+  td:last-child {
+    border-right: 2px solid #091423;
+  }
+
+  td.pid {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+  }
+
+  td.tagged {
+    color: var(--coral-light);
+    text-shadow: 0 0 8px rgba(240, 82, 82, 0.4);
+  }
+
+  .server-grid,
+  .controls-grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 12px;
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .server-health {
+    grid-column: span 4;
+  }
+
+  .pipeline-panel {
+    grid-column: span 8;
+  }
+
+  .storage-panel,
+  .archive-panel,
+  .events-terminal {
+    grid-column: span 4;
+  }
+
+  .events-terminal {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .events-terminal .panel-head,
+  .events-terminal #event-list,
+  .events-terminal .metric-note {
+    position: relative;
+    z-index: 1;
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .status-card {
+    min-height: 84px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .status-slot {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--white);
+    word-break: break-word;
+  }
+
+  .pipeline-strip {
+    display: flex;
+    align-items: stretch;
     gap: 0;
     overflow-x: auto;
-    white-space: nowrap;
+    padding-bottom: 4px;
   }
+
   .pipe-stage {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 90px;
+    min-width: 116px;
   }
+
   .pipe-stage .stage-label {
-    font-size: 10px;
-    color: #443a66;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 2px;
-  }
-  .pipe-stage .stage-box {
-    border: 1px solid #2a2040;
-    border-radius: 8px;
-    padding: 5px 12px;
-    text-align: center;
-    min-width: 88px;
-    background: #0f0d1c;
-  }
-  .pipe-stage .stage-name {
-    font-size: 12px;
-    font-weight: bold;
-    color: #a78bfa;
-  }
-  .pipe-stage .stage-desc {
-    font-size: 10px;
-    color: #554a77;
-    margin-top: 2px;
-  }
-  .pipe-stage .stage-val {
+    font-family: 'Silkscreen', cursive;
     font-size: 11px;
-    color: #887aaa;
-    margin-top: 3px;
+    color: #96b8e0;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    text-align: center;
   }
+
+  .pipe-stage .stage-box {
+    min-width: 112px;
+    padding: 12px 10px;
+    background: #0a1730;
+    border: 3px solid #335f91;
+    box-shadow:
+      inset -3px -3px 0 0 #08162a,
+      inset 3px 3px 0 0 #5a9fd4,
+      4px 4px 0 0 #000;
+    text-align: center;
+  }
+
+  .pipe-stage .stage-name {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    line-height: 1.8;
+    color: var(--cyan);
+    margin-bottom: 6px;
+  }
+
+  .pipe-stage .stage-desc,
+  .pipe-stage .stage-val {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    line-height: 1.1;
+    color: #d6e6fa;
+  }
+
   .pipe-stage .stage-val span {
-    color: #ffcc44;
-    font-weight: bold;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    color: var(--yellow);
   }
-  /* queue label on the arrow */
+
   .pipe-queue {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0 3px;
-  }
-  .pipe-queue .q-arrow { font-size: 15px; color: #332a55; }
-  .pipe-queue .q-label { font-size: 9px; color: #332a55; letter-spacing: 0.5px; margin-top: -1px; }
-  /* stage colours by role */
-  .stage-net   { border-color: #0d2e1f; }
-  .stage-net   .stage-name { color: #00ff88; }
-  .stage-logic { border-color: #0d1e2e; }
-  .stage-logic .stage-name { color: #60c8ff; }
-  .stage-io    { border-color: #2a200d; }
-  .stage-io    .stage-name { color: #ffaa00; }
-  .stage-store { border-color: #2a0d1a; }
-  .stage-store .stage-name { color: #ff6688; }
-  .stage-ext   { border-color: #1e0d2a; }
-  .stage-ext   .stage-name { color: #c084fc; }
-
-  /* ── Main content ── */
-  .main {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-    gap: 1px;
-    background: #12101e;
-  }
-
-  /* ── Left rail ── */
-  .left-rail {
-    width: 220px;
-    display: flex;
-    flex-direction: column;
-    background: #0d0b18;
-    border-right: 1px solid #1a1628;
-    overflow-y: auto;
-    flex-shrink: 0;
-  }
-
-  /* ── Canvas ── */
-  .canvas-panel {
-    flex: 1;
-    display: flex;
-    align-items: center;
     justify-content: center;
-    background: #08080f;
-    position: relative;
-    min-width: 0;
-    overflow: hidden;
-  }
-  canvas { border: 1px solid #1a1628; max-width: 100%; max-height: 100%; }
-  .canvas-label {
-    position: absolute; top: 8px; left: 12px;
-    font-size: 10px; color: #2a2244; letter-spacing: 1px; text-transform: uppercase;
+    padding: 0 8px;
+    min-width: 70px;
   }
 
-  /* ── Side panel ── */
-  .side {
-    width: 310px;
+  .pipe-queue .q-arrow {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    color: var(--coral-light);
+    line-height: 1.6;
+  }
+
+  .pipe-queue .q-label {
+    font-family: 'Silkscreen', cursive;
+    font-size: 10px;
+    color: #a6b9d9;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .stage-net .stage-name { color: var(--green); }
+  .stage-logic .stage-name { color: var(--cyan); }
+  .stage-io .stage-name { color: var(--yellow); }
+  .stage-store .stage-name { color: var(--coral-light); }
+  .stage-ext .stage-name { color: #f3c2ff; }
+
+  .match-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 2px dashed rgba(232, 232, 232, 0.12);
+  }
+
+  .match-row:last-child {
+    border-bottom: none;
+  }
+
+  .match-id {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    line-height: 1.8;
+    color: var(--white);
+  }
+
+  .match-status,
+  .match-time {
+    font-family: 'Silkscreen', cursive;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .match-status.in_progress { color: var(--cyan); }
+  .match-status.paused { color: var(--yellow); }
+  .match-status.completed { color: var(--green); }
+  .match-status.aborted { color: var(--coral-light); }
+  .match-time { color: #9cb4d3; }
+
+  .ddb-note {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    color: #bad0ee;
+    margin-top: 10px;
+  }
+
+  #event-list {
+    flex: 1;
+    min-height: 220px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    background: #0d0b18;
-    border-left: 1px solid #1a1628;
-    overflow-y: auto;
+    gap: 6px;
   }
 
-  .panel {
-    padding: 10px 13px;
-    border-bottom: 1px solid #14111f;
+  .event-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border-left: 4px solid var(--green);
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    color: var(--green);
+  }
+
+  .event-text {
+    flex: 1;
+  }
+
+  .event-time {
     flex-shrink: 0;
-  }
-  .panel h2 {
-    font-size: 10px; color: #a78bfa;
-    letter-spacing: 2px; text-transform: uppercase;
-    margin-bottom: 8px;
+    font-family: 'Silkscreen', cursive;
+    font-size: 11px;
+    color: #7dd99a;
   }
 
-  .metric-row { display: flex; justify-content: space-between; margin-bottom: 5px; color: #887aaa; }
-  .metric-row span:last-child { color: #dde0f0; font-weight: bold; }
-  .metric-note { font-size: 10px; color: #443a66; margin-top: 3px; margin-bottom: 4px; line-height: 1.5; }
+  .event-item.player_tagged { border-left-color: var(--coral); color: #ffd2d2; }
+  .event-item.match_start { border-left-color: var(--green); color: #bdf9cd; }
+  .event-item.match_end { border-left-color: var(--yellow); color: #ffe59a; }
+  .event-item.match_aborted { border-left-color: var(--coral-light); color: #ffd8dd; }
+  .event-item.match_paused { border-left-color: var(--yellow); color: #ffe8a8; }
+  .event-item.match_resumed { border-left-color: var(--cyan); color: #c9f6ff; }
+  .event-item.bit_collected { border-left-color: var(--cyan); color: #c9f6ff; }
+
   .control-stack {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
+    gap: 12px;
+    margin-top: 10px;
   }
+
   .control-pair {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-top: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
   }
-  .control-btn {
-    padding: 6px 10px;
-    background: #13111f;
-    color: #b8b0d8;
-    border: 1px solid #2a2040;
-    border-radius: 20px;
+
+  .control-btn,
+  .replay-btn {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
+    padding: 14px 16px;
+    border: none;
     cursor: pointer;
-    font-size: 10px;
-    letter-spacing: 0.8px;
     text-transform: uppercase;
-    transition: border-color 0.15s, color 0.15s;
-  }
-  .control-btn:hover { border-color: #a78bfa88; color: #fff; background: #1a1530; }
-  .control-btn.start { border-color: #00ff8844; color: #baffd8; }
-  .control-btn.stop  { border-color: #ff666644; color: #ffd0d0; }
-  .control-btn.restart { border-color: #ffaa0044; color: #ffe0a6; }
-  .control-btn.active-view { border-color: #66ccff66; color: #d7f3ff; background: #10192a; }
-  .node-link {
-    font-size: 10px;
-    color: #665a8a;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-  }
-  .bits-track {
-    width: 100%;
-    height: 8px;
-    border-radius: 999px;
-    background: #14111f;
-    border: 1px solid #2a2040;
-    overflow: hidden;
-    margin-top: 8px;
-  }
-  .bits-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #66ccff 0%, #ffdd00 100%);
-    transition: width 0.15s ease;
+    letter-spacing: 1px;
+    text-align: left;
+    background: #224a78;
+    color: #f4fbff;
+    box-shadow:
+      inset -3px -3px 0 0 #143154,
+      inset 3px 3px 0 0 #5fa9e6,
+      4px 4px 0 0 #000;
+    transition: transform 0.05s steps(2);
   }
 
-  table { width: 100%; border-collapse: collapse; }
-  th { color: #443a66; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
-  td { padding: 3px 0; color: #b8b0d8; font-size: 12px; }
-  td.pid { font-weight: bold; }
-  td.tagged { color: #ff6666; font-weight: bold; }
+  .control-btn:active,
+  .replay-btn:active {
+    transform: translate(3px, 3px);
+    box-shadow:
+      inset 3px 3px 0 0 #143154,
+      inset -3px -3px 0 0 #5fa9e6,
+      1px 1px 0 0 #000;
+  }
 
-  /* event log */
-  .events-panel {
-    flex: 1; padding: 10px 13px;
-    display: flex; flex-direction: column;
-    min-height: 80px;
+  .control-btn.start {
+    background: #22c55e;
+    color: #04110a;
+    box-shadow:
+      inset -3px -3px 0 0 #15803d,
+      inset 3px 3px 0 0 #4ade80,
+      4px 4px 0 0 #000;
   }
-  .events-panel h2 {
-    font-size: 10px; color: #a78bfa;
-    letter-spacing: 2px; text-transform: uppercase;
-    margin-bottom: 8px; flex-shrink: 0;
-  }
-  #event-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
-  .event-item {
-    background: #100e1c; border-left: 3px solid #2a2040;
-    padding: 5px 8px; font-size: 12px; color: #887aaa; border-radius: 4px;
-    display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
-  }
-  .event-text { flex: 1; }
-  .event-time { color: #332a55; font-size: 10px; flex-shrink: 0; }
-  .event-item.player_tagged { border-left-color: #ff4444; color: #ffbbbb; }
-  .event-item.match_start   { border-left-color: #00ff88; color: #bbffdd; }
-  .event-item.match_end     { border-left-color: #ffaa00; color: #ffd088; background: #1a1200; }
-  .event-item.match_aborted { border-left-color: #ff6677; color: #ffd0d6; background: #1a0b0f; }
-  .event-item.match_paused  { border-left-color: #ffd866; color: #ffe6a0; background: #191306; }
-  .event-item.match_resumed { border-left-color: #66ccff; color: #d7f3ff; background: #07141c; }
-  .event-item.bit_collected { border-left-color: #66ccff; color: #d7f3ff; background: #07141c; }
 
-  /* DynamoDB matches */
-  .match-row {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding: 3px 0; border-bottom: 1px solid #14111f;
-    font-size: 11px;
+  .control-btn.stop {
+    background: var(--coral);
+    color: #fff7f7;
+    box-shadow:
+      inset -3px -3px 0 0 var(--coral-dark),
+      inset 3px 3px 0 0 var(--coral-light),
+      4px 4px 0 0 #000;
   }
-  .match-row:last-child { border-bottom: none; }
-  .match-id { color: #554a77; font-size: 10px; }
-  .match-status.in_progress { color: #ffaa00; }
-  .match-status.paused      { color: #ffd866; }
-  .match-status.completed   { color: #00ff88; }
-  .match-status.aborted     { color: #ff6677; }
-  .match-time { color: #332a55; font-size: 10px; }
-  .ddb-note { font-size: 10px; color: #2a2244; margin-top: 5px; }
-  .replay-list {
+
+  .control-btn.restart {
+    background: #eab308;
+    color: #100d02;
+    box-shadow:
+      inset -3px -3px 0 0 #a16207,
+      inset 3px 3px 0 0 #facc15,
+      4px 4px 0 0 #000;
+  }
+
+  .control-btn.active-view,
+  .replay-btn {
+    background: #0891b2;
+    color: #eefcff;
+    box-shadow:
+      inset -3px -3px 0 0 #065a73,
+      inset 3px 3px 0 0 #22d3ee,
+      4px 4px 0 0 #000;
+  }
+
+  .replay-btn.empty {
+    cursor: default;
+    background: #2e3656;
+    color: #969fbf;
+    box-shadow:
+      inset -3px -3px 0 0 #171d32,
+      inset 3px 3px 0 0 #4a5a82,
+      4px 4px 0 0 #000;
+  }
+
+  .controls-actions {
+    grid-column: span 4;
+  }
+
+  .controls-sim {
+    grid-column: span 5;
+  }
+
+  .controls-notes {
+    grid-column: span 3;
+  }
+
+  .note-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
+    gap: 12px;
   }
-  .replay-btn {
-    width: 100%;
-    text-align: left;
-    padding: 6px 10px;
-    background: #13111f;
-    color: #b8b0d8;
-    border: 1px solid #2a2040;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 10px;
-    letter-spacing: 0.4px;
-    transition: border-color 0.15s, color 0.15s;
+
+  .note-list .metric-note {
+    margin-top: 0;
   }
-  .replay-btn:hover { border-color: #a78bfa88; color: #fff; background: #1a1530; }
-  .replay-btn.empty { cursor: default; color: #332a55; }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  @media (max-width: 1280px) {
+    .hud-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .game-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .server-health,
+    .pipeline-panel,
+    .storage-panel,
+    .archive-panel,
+    .events-terminal,
+    .controls-actions,
+    .controls-sim,
+    .controls-notes {
+      grid-column: span 12;
+    }
+  }
+
+  @media (max-width: 820px) {
+    body {
+      overflow: auto;
+    }
+
+    .app-shell {
+      height: auto;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+
+    .top-nav,
+    .top-status {
+      justify-content: flex-start;
+    }
+
+    .hud-grid,
+    .status-grid,
+    .control-pair {
+      grid-template-columns: 1fr;
+    }
+
+    .brand-title {
+      font-size: 14px;
+    }
+
+    #fps {
+      font-size: 24px;
+    }
+  }
 </style>
 </head>
 <body>
-
-<header>
-  <h1>PYNQ Raycaster Monitor</h1>
-  <span id="status" class="disconnected">● DISCONNECTED</span>
-  <span id="game-chip">no game</span>
-  <span id="fps"></span>
-</header>
-<div id="pause-banner" class="pause-banner" hidden></div>
-
-<!-- ═══ SEDA Pipeline Strip ═══════════════════════════════════════════════ -->
-<div class="pipeline-strip">
-
-  <!-- T1 UDP Receiver -->
-  <div class="pipe-stage">
-    <div class="stage-label">asyncio</div>
-    <div class="stage-box stage-net">
-      <div class="stage-name">T1 UDP</div>
-      <div class="stage-desc">receives datagrams</div>
-      <div class="stage-val">port <span>9000</span></div>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-lockup">
+      <div class="brand-title">PYNQ CAST</div>
+      <div class="brand-sub">distributed FPGA raycaster monitor</div>
     </div>
-  </div>
-
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">packet_queue</div>
-  </div>
-
-  <!-- T2 GameTick -->
-  <div class="pipe-stage">
-    <div class="stage-label">asyncio · 20 Hz</div>
-    <div class="stage-box stage-logic">
-      <div class="stage-name">T2 GameTick</div>
-      <div class="stage-desc">parse · tag · state</div>
-      <div class="stage-val"><span id="pp-players">0</span> players</div>
+    <nav class="top-nav">
+      <button id="tab-game" class="nav-tab active" type="button" onclick="setActiveTab('game')">Game View</button>
+      <button id="tab-server" class="nav-tab" type="button" onclick="setActiveTab('server')">Server Monitoring</button>
+      <button id="tab-controls" class="nav-tab" type="button" onclick="setActiveTab('controls')">Controls &amp; Config</button>
+    </nav>
+    <div class="top-status">
+      <span id="status" class="disconnected">● DISCONNECTED</span>
+      <span id="game-chip">no game</span>
     </div>
-  </div>
+  </header>
 
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">broadcast_queue</div>
-  </div>
+  <div id="pause-banner" class="pause-banner" hidden></div>
 
-  <!-- T3 Broadcaster -->
-  <div class="pipe-stage">
-    <div class="stage-label">asyncio</div>
-    <div class="stage-box stage-net">
-      <div class="stage-name">T3 Broadcast</div>
-      <div class="stage-desc">UDP fan-out</div>
-      <div class="stage-val">→ clients</div>
-    </div>
-  </div>
+  <main class="page-shell">
+    <section id="page-game" class="page">
+      <div class="section-label">Game View</div>
 
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">write_queue</div>
-  </div>
-
-  <!-- T4 Redis Writer -->
-  <div class="pipe-stage">
-    <div class="stage-label">OS thread</div>
-    <div class="stage-box stage-io">
-      <div class="stage-name">T4 Redis</div>
-      <div class="stage-desc">HSET · LPUSH</div>
-      <div class="stage-val"><span id="pp-ops">—</span> ops/s</div>
-    </div>
-  </div>
-
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">BRPOP wait</div>
-  </div>
-
-  <!-- Sidecar -->
-  <div class="pipe-stage">
-    <div class="stage-label">process</div>
-    <div class="stage-box stage-store">
-      <div class="stage-name">Sidecar</div>
-      <div class="stage-desc">Redis → DDB · S3 · SNS</div>
-      <div class="stage-val">blocked: <span id="pp-blocked">—</span></div>
-    </div>
-  </div>
-
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">archive · notify</div>
-  </div>
-
-  <!-- S3 -->
-  <div class="pipe-stage">
-    <div class="stage-label">AWS</div>
-    <div class="stage-box stage-ext">
-      <div class="stage-name">S3 Cold</div>
-      <div class="stage-desc">replays + DDB archive</div>
-      <div class="stage-val">durable object store</div>
-    </div>
-  </div>
-
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">match_end</div>
-  </div>
-
-  <!-- SNS / Lambda -->
-  <div class="pipe-stage">
-    <div class="stage-label">AWS</div>
-    <div class="stage-box stage-store">
-      <div class="stage-name">SNS/Lambda</div>
-      <div class="stage-desc">post-match summary</div>
-      <div class="stage-val">async processing</div>
-    </div>
-  </div>
-
-  <div class="pipe-queue">
-    <div class="q-arrow">→</div>
-    <div class="q-label">UpdateItem</div>
-  </div>
-
-  <!-- DynamoDB -->
-  <div class="pipe-stage">
-    <div class="stage-label">AWS</div>
-    <div class="stage-box stage-ext">
-      <div class="stage-name">DynamoDB</div>
-      <div class="stage-desc">warm metadata index</div>
-      <div class="stage-val"><span id="pp-ddb">—</span> recent</div>
-    </div>
-  </div>
-
-  <!-- Event counter -->
-  <div style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; padding-left:16px;">
-    <div style="font-size:9px;color:#333;letter-spacing:1px;">EVENTS THIS MATCH</div>
-    <div style="font-size:18px;color:#00d4ff;font-weight:bold;" id="pp-events">—</div>
-    <div style="font-size:9px;color:#333;">match flow</div>
-  </div>
-
-</div>
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-
-<div class="main">
-  <div class="left-rail">
-
-    <!-- EC2 controls -->
-    <div class="panel">
-      <h2>EC2 Controls</h2>
-      <div class="metric-row"><span>server</span><span id="svc-server">—</span></div>
-      <div class="metric-row"><span>sidecar</span><span id="svc-sidecar">—</span></div>
-      <div class="metric-row"><span>monitor</span><span id="svc-monitor">—</span></div>
-      <div class="control-stack">
-        <button class="control-btn start" onclick="sendControl('start_server', 'start server')">Start Server</button>
-        <button class="control-btn stop" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
-        <button class="control-btn start" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
-        <button class="control-btn stop" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
-        <button class="control-btn restart" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
-        <button class="control-btn restart" onclick="sendControl('restart', 'start match')">Start Match</button>
-        <button class="control-btn stop" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
-      </div>
-      <div class="metric-note" style="margin-top:8px">View Mode</div>
-      <div class="control-pair" id="view-mode-btns"></div>
-      <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
-      <div class="metric-note" style="margin-top:8px">Node Links</div>
-      <div class="metric-row"><span>P1</span><span id="node1-link" class="node-link">offline · manual</span></div>
-      <div class="metric-row"><span>P2</span><span id="node2-link" class="node-link">offline · manual</span></div>
-      <div id="orbit-mode-controls" hidden>
-        <div class="metric-note" style="margin-top:8px">Orbit Test Controls</div>
-        <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
-        <div class="metric-note" style="margin-top:8px">Node 1</div>
-        <div class="control-pair">
-          <button class="control-btn start" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
-          <button class="control-btn restart" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
+      <div class="hud-grid">
+        <div class="panel-raised hud-card">
+          <div class="hud-label">Render Rate</div>
+          <div class="fps-stack">
+            <span id="fps">0</span>
+            <span class="fps-unit">FPS</span>
+          </div>
+          <div id="hud-frame-ms" class="hud-sub">0.0 ms/frame</div>
         </div>
-        <div class="metric-note" style="margin-top:8px">Node 2</div>
-        <div class="control-pair">
-          <button class="control-btn start" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
-          <button class="control-btn restart" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
+
+        <div class="panel-raised hud-card">
+          <div class="hud-label">View Mode</div>
+          <div id="hud-view-mode" class="hud-value">Map Play</div>
+          <div id="hud-map-name" class="hud-sub">chase</div>
+        </div>
+
+        <div class="panel-raised hud-card">
+          <div class="hud-label">Match State</div>
+          <div id="hud-match-state" class="hud-value">Idle</div>
+          <div id="hud-player-count" class="hud-sub">0 entities online</div>
+        </div>
+
+        <div class="panel-raised hud-card">
+          <div class="hud-label">Socket Feed</div>
+          <div id="hud-ws-rate" class="hud-value">0 / s</div>
+          <div class="hud-sub">browser update stream</div>
         </div>
       </div>
-      <div id="map-play-controls">
-        <div class="metric-note" style="margin-top:8px">Ghost Taggers (simulates PYNQ menu)</div>
-        <div class="control-stack">
-          <button class="control-btn" onclick="sendControl('set_ghosts_0', 'ghost count → 0')">0 Ghosts</button>
-          <button class="control-btn" onclick="sendControl('set_ghosts_1', 'ghost count → 1')">1 Ghost</button>
-          <button class="control-btn" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
-          <button class="control-btn" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
+
+      <div class="game-layout">
+        <div class="panel-raised viewport-card">
+          <div class="panel-head">
+            <h2>Raycast Arena</h2>
+            <span id="canvas-label" class="panel-head-note">map play · loading map…</span>
+          </div>
+          <div class="viewport-wrap">
+            <canvas id="arena" width="480" height="480"></canvas>
+          </div>
         </div>
-        <div class="metric-note" style="margin-top:8px">Map (hot-swap mid-session)</div>
-        <div class="control-stack" id="map-btn-list">
-          <span style="color:#333">loading maps...</span>
+
+        <div class="game-sidebar">
+          <div class="panel-raised">
+            <div class="panel-head">
+              <h2>Frame Timing</h2>
+              <span class="micro-chip">sparkline</span>
+            </div>
+            <canvas id="frame-chart" width="320" height="92"></canvas>
+            <div class="metric-note">Recent monitor render times. Taller bars mean slower browser-side drawing.</div>
+          </div>
+
+          <div class="panel-raised">
+            <div class="panel-head">
+              <h2>Player Stats</h2>
+              <span class="micro-chip">live</span>
+            </div>
+            <table>
+              <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th></tr></thead>
+              <tbody id="player-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="panel-raised">
+            <div class="panel-head">
+              <h2>Objective State</h2>
+              <span class="micro-chip">bits</span>
+            </div>
+            <div class="metric-row"><span>mode</span><span id="bits-mode">—</span></div>
+            <div class="metric-row"><span>remaining</span><span id="bits-remaining">—</span></div>
+            <div class="metric-row"><span>collected</span><span id="bits-collected">—</span></div>
+            <div class="metric-row"><span>progress</span><span id="bits-progress">—</span></div>
+            <div class="bits-track"><div class="bits-fill" id="bits-fill"></div></div>
+            <div class="metric-note" id="bits-note">runner wins by clearing every bit in chase_bits mode.</div>
+          </div>
         </div>
-        <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
       </div>
-      <div class="metric-note">EC2 services are controlled here. Node simulators still run locally via `dev.sh`, but their mode can be switched over Redis.</div>
-      <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
-    </div>
+    </section>
 
-  </div>
+    <section id="page-server" class="page" hidden>
+      <div class="section-label">Server Monitoring</div>
 
-  <div class="canvas-panel">
-    <span class="canvas-label" id="canvas-label">map play · loading map…</span>
-    <canvas id="arena" width="480" height="480"></canvas>
-  </div>
+      <div class="server-grid">
+        <div class="panel-raised server-health">
+          <div class="panel-head">
+            <h2>Node Health</h2>
+            <span class="micro-chip">live</span>
+          </div>
+          <div class="status-grid">
+            <div class="panel-inset status-card">
+              <span class="status-name">Server</span>
+              <span id="svc-server" class="status-slot">—</span>
+            </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">Sidecar</span>
+              <span id="svc-sidecar" class="status-slot">—</span>
+            </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">Monitor</span>
+              <span id="svc-monitor" class="status-slot">—</span>
+            </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">P1 Node</span>
+              <span id="node1-link" class="status-slot">offline · manual</span>
+            </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">P2 Node</span>
+              <span id="node2-link" class="status-slot">offline · manual</span>
+            </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">Live View</span>
+              <span id="server-view-card" class="status-slot">game telemetry</span>
+            </div>
+          </div>
+        </div>
 
-  <div class="side">
+        <div class="panel-raised pipeline-panel">
+          <div class="panel-head">
+            <h2>SEDA Pipeline</h2>
+            <span class="micro-chip">throughput</span>
+          </div>
+          <div class="pipeline-strip">
+            <div class="pipe-stage">
+              <div class="stage-label">asyncio</div>
+              <div class="stage-box stage-net">
+                <div class="stage-name">T1 UDP</div>
+                <div class="stage-desc">receives datagrams</div>
+                <div class="stage-val">port <span>9000</span></div>
+              </div>
+            </div>
 
-    <!-- Players -->
-    <div class="panel">
-      <h2>Players</h2>
-      <table>
-        <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th></tr></thead>
-        <tbody id="player-tbody"></tbody>
-      </table>
-    </div>
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">packet_queue</div>
+            </div>
 
-    <div class="panel">
-      <h2>Bits</h2>
-      <div class="metric-row"><span>mode</span><span id="bits-mode">—</span></div>
-      <div class="metric-row"><span>remaining</span><span id="bits-remaining">—</span></div>
-      <div class="metric-row"><span>collected</span><span id="bits-collected">—</span></div>
-      <div class="metric-row"><span>progress</span><span id="bits-progress">—</span></div>
-      <div class="bits-track"><div class="bits-fill" id="bits-fill"></div></div>
-      <div class="metric-note" id="bits-note">runner wins by clearing every bit in chase_bits mode.</div>
-    </div>
+            <div class="pipe-stage">
+              <div class="stage-label">asyncio · 20 Hz</div>
+              <div class="stage-box stage-logic">
+                <div class="stage-name">T2 GameTick</div>
+                <div class="stage-desc">parse · tag · state</div>
+                <div class="stage-val"><span id="pp-players">0</span> players</div>
+              </div>
+            </div>
 
-    <!-- Redis -->
-    <div class="panel">
-      <h2>Redis</h2>
-      <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
-      <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
-      <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
-      <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
-      <div class="metric-row"><span>pub/sub</span><span id="r-pubsub">—</span></div>
-      <div class="metric-row"><span>monitor load</span><span id="r-poll">—</span></div>
-      <div class="metric-note" id="redis-note">measuring live Redis load...</div>
-    </div>
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">broadcast_queue</div>
+            </div>
 
-    <!-- DynamoDB matches -->
-    <div class="panel">
-      <h2>DynamoDB — recent matches</h2>
-      <div id="match-list"><span style="color:#333">loading...</span></div>
-      <div class="ddb-note">warm tier only · recent META rows kept in DynamoDB · older match rows archived to S3</div>
-    </div>
+            <div class="pipe-stage">
+              <div class="stage-label">asyncio</div>
+              <div class="stage-box stage-net">
+                <div class="stage-name">T3 Broadcast</div>
+                <div class="stage-desc">UDP fan-out</div>
+                <div class="stage-val">→ clients</div>
+              </div>
+            </div>
 
-    <!-- Replay -->
-    <div class="panel">
-      <h2>Replay</h2>
-      <div class="metric-note">Replays are loaded from S3. Only matches with saved state frames are listed below.</div>
-      <div class="metric-note" id="replay-status">no replay loaded</div>
-      <div class="replay-list" id="replay-list">
-        <button class="replay-btn empty" disabled>waiting for replayable matches...</button>
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">write_queue</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">OS thread</div>
+              <div class="stage-box stage-io">
+                <div class="stage-name">T4 Redis</div>
+                <div class="stage-desc">HSET · LPUSH</div>
+                <div class="stage-val"><span id="pp-ops">—</span> ops/s</div>
+              </div>
+            </div>
+
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">BRPOP wait</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">process</div>
+              <div class="stage-box stage-store">
+                <div class="stage-name">Sidecar</div>
+                <div class="stage-desc">Redis → DDB · S3 · SNS</div>
+                <div class="stage-val">blocked: <span id="pp-blocked">—</span></div>
+              </div>
+            </div>
+
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">archive · notify</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">AWS</div>
+              <div class="stage-box stage-ext">
+                <div class="stage-name">S3 Cold</div>
+                <div class="stage-desc">replays + DDB archive</div>
+                <div class="stage-val">durable object store</div>
+              </div>
+            </div>
+
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">match_end</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">AWS</div>
+              <div class="stage-box stage-store">
+                <div class="stage-name">SNS/Lambda</div>
+                <div class="stage-desc">post-match summary</div>
+                <div class="stage-val">async processing</div>
+              </div>
+            </div>
+
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">UpdateItem</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">AWS</div>
+              <div class="stage-box stage-ext">
+                <div class="stage-name">DynamoDB</div>
+                <div class="stage-desc">warm metadata index</div>
+                <div class="stage-val"><span id="pp-ddb">—</span> recent</div>
+              </div>
+            </div>
+
+            <div class="pipe-queue">
+              <div class="q-arrow">→</div>
+              <div class="q-label">this match</div>
+            </div>
+
+            <div class="pipe-stage">
+              <div class="stage-label">feed</div>
+              <div class="stage-box stage-logic">
+                <div class="stage-name">Events</div>
+                <div class="stage-desc">match flow</div>
+                <div class="stage-val"><span id="pp-events">—</span> seen</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-raised storage-panel">
+          <div class="panel-head">
+            <h2>Redis Hot Cache</h2>
+            <span class="micro-chip">telemetry</span>
+          </div>
+          <div class="metric-row"><span>ops / sec</span><span id="r-ops">—</span></div>
+          <div class="metric-row"><span>memory</span><span id="r-mem">—</span></div>
+          <div class="metric-row"><span>clients</span><span id="r-clients">—</span></div>
+          <div class="metric-row"><span>blocked</span><span id="r-blocked">—</span></div>
+          <div class="metric-row"><span>pub/sub</span><span id="r-pubsub">—</span></div>
+          <div class="metric-row"><span>monitor load</span><span id="r-poll">—</span></div>
+          <div class="metric-note" id="redis-note">measuring live Redis load...</div>
+        </div>
+
+        <div class="panel-raised archive-panel">
+          <div class="panel-head">
+            <h2>DynamoDB + Replay</h2>
+            <span class="micro-chip">archive</span>
+          </div>
+          <div id="match-list"><span style="color:#90a3c4">loading...</span></div>
+          <div class="ddb-note">warm tier only · recent META rows kept in DynamoDB · older match rows archived to S3</div>
+          <div class="panel-head" style="margin-top:16px;">
+            <h2>Replay</h2>
+            <span class="micro-chip">S3</span>
+          </div>
+          <div class="metric-note" id="replay-status">no replay loaded</div>
+          <div class="replay-list" id="replay-list">
+            <button class="replay-btn empty" disabled>waiting for replayable matches...</button>
+          </div>
+          <div class="control-stack">
+            <button class="control-btn stop" type="button" onclick="stopReplay()">Stop Replay</button>
+          </div>
+        </div>
+
+        <div class="panel-terminal events-terminal">
+          <div class="panel-head">
+            <h2>Live Event Feed</h2>
+            <span id="event-count" class="micro-chip"></span>
+          </div>
+          <div id="event-list"></div>
+        </div>
       </div>
-      <div class="control-stack">
-        <button class="control-btn stop" onclick="stopReplay()">Stop Replay</button>
+    </section>
+
+    <section id="page-controls" class="page" hidden>
+      <div class="section-label">Controls &amp; Config</div>
+
+      <div class="controls-grid">
+        <div class="panel-raised controls-actions">
+          <div class="panel-head">
+            <h2>EC2 Stack Controls</h2>
+            <span class="micro-chip">runtime</span>
+          </div>
+          <div class="control-stack">
+            <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
+            <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+            <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+            <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+            <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+            <button class="control-btn restart" type="button" onclick="sendControl('restart', 'start match')">Start Match</button>
+            <button class="control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
+          </div>
+          <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
+        </div>
+
+        <div class="panel-raised controls-sim">
+          <div class="panel-head">
+            <h2>Simulation Mode</h2>
+            <span class="micro-chip">manual / auto</span>
+          </div>
+          <div class="metric-note">View Mode</div>
+          <div class="control-pair" id="view-mode-btns"></div>
+          <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
+
+          <div id="orbit-mode-controls" hidden>
+            <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
+            <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
+            <div class="metric-note" style="margin-top:12px;">Node 1</div>
+            <div class="control-pair">
+              <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
+              <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
+            </div>
+            <div class="metric-note" style="margin-top:12px;">Node 2</div>
+            <div class="control-pair">
+              <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
+              <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
+            </div>
+          </div>
+
+          <div id="map-play-controls">
+            <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
+            <div class="control-stack">
+              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count → 0')">0 Ghosts</button>
+              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_1', 'ghost count → 1')">1 Ghost</button>
+              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
+              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
+            </div>
+            <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
+            <div class="control-stack" id="map-btn-list">
+              <span style="color:#90a3c4">loading maps...</span>
+            </div>
+            <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
+          </div>
+        </div>
+
+        <div class="panel-raised controls-notes">
+          <div class="panel-head">
+            <h2>Operator Notes</h2>
+            <span class="micro-chip">quick guide</span>
+          </div>
+          <div class="note-list">
+            <div class="metric-note">Game View is the showpiece: viewport, player state, bit progress, and frame timing stay together there.</div>
+            <div class="metric-note">Server Monitoring is the ops deck: health, pipeline throughput, storage tiers, replay archive, and the live event terminal.</div>
+            <div class="metric-note">Controls &amp; Config keeps the active knobs isolated so runtime actions stop fighting with the visual telemetry pages.</div>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <!-- Event log -->
-    <div class="events-panel">
-      <h2>Match Events  <span id="event-count" style="color:#333;font-size:9px;float:right;font-weight:normal;letter-spacing:0"></span></h2>
-      <div id="event-list"></div>
-    </div>
-
-  </div>
+    </section>
+  </main>
 </div>
 
 <script>
 const canvas = document.getElementById('arena');
 const ctx    = canvas.getContext('2d');
+const frameChartCanvas = document.getElementById('frame-chart');
+const frameChartCtx = frameChartCanvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
 const ORBIT_RADIUS   = 50.0;   // must match t2_game_tick.py ORBIT_RADIUS
@@ -591,6 +1361,9 @@ let _showMap = true;  // map play is the default; orbit view is a sim-only test 
 let _viewMode = 'map';
 const requestedNodeModes = { 1: 'manual', 2: 'manual' };
 let _mapManualSyncPending = true;
+let _activePage = 'game';
+const frameTimeHistory = [];
+let lastRenderSampleAt = performance.now();
 
 async function loadMap(name = 'chase') {
   try {
@@ -663,6 +1436,7 @@ function syncViewMode(mode) {
   } else {
     updateCanvasLabel();
   }
+  updateGameHud(latestState);
 }
 
 function setViewMode(mode) {
@@ -722,6 +1496,93 @@ function updateCanvasLabel() {
     const selectedMap = latestState?.selected_map || _activeMapName;
     el.textContent = `orbit test · selected map ${selectedMap} parked · auto/manual optional · 50u radius`;
   }
+}
+
+function setActiveTab(tab) {
+  const target = (tab === 'server' || tab === 'controls') ? tab : 'game';
+  _activePage = target;
+  ['game', 'server', 'controls'].forEach((page) => {
+    const panel = document.getElementById(`page-${page}`);
+    const tabBtn = document.getElementById(`tab-${page}`);
+    if (panel) panel.hidden = page !== target;
+    if (tabBtn) tabBtn.classList.toggle('active', page === target);
+  });
+  const nextHash = target === 'game' ? '' : `#${target}`;
+  history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
+}
+
+function pushFrameSample(frameMs) {
+  if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > 100) return;
+  frameTimeHistory.push(frameMs);
+  if (frameTimeHistory.length > 64) {
+    frameTimeHistory.shift();
+  }
+}
+
+function averageFrameMs() {
+  if (!frameTimeHistory.length) return 0.0;
+  return frameTimeHistory.reduce((sum, value) => sum + value, 0) / frameTimeHistory.length;
+}
+
+function drawFrameChart() {
+  const width = frameChartCanvas.width;
+  const height = frameChartCanvas.height;
+  frameChartCtx.clearRect(0, 0, width, height);
+
+  frameChartCtx.fillStyle = '#07101e';
+  frameChartCtx.fillRect(0, 0, width, height);
+
+  frameChartCtx.strokeStyle = 'rgba(0, 212, 255, 0.18)';
+  frameChartCtx.lineWidth = 1;
+  for (let y = 1; y < 4; y += 1) {
+    const row = Math.floor((height / 4) * y);
+    frameChartCtx.beginPath();
+    frameChartCtx.moveTo(0, row);
+    frameChartCtx.lineTo(width, row);
+    frameChartCtx.stroke();
+  }
+
+  if (!frameTimeHistory.length) {
+    frameChartCtx.fillStyle = '#7aa3d1';
+    frameChartCtx.font = '18px VT323';
+    frameChartCtx.fillText('waiting for frame samples...', 12, 28);
+    return;
+  }
+
+  const maxMs = Math.max(20, ...frameTimeHistory);
+  const barWidth = Math.max(2, Math.floor(width / frameTimeHistory.length));
+  frameTimeHistory.forEach((value, index) => {
+    const barHeight = Math.max(3, Math.round((value / maxMs) * (height - 14)));
+    const x = index * barWidth;
+    const y = height - barHeight - 4;
+    frameChartCtx.fillStyle = value > 20 ? '#f05252' : value > 14 ? '#ffd700' : '#00d4ff';
+    frameChartCtx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
+  });
+}
+
+function deriveMatchStateLabel(state) {
+  if (!state || !state.match) return 'Idle';
+  if (state.match.paused) return 'Paused';
+  if (state.match.ended) return 'Ended';
+  if (state.match.started) return 'Live';
+  return 'Lobby';
+}
+
+function updateGameHud(state) {
+  const players = state?.players || [];
+  const playerCount = players.length;
+  const parkedMap = state?.selected_map || _activeMapName;
+  const liveMap = state?.active_map || _activeMapName;
+  const mapLabel = _viewMode === 'orbit' ? `${parkedMap} parked` : liveMap;
+
+  document.getElementById('hud-view-mode').textContent = _viewMode === 'orbit' ? 'Orbit Test' : 'Map Play';
+  document.getElementById('hud-map-name').textContent = mapLabel;
+  document.getElementById('hud-match-state').textContent = deriveMatchStateLabel(state);
+  document.getElementById('hud-player-count').textContent = `${playerCount} entities online`;
+  document.getElementById('hud-ws-rate').textContent = `${wsHz} / s`;
+  document.getElementById('server-view-card').textContent = _viewMode === 'orbit'
+    ? `orbit test · ${playerCount} entities`
+    : `map play · ${liveMap}`;
 }
 
 function updateMapSelector(activeMap) {
@@ -986,6 +1847,12 @@ function drawArena(players, bits, bitsMask) {
 
 // ── 60 fps render loop ─────────────────────────────────────────────────────
 function renderLoop() {
+  const now = performance.now();
+  const frameDelta = now - lastRenderSampleAt;
+  lastRenderSampleAt = now;
+  pushFrameSample(frameDelta);
+  drawFrameChart();
+
   if (replayState.active && replayState.frames.length) {
     const frame = replayState.frames[Math.min(replayState.frameIndex, replayState.frames.length - 1)];
     drawArena(normalisePlayers(frame.players), frame.bits || [], frame.bits_mask ?? 0xFFFF);
@@ -993,9 +1860,10 @@ function renderLoop() {
     drawArena(normalisePlayers(latestState.players), latestState.bits || [], latestState.bits_mask ?? 0xFFFF);
   }
   renderCount++;
-  const now = performance.now();
   if (now - renderLastTime >= 1000) {
-    document.getElementById('fps').textContent = `${renderCount} fps · ws ${wsHz}/s`;
+    document.getElementById('fps').textContent = String(renderCount);
+    document.getElementById('hud-frame-ms').textContent = `${averageFrameMs().toFixed(1)} ms/frame`;
+    document.getElementById('hud-ws-rate').textContent = `${wsHz} / s`;
     renderCount = 0; renderLastTime = now;
   }
   requestAnimationFrame(renderLoop);
@@ -1347,6 +2215,7 @@ function connect() {
     }
     latestState = state;
     syncViewMode(state.sim_view_mode || 'map');
+    updateGameHud(state);
     maybeEnforceMapManual(state.players || []);
     if (!replayState.active) updatePlayers(state.players);
     updateNodeLinks(state.players);
@@ -1376,6 +2245,9 @@ function connect() {
 }
 renderViewModeButtons();
 updateOrbitModeControls();
+updateGameHud(null);
+drawFrameChart();
+setActiveTab(window.location.hash.replace('#', ''));
 connect();
 </script>
 </body>
