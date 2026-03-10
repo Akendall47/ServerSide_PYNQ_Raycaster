@@ -574,7 +574,8 @@
   }
 
   #frame-chart {
-    width: 100%;
+    display: block;
+    width: min(100%, 360px);
     height: auto;
     background: #08101b;
     border: var(--px) solid #244265;
@@ -1054,6 +1055,33 @@
       grid-template-columns: 1fr;
     }
 
+    .viewport-wrap {
+      min-height: clamp(420px, 52vw, 640px);
+    }
+
+    .game-sidebar {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      align-items: start;
+    }
+
+    .frame-panel {
+      grid-column: 1;
+      align-items: flex-start;
+    }
+
+    .frame-panel .metric-note {
+      display: none;
+    }
+
+    .objective-panel {
+      grid-column: 2;
+    }
+
+    .player-panel {
+      grid-column: 1 / -1;
+    }
+
     .server-health,
     .pipeline-panel,
     .storage-panel,
@@ -1094,7 +1122,8 @@
 
     .hud-grid,
     .status-grid,
-    .control-pair {
+    .control-pair,
+    .game-sidebar {
       grid-template-columns: 1fr;
     }
 
@@ -1229,7 +1258,7 @@
         </div>
 
         <div class="game-sidebar">
-          <div class="panel-raised">
+          <div class="panel-raised frame-panel">
             <div class="panel-head">
               <h2>Frame Timing</h2>
               <span class="micro-chip">sparkline</span>
@@ -1251,7 +1280,7 @@
             </div>
           </div>
 
-          <div class="panel-raised">
+          <div class="panel-raised objective-panel">
             <div class="panel-head">
               <h2>Objective State</h2>
               <span class="micro-chip">bits</span>
