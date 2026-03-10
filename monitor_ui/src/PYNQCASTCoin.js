@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const ABOUT_LOGO_PATH = '/PNG_LOGO.png';
 
@@ -33,6 +34,7 @@ export function mountPYNQCASTCoin(rootEl) {
   let renderer = null;
   let scene = null;
   let camera = null;
+  let envTarget = null;
   let coinGroup = null;
   let edge = null;
   let frontFill = null;
@@ -100,6 +102,12 @@ export function mountPYNQCASTCoin(rootEl) {
   camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.set(0, 0.06, 4.9);
 
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  envTarget = pmremGenerator.fromScene(new RoomEnvironment());
+  scene.environment = envTarget.texture;
+  scene.background = null;
+  pmremGenerator.dispose();
+
   const ambient = new THREE.AmbientLight(0xffeedd, 3.0);
   scene.add(ambient);
 
@@ -115,6 +123,10 @@ export function mountPYNQCASTCoin(rootEl) {
   rimLight.position.set(0, -2.5, -3);
   scene.add(rimLight);
 
+  const glintLight = new THREE.PointLight(0xffffff, 120, 6);
+  glintLight.position.set(1, 1.5, 2);
+  scene.add(glintLight);
+
   edgeGeo = new THREE.CylinderGeometry(1.14, 1.14, 0.14, 32, 1, true);
   frontFillGeo = new THREE.CircleGeometry(1.13, 32);
   backFillGeo = new THREE.CircleGeometry(1.13, 32);
@@ -123,8 +135,8 @@ export function mountPYNQCASTCoin(rootEl) {
 
   const edgeMaterial = new THREE.MeshStandardMaterial({
     color: 0x7d2429,
-    metalness: 0.58,
-    roughness: 0.32,
+    metalness: 0.95,
+    roughness: 0.05,
     emissive: new THREE.Color('#260709'),
     emissiveIntensity: 0.22,
     transparent: false,
@@ -132,10 +144,11 @@ export function mountPYNQCASTCoin(rootEl) {
   });
   const faceMaterial = new THREE.MeshStandardMaterial({
     map: null,
-    metalness: 0.0,
-    roughness: 0.75,
-    emissive: new THREE.Color('#F05A50'),
-    emissiveIntensity: 0.15,
+    color: 0xffffff,
+    metalness: 0.85,
+    roughness: 0.08,
+    emissive: new THREE.Color('#ffffff'),
+    emissiveIntensity: 0.25,
     transparent: true,
     alphaTest: 0.1,
     depthWrite: true,
@@ -143,10 +156,11 @@ export function mountPYNQCASTCoin(rootEl) {
   });
   const backFaceMaterial = new THREE.MeshStandardMaterial({
     map: null,
-    metalness: 0.0,
-    roughness: 0.75,
-    emissive: new THREE.Color('#F05A50'),
-    emissiveIntensity: 0.15,
+    color: 0xffffff,
+    metalness: 0.85,
+    roughness: 0.08,
+    emissive: new THREE.Color('#ffffff'),
+    emissiveIntensity: 0.25,
     transparent: true,
     alphaTest: 0.1,
     depthWrite: true,
@@ -234,6 +248,9 @@ export function mountPYNQCASTCoin(rootEl) {
 
     keyLight.position.x = Math.cos(t * 0.6) * 3;
     keyLight.position.z = Math.sin(t * 0.6) * 3 + 1;
+    glintLight.position.x = Math.cos(t * 2.5) * 2;
+    glintLight.position.y = Math.sin(t * 1.8) * 1.5;
+    glintLight.position.z = 2;
 
     if (groundShadow) {
       const bobPhase = (Math.sin(t * 1.55) + 1) / 2;
@@ -286,6 +303,7 @@ export function mountPYNQCASTCoin(rootEl) {
     backGeo?.dispose();
     frontTexture?.dispose();
     backTexture?.dispose();
+    envTarget?.dispose();
     materials.forEach((material) => material.dispose());
     renderer?.dispose();
     coinStage.remove();
