@@ -206,7 +206,7 @@ export function mountPYNQCASTCoin(rootEl) {
   scene.background = null;
   pmremGenerator.dispose();
 
-  const ambient = new THREE.AmbientLight(0xffeedd, 3.0);
+  const ambient = new THREE.AmbientLight(0xffeedd, 1.2);
   scene.add(ambient);
 
   const keyLight = new THREE.PointLight(0xF05A50, 80, 14);
@@ -262,8 +262,12 @@ export function mountPYNQCASTCoin(rootEl) {
     depthWrite: true,
     side: THREE.FrontSide,
   });
-  const fillMaterial = new THREE.MeshBasicMaterial({
-    color: 0x0a0305,
+  const fillMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1a0508,
+    metalness: 0.9,
+    roughness: 0.05,
+    emissive: new THREE.Color('#000000'),
+    emissiveIntensity: 0.0,
     transparent: false,
     depthWrite: true,
   });
