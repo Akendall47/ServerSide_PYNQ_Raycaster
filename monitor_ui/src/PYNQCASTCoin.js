@@ -144,7 +144,6 @@ export function mountPYNQCASTCoin(rootEl) {
   });
   const faceMaterial = new THREE.MeshStandardMaterial({
     map: null,
-    color: 0xffffff,
     metalness: 0.85,
     roughness: 0.08,
     emissive: new THREE.Color('#ffffff'),
@@ -156,7 +155,6 @@ export function mountPYNQCASTCoin(rootEl) {
   });
   const backFaceMaterial = new THREE.MeshStandardMaterial({
     map: null,
-    color: 0xffffff,
     metalness: 0.85,
     roughness: 0.08,
     emissive: new THREE.Color('#ffffff'),
