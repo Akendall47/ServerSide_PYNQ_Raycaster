@@ -626,10 +626,21 @@ function renderMapButtons() {
 
 function renderViewModeButtons() {
   const el = document.getElementById('view-mode-btns');
-  el.innerHTML = `
-    <button class="control-btn ${_viewMode === 'map' ? 'active-view' : ''}" onclick="setViewMode('map')">Map Play</button>
-    <button class="control-btn ${_viewMode === 'orbit' ? 'active-view' : ''}" onclick="setViewMode('orbit')">Orbit Test</button>
-  `;
+  if (!el.dataset.initialized) {
+    el.innerHTML = `
+      <button id="viewmode-map" class="control-btn" type="button" onclick="setViewMode('map')">Map Play</button>
+      <button id="viewmode-orbit" class="control-btn" type="button" onclick="setViewMode('orbit')">Orbit Test</button>
+    `;
+    el.dataset.initialized = '1';
+  }
+  const mapBtn = document.getElementById('viewmode-map');
+  const orbitBtn = document.getElementById('viewmode-orbit');
+  if (mapBtn) {
+    mapBtn.classList.toggle('active-view', _viewMode === 'map');
+  }
+  if (orbitBtn) {
+    orbitBtn.classList.toggle('active-view', _viewMode === 'orbit');
+  }
 }
 
 function syncViewMode(mode) {
