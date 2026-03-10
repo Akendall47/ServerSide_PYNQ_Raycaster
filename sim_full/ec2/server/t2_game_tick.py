@@ -14,7 +14,9 @@
 #   t2_redis_io            — broadcast packet builder, Redis write helpers
 
 import asyncio
+import copy
 import json
+import math
 import os
 import queue
 import time
@@ -22,7 +24,7 @@ import threading
 
 import redis as redislib
 
-from t2_constants import CONTROL_CHANNEL
+from t2_constants import CONTROL_CHANNEL, MAP_TILE_SCALE, ORBIT_RADIUS, SPAWN_ANGLES
 from t2_map_loader import load_map, DEFAULT_MAP_PATH
 from game_logic.match_state import MatchState
 from t2_packet_handler import PacketHandler
@@ -33,6 +35,7 @@ from t2_redis_io import RedisIO
 _MAPS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pynq_full', 'ec2', 'maps')
 )
+_ORBIT_TEST_MAP_NAME = "orbit_test"
 
 
 class GameTick:
@@ -45,7 +48,11 @@ class GameTick:
         self.control_queue   = queue.SimpleQueue()
 
         self.map_state = load_map(DEFAULT_MAP_PATH)  # mutable dict; hot-swappable
+        self._selected_map = copy.deepcopy(self.map_state)
+        self._sim_view_mode = "map"
         self.state     = MatchState()
+        self.state.sim_view_mode = self._sim_view_mode
+        self.state.selected_map_name = self._selected_map.get("name", "")
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
 
         # Sub-modules wired up with callbacks so they stay decoupled
@@ -121,6 +128,8 @@ class GameTick:
             self.logic._force_end_flag = True
         elif cmd == "restart":
             self._reset_session("restart", arm_lockout=False)
+        elif cmd == "set_sim_view":
+            self._set_sim_view(str(data.get("view", "map")).lower())
         elif cmd == "set_ghost_count":
             count = int(data.get("count", 0))
             self.packets.set_ghost_count(count)
@@ -128,10 +137,44 @@ class GameTick:
             name = data.get("map", "chase")
             new_map = load_map(os.path.join(_MAPS_DIR, f"{name}.txt"))
             if new_map["width"] > 0:
-                self._swap_map(new_map)
+                self._selected_map = copy.deepcopy(new_map)
+                self.state.selected_map_name = self._selected_map.get("name", "")
+                if self._sim_view_mode == "map":
+                    self._swap_map(new_map)
 
     def _swap_map(self, new_map: dict):
         self._reset_session("map_changed", next_map=new_map, arm_lockout=False)
+
+    def _build_orbit_test_map(self) -> dict:
+        width = 32
+        height = 32
+        spawn_positions = [
+            (
+                round(ORBIT_RADIUS * math.cos(angle), 2),
+                round(ORBIT_RADIUS * math.sin(angle), 2),
+            )
+            for angle in SPAWN_ANGLES
+        ]
+        return {
+            "name": _ORBIT_TEST_MAP_NAME,
+            "width": width,
+            "height": height,
+            "tile_scale": MAP_TILE_SCALE,
+            "tiles": bytearray(width * height),
+            "bits": [],
+            "spawn_positions": spawn_positions,
+        }
+
+    def _set_sim_view(self, view: str):
+        target = "orbit" if view == "orbit" else "map"
+        if target == self._sim_view_mode:
+            return
+        self._sim_view_mode = target
+        self.state.sim_view_mode = target
+        if target == "orbit":
+            self._reset_session("sim_view_changed", next_map=self._build_orbit_test_map(), arm_lockout=False)
+        else:
+            self._reset_session("sim_view_changed", next_map=copy.deepcopy(self._selected_map), arm_lockout=False)
 
     def _drain_asyncio_queue(self, q: asyncio.Queue) -> int:
         drained = 0
@@ -168,6 +211,8 @@ class GameTick:
         for player in current_players:
             self.write_queue.put({"op": "del", "key": f"player:{player['player_id']}"})
         self.state.clear_match(arm_lockout=arm_lockout)
+        self.state.sim_view_mode = self._sim_view_mode
+        self.state.selected_map_name = self._selected_map.get("name", "")
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
         self.logic._force_end_flag = False
 

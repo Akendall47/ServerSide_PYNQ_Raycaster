@@ -492,6 +492,77 @@ def test_sim_restart_command_clears_players_and_backlog():
         assert game_tick.state.lockout_until is None
 
 
+def test_sim_view_switch_uses_orbit_runtime_map_but_keeps_selected_map():
+    with sim_import_context():
+        game_tick_mod = importlib.import_module("t2_game_tick")
+
+        packet_queue = asyncio.Queue()
+        broadcast_queue = asyncio.Queue()
+        write_queue = queue.SimpleQueue()
+        game_tick = game_tick_mod.GameTick(packet_queue, broadcast_queue, write_queue)
+
+        game_tick._apply_control_command({"cmd": "set_map", "map": "ghost_bits"})
+        assert game_tick._selected_map["name"] == "ghost_bits"
+        assert game_tick.state.selected_map_name == "ghost_bits"
+        assert game_tick.map_state["name"] == "ghost_bits"
+
+        game_tick._apply_control_command({"cmd": "set_sim_view", "view": "orbit"})
+        assert game_tick.state.sim_view_mode == "orbit"
+        assert game_tick.map_state["name"] == "orbit_test"
+        assert game_tick._selected_map["name"] == "ghost_bits"
+        assert game_tick.state.selected_map_name == "ghost_bits"
+
+        game_tick._apply_control_command({"cmd": "set_sim_view", "view": "map"})
+        assert game_tick.state.sim_view_mode == "map"
+        assert game_tick.map_state["name"] == "ghost_bits"
+        assert game_tick.state.selected_map_name == "ghost_bits"
+
+
+def test_sim_orbit_view_match_start_uses_orbit_spawns():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        game_tick_mod = importlib.import_module("t2_game_tick")
+
+        packet_queue = asyncio.Queue()
+        broadcast_queue = asyncio.Queue()
+        write_queue = queue.SimpleQueue()
+        game_tick = game_tick_mod.GameTick(packet_queue, broadcast_queue, write_queue)
+        game_tick.packets._on_match_start = lambda: None
+
+        game_tick._apply_control_command({"cmd": "set_map", "map": "ghost_bits"})
+        game_tick._apply_control_command({"cmd": "set_sim_view", "view": "orbit"})
+
+        game_tick.packets._process_packet({
+            "data": protocol.pack_node_packet(
+                protocol.PKT_REGISTER,
+                0,
+                -92.0,
+                -108.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": ("runner", 1),
+        })
+        game_tick.packets._process_packet({
+            "data": protocol.pack_node_packet(
+                protocol.PKT_REGISTER,
+                0,
+                92.0,
+                108.0,
+                0.0,
+                movement_mode=protocol.MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+            ),
+            "addr": ("tagger", 2),
+        })
+
+        assert game_tick.state.match_started is True
+        assert game_tick.map_state["name"] == "orbit_test"
+        assert game_tick.state.players[("runner", 1)]["x"] == game_tick.map_state["spawn_positions"][0][0]
+        assert game_tick.state.players[("runner", 1)]["y"] == game_tick.map_state["spawn_positions"][0][1]
+        assert game_tick.state.players[("tagger", 2)]["x"] == game_tick.map_state["spawn_positions"][1][0]
+        assert game_tick.state.players[("tagger", 2)]["y"] == game_tick.map_state["spawn_positions"][1][1]
+
+
 def test_sim_timeout_pauses_match_instead_of_aborting():
     with sim_import_context():
         match_state_mod = importlib.import_module("game_logic.match_state")

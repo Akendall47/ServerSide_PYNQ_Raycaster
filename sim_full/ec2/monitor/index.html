@@ -630,15 +630,30 @@ function renderViewModeButtons() {
   `;
 }
 
-function setViewMode(mode) {
+function syncViewMode(mode) {
   _viewMode = (mode === 'orbit') ? 'orbit' : 'map';
   _showMap = _viewMode === 'map';
+  if (!_showMap) {
+    mapData = null;
+  }
   renderViewModeButtons();
   updateOrbitModeControls();
-  updateCanvasLabel();
   if (_showMap) {
-    enforceMapManualModes();
     loadMap(_activeMapName);
+  } else {
+    updateCanvasLabel();
+  }
+}
+
+function setViewMode(mode) {
+  const target = (mode === 'orbit') ? 'orbit' : 'map';
+  if (target === _viewMode) return;
+  syncViewMode(target);
+  sendControl(`set_sim_view:${target}`, `sim view ${target}`);
+  if (target === 'map') {
+    enforceMapManualModes();
+  } else {
+    enforceOrbitAutoModes();
   }
 }
 
@@ -657,12 +672,17 @@ function enforceMapManualModes() {
   requestNodeMode(2, 'manual', true);
 }
 
+function enforceOrbitAutoModes() {
+  requestNodeMode(1, 'auto', true);
+  requestNodeMode(2, 'auto', true);
+}
+
 function updateOrbitModeControls() {
   const orbitControls = document.getElementById('orbit-mode-controls');
   const note = document.getElementById('view-mode-note');
   orbitControls.hidden = _viewMode !== 'orbit';
   note.textContent = _viewMode === 'orbit'
-    ? 'Orbit test exposes per-node auto/manual controls. Use it only for movement smoke tests.'
+    ? 'Orbit test is a simulator smoke test. Nodes default to auto orbit, but you can override them below.'
     : 'Map play is the default and forces both simulator nodes back to manual control.';
 }
 
@@ -676,19 +696,24 @@ function updateCanvasLabel() {
   } else if (_showMap) {
     el.textContent = `map play · ${_activeMapName} · loading map…`;
   } else {
-    el.textContent = 'orbit test · auto/manual enabled · tag radius 20u';
+    const selectedMap = latestState?.selected_map || _activeMapName;
+    el.textContent = `orbit test · selected map ${selectedMap} parked · nodes default auto · 50u radius`;
   }
 }
 
 function updateMapSelector(activeMap) {
-  if (!activeMap || activeMap === _activeMapName) return;
+  if (!activeMap || activeMap === 'orbit_test' || activeMap === _activeMapName) return;
   _activeMapName = activeMap;
   renderMapButtons();
-  loadMap(activeMap);
+  if (_showMap) {
+    loadMap(activeMap);
+  }
 }
 
 function selectMap(name) {
-  setViewMode('map');
+  if (_viewMode !== 'map') {
+    setViewMode('map');
+  }
   sendControl(`set_map:${name}`, `map → ${name}`);
   _activeMapName = name;
   renderMapButtons();
@@ -1281,7 +1306,6 @@ function connect() {
     loadMapList();
     renderViewModeButtons();
     updateOrbitModeControls();
-    enforceMapManualModes();
   };
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
@@ -1299,6 +1323,7 @@ function connect() {
       for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
     }
     latestState = state;
+    syncViewMode(state.sim_view_mode || 'map');
     if (!replayState.active) updatePlayers(state.players);
     updateNodeLinks(state.players);
     updateBitsPanel(state);
@@ -1308,7 +1333,9 @@ function connect() {
     updateMatches(state.matches);
     updateMatchState(state.match);
     updateEvents(state.events);
-    if (state.active_map) updateMapSelector(state.active_map);
+    if (state.selected_map || state.active_map) {
+      updateMapSelector(state.selected_map || state.active_map);
+    }
     wsUpdateCount++;
     const now = performance.now();
     if (now - wsLastTime >= 1000) {

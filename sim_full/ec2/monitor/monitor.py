@@ -316,6 +316,11 @@ def handle_control_command(cmd: str):
         r.publish("game:control", payload)
         _active_map = map_name
         _service_message = f"map → {map_name} sent"
+    elif cmd.startswith("set_sim_view:"):
+        view_name = cmd[len("set_sim_view:"):]
+        payload = json.dumps({"cmd": "set_sim_view", "view": view_name})
+        r.publish("game:control", payload)
+        _service_message = f"sim view → {view_name} sent"
     else:
         _service_message = f"unknown command: {cmd}"
 
@@ -446,6 +451,8 @@ def collect_state():
     game_raw  = redis_rows[9]
     game_mode = int(game_raw.get("game_mode", 0)) if game_raw else 0
     bits_mask = int(game_raw.get("bits_mask", 0xFFFF)) if game_raw else 0xFFFF
+    sim_view_mode = (game_raw.get("sim_view_mode") or "map") if game_raw else "map"
+    selected_map = (game_raw.get("selected_map") or _active_map) if game_raw else _active_map
     match_started = bool(_as_int(game_raw.get("match_started", 0), 0)) if game_raw else False
     match_ended = bool(_as_int(game_raw.get("match_ended", 0), 0)) if game_raw else False
     match_paused = bool(_as_int(game_raw.get("match_paused", 0), 0)) if game_raw else False
@@ -523,6 +530,8 @@ def collect_state():
         "bits":       bits_positions,      # [[world_x, world_y], ...] from match_start
         "bits_mask":  bits_mask,           # bitmask of active bits this tick
         "active_map": active_map,          # name of the currently loaded map
+        "selected_map": selected_map,      # chosen real map even when orbit is active
+        "sim_view_mode": sim_view_mode,
         "match": {
             "started": match_started,
             "ended": match_ended,

@@ -43,12 +43,16 @@ MAP_CHANGE_REJOIN_DELAY_S = 0.25
 TICK_HZ      = 20
 TICK_INTERVAL = 1.0 / TICK_HZ
 ARENA_RADIUS = 50.0
+ORBIT_ROTATION_SPEED = 0.07
+MAP_ROTATION_SPEED_BASE = 0.05
+MAP_ROTATION_SPEED_STEP = 0.06
 MANUAL_TURN_STEP = 0.2
 MANUAL_MOVE_STEP = 4.0
 MAP_TILE_SCALE = 8
 PLAYER_COLLISION_RADIUS = 2.5
 SPAWN_CLEARANCE_RADIUS = 3.25
 DEFAULT_MAP_NAME = "chase"
+ORBIT_TEST_MAP_NAME = "orbit_test"
 MAPS_DIR = Path(__file__).resolve().parents[2] / "pynq_full" / "ec2" / "maps"
 SPAWN_ANGLES = [0.0, math.pi, math.pi / 2, 3 * math.pi / 2, math.pi / 4]
 AUTHORITATIVE_STATE_TIMEOUT_S = 0.4
@@ -56,6 +60,8 @@ SPAWN_MARKERS = {str(index): index - 1 for index in range(1, 6)}
 
 
 def load_local_map(name: str):
+    if name == ORBIT_TEST_MAP_NAME:
+        return build_orbit_test_map()
     path = MAPS_DIR / f"{name}.txt"
     rows = []
     try:
@@ -85,6 +91,25 @@ def load_local_map(name: str):
         "tile_scale": MAP_TILE_SCALE,
         "tiles": tiles,
         "spawn_positions": spawn_positions,
+    }
+
+
+def build_orbit_test_map():
+    width = 32
+    height = 32
+    return {
+        "name": ORBIT_TEST_MAP_NAME,
+        "width": width,
+        "height": height,
+        "tile_scale": MAP_TILE_SCALE,
+        "tiles": bytearray(width * height),
+        "spawn_positions": [
+            (
+                round(ARENA_RADIUS * math.cos(angle), 2),
+                round(ARENA_RADIUS * math.sin(angle), 2),
+            )
+            for angle in SPAWN_ANGLES
+        ],
     }
 
 
@@ -316,21 +341,24 @@ def apply_control_command(tag: str, command: dict, current_mode: str, node_index
     if target_index is not None:
         try:
             if int(target_index) != node_index:
-                return current_mode, False, None
+                return current_mode, False, None, None
         except (TypeError, ValueError):
-            return current_mode, False, None
+            return current_mode, False, None, None
 
     cmd = command.get("cmd")
     if cmd == "set_mode":
         requested = normalize_mode(str(command.get("mode", "")).lower())
         if requested in ("auto", "manual") and requested != current_mode:
             print(f"{tag} mode switch requested: {current_mode} -> {requested}")
-            return requested, False, None
+            return requested, False, None, None
     elif cmd == "restart":
-        return current_mode, True, None
+        return current_mode, True, None, None
     elif cmd == "set_map":
-        return current_mode, False, str(command.get("map", DEFAULT_MAP_NAME))
-    return current_mode, False, None
+        return current_mode, False, str(command.get("map", DEFAULT_MAP_NAME)), None
+    elif cmd == "set_sim_view":
+        requested_view = str(command.get("view", "map")).lower()
+        return current_mode, False, None, ("orbit" if requested_view == "orbit" else "map")
+    return current_mode, False, None, None
 
 
 def run_node(server_ip, server_port, player_id, node_index,
@@ -338,11 +366,14 @@ def run_node(server_ip, server_port, player_id, node_index,
     server_addr = (server_ip, server_port)
 
     radius         = ARENA_RADIUS
-    rotation_speed = 0.05 + node_index * 0.06  # runner=0.05, tagger=0.11 rad/tick
+    map_rotation_speed = MAP_ROTATION_SPEED_BASE + node_index * MAP_ROTATION_SPEED_STEP
     shoot_freq     = 20  + node_index * 10
-    current_map_name = DEFAULT_MAP_NAME
+    selected_map_name = DEFAULT_MAP_NAME
+    sim_view_mode = "map"
+    current_map_name = selected_map_name
     map_state = load_local_map(current_map_name)
     x, y, angle = spawn_pose(map_state, node_index, radius)
+    orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
 
     tag = f"[NODE {player_id}]"
 
@@ -393,14 +424,33 @@ def run_node(server_ip, server_port, player_id, node_index,
                 manual_controller = None
             normalized_mode = "auto"
 
-    def load_selected_map(next_map: str):
-        nonlocal current_map_name, map_state, x, y, angle
-        nonlocal have_authoritative_state, last_authoritative_state_at
-        current_map_name = next_map
+    def load_runtime_map():
+        nonlocal current_map_name, map_state, x, y, angle, orbit_phase
+        current_map_name = ORBIT_TEST_MAP_NAME if sim_view_mode == "orbit" else selected_map_name
         map_state = load_local_map(current_map_name)
         x, y, angle = spawn_pose(map_state, node_index, radius)
+        orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
+
+    def load_selected_map(next_map: str):
+        nonlocal selected_map_name
+        nonlocal have_authoritative_state, last_authoritative_state_at
+        selected_map_name = next_map
+        load_runtime_map()
         have_authoritative_state = False
         last_authoritative_state_at = 0.0
+
+    def switch_sim_view(next_view: str):
+        nonlocal sim_view_mode
+        nonlocal have_authoritative_state, last_authoritative_state_at
+        target_view = "orbit" if next_view == "orbit" else "map"
+        if target_view == sim_view_mode:
+            return False
+        sim_view_mode = target_view
+        load_runtime_map()
+        have_authoritative_state = False
+        last_authoritative_state_at = 0.0
+        print(f"{tag} sim view switched to {sim_view_mode}")
+        return True
 
     try:
         if manual_controller:
@@ -419,11 +469,13 @@ def run_node(server_ip, server_port, player_id, node_index,
                             command = json.loads(msg["data"])
                         except Exception:
                             continue
-                        next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
+                        next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
                         switch_mode(next_mode)
                         if next_map:
                             load_selected_map(next_map)
-                            print(f"{tag} map switched to {current_map_name}")
+                            print(f"{tag} map selected as {selected_map_name}")
+                        if next_view:
+                            switch_sim_view(next_view)
                         if should_restart:
                             rejoin_at = time.monotonic() + RESTART_DELAY_S
                             print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
@@ -437,11 +489,13 @@ def run_node(server_ip, server_port, player_id, node_index,
                             except Exception:
                                 command = None
                             if command:
-                                next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
+                                next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
                                 switch_mode(next_mode)
                                 if next_map:
                                     load_selected_map(next_map)
-                                    print(f"{tag} map switched to {current_map_name}")
+                                    print(f"{tag} map selected as {selected_map_name}")
+                                if next_view:
+                                    switch_sim_view(next_view)
                                 if should_restart:
                                     rejoin_at = time.monotonic() + RESTART_DELAY_S
                                     print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
@@ -456,6 +510,7 @@ def run_node(server_ip, server_port, player_id, node_index,
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.settimeout(0.05)
                 x, y, angle = spawn_pose(map_state, node_index, radius)
+                orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
                 pkt = pack_node_packet(
                     PKT_REGISTER, seq=0,
                     x=x, y=y, angle=angle, flags=0,
@@ -485,13 +540,18 @@ def run_node(server_ip, server_port, player_id, node_index,
                         command = json.loads(msg["data"])
                     except Exception:
                         continue
-                    next_mode, should_restart, next_map = apply_control_command(tag, command, normalized_mode, node_index)
+                    next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
                     switch_mode(next_mode)
                     if next_map:
                         load_selected_map(next_map)
                         rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
                         playing = False
-                        print(f"{tag} map switched to {current_map_name} — rejoining")
+                        print(f"{tag} map selected as {selected_map_name} — rejoining")
+                        break
+                    if next_view and switch_sim_view(next_view):
+                        rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
+                        playing = False
+                        print(f"{tag} sim view changed to {sim_view_mode} — rejoining")
                         break
                     if should_restart:
                         rejoin_at = time.monotonic() + RESTART_DELAY_S
@@ -521,6 +581,8 @@ def run_node(server_ip, server_port, player_id, node_index,
                                 x = p["x"]
                                 y = p["y"]
                                 angle = p["angle"]
+                                if sim_view_mode == "orbit" and (abs(x) > 0.01 or abs(y) > 0.01):
+                                    orbit_phase = math.atan2(y, x)
                                 have_authoritative_state = True
                                 last_authoritative_state_at = time.monotonic()
                             if p["flags"] & FLAG_MATCH_END:
@@ -554,13 +616,19 @@ def run_node(server_ip, server_port, player_id, node_index,
                 actions = manual_controller.read_actions() if manual_controller else []
                 x, y, angle, shoot_now = apply_manual_actions(x, y, angle, actions, map_state)
                 input_flags = client_input_flags(shooting=shoot_now)
+            elif sim_view_mode == "orbit":
+                orbit_phase = (orbit_phase + ORBIT_ROTATION_SPEED) % (math.pi * 2.0)
+                x = radius * math.cos(orbit_phase)
+                y = radius * math.sin(orbit_phase)
+                angle = orbit_phase + (math.pi / 2.0)
+                input_flags = client_input_flags(shooting=(tick % shoot_freq == 0))
             else:
-                move_speed = radius * rotation_speed
+                move_speed = radius * map_rotation_speed
                 desired_x = x + move_speed * math.cos(angle)
                 desired_y = y + move_speed * math.sin(angle)
                 next_x, next_y = resolve_move(map_state, x, y, desired_x, desired_y)
                 if next_x == x and next_y == y:
-                    angle += rotation_speed * 2.5
+                    angle += map_rotation_speed * 2.5
                     desired_x = x + move_speed * math.cos(angle)
                     desired_y = y + move_speed * math.sin(angle)
                     next_x, next_y = resolve_move(map_state, x, y, desired_x, desired_y)

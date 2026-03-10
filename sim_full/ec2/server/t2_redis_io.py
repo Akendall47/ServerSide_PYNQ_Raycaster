@@ -78,6 +78,8 @@ class RedisIO:
             "match_started":     int(self.state.match_started),
             "match_ended":       int(self.state.match_ended),
             "match_paused":      int(self.state.match_paused),
+            "sim_view_mode":     getattr(self.state, "sim_view_mode", "map"),
+            "selected_map":      getattr(self.state, "selected_map_name", self.map_state.get("name", "")),
             "pause_reason":      self.state.pause_reason or "",
             "paused_player_ids": json.dumps(self.state.paused_player_ids),
             "pause_remaining_s": "" if pause_remaining_s is None else round(pause_remaining_s, 2),
