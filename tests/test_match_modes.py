@@ -754,7 +754,7 @@ def test_sim_ghosts_steer_without_crossing_walls():
         )
 
         positions = []
-        for _ in range(6):
+        for _ in range(18):
             logic._move_ghosts()
             ghost = state.players["ghost:1"]
             positions.append((ghost["x"], ghost["y"]))

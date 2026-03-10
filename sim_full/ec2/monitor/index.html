@@ -189,6 +189,12 @@
     gap: 6px;
     margin-top: 8px;
   }
+  .control-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
   .control-btn {
     padding: 6px 10px;
     background: #13111f;
@@ -205,6 +211,28 @@
   .control-btn.start { border-color: #00ff8844; color: #baffd8; }
   .control-btn.stop  { border-color: #ff666644; color: #ffd0d0; }
   .control-btn.restart { border-color: #ffaa0044; color: #ffe0a6; }
+  .control-btn.active-view { border-color: #66ccff66; color: #d7f3ff; background: #10192a; }
+  .node-link {
+    font-size: 10px;
+    color: #665a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .bits-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: #14111f;
+    border: 1px solid #2a2040;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .bits-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #66ccff 0%, #ffdd00 100%);
+    transition: width 0.15s ease;
+  }
 
   table { width: 100%; border-collapse: collapse; }
   th { color: #443a66; font-weight: normal; text-align: left; padding-bottom: 4px; font-size: 11px; }
@@ -432,15 +460,25 @@
         <button class="control-btn restart" onclick="sendControl('restart', 'start match')">Start Match</button>
         <button class="control-btn stop" onclick="sendControl('force_end', 'force end match')">Force End Match</button>
       </div>
-      <div class="metric-note" style="margin-top:8px">Node 1</div>
-      <div class="control-stack">
-        <button class="control-btn start" onclick="sendControl('node1_auto', 'node 1 auto mode')">P1 Auto</button>
-        <button class="control-btn restart" onclick="sendControl('node1_manual', 'node 1 manual mode')">P1 Manual</button>
-      </div>
-      <div class="metric-note" style="margin-top:8px">Node 2</div>
-      <div class="control-stack">
-        <button class="control-btn start" onclick="sendControl('node2_auto', 'node 2 auto mode')">P2 Auto</button>
-        <button class="control-btn restart" onclick="sendControl('node2_manual', 'node 2 manual mode')">P2 Manual</button>
+      <div class="metric-note" style="margin-top:8px">View Mode</div>
+      <div class="control-pair" id="view-mode-btns"></div>
+      <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
+      <div class="metric-note" style="margin-top:8px">Node Links</div>
+      <div class="metric-row"><span>P1</span><span id="node1-link" class="node-link">offline · manual</span></div>
+      <div class="metric-row"><span>P2</span><span id="node2-link" class="node-link">offline · manual</span></div>
+      <div id="orbit-mode-controls" hidden>
+        <div class="metric-note" style="margin-top:8px">Orbit Test Controls</div>
+        <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
+        <div class="metric-note" style="margin-top:8px">Node 1</div>
+        <div class="control-pair">
+          <button class="control-btn start" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
+          <button class="control-btn restart" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
+        </div>
+        <div class="metric-note" style="margin-top:8px">Node 2</div>
+        <div class="control-pair">
+          <button class="control-btn start" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
+          <button class="control-btn restart" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
+        </div>
       </div>
       <div class="metric-note" style="margin-top:8px">Ghost Taggers (simulates PYNQ menu)</div>
       <div class="control-stack">
@@ -454,14 +492,14 @@
         <span style="color:#333">loading maps...</span>
       </div>
       <div class="metric-note">EC2 services are controlled here. Node simulators still run locally via `dev.sh`, but their mode can be switched over Redis.</div>
-      <div class="metric-note">For manual mode, focus the relevant tmux pane before using arrow keys.</div>
+      <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
       <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
     </div>
 
   </div>
 
   <div class="canvas-panel">
-    <span class="canvas-label" id="canvas-label">fixed world · orbit 50u · tag radius 20u</span>
+    <span class="canvas-label" id="canvas-label">map play · loading map…</span>
     <canvas id="arena" width="480" height="480"></canvas>
   </div>
 
@@ -474,6 +512,16 @@
         <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th></tr></thead>
         <tbody id="player-tbody"></tbody>
       </table>
+    </div>
+
+    <div class="panel">
+      <h2>Bits</h2>
+      <div class="metric-row"><span>mode</span><span id="bits-mode">—</span></div>
+      <div class="metric-row"><span>remaining</span><span id="bits-remaining">—</span></div>
+      <div class="metric-row"><span>collected</span><span id="bits-collected">—</span></div>
+      <div class="metric-row"><span>progress</span><span id="bits-progress">—</span></div>
+      <div class="bits-track"><div class="bits-fill" id="bits-fill"></div></div>
+      <div class="metric-note" id="bits-note">runner wins by clearing every bit in chase_bits mode.</div>
     </div>
 
     <!-- Redis -->
@@ -537,7 +585,9 @@ const FLAG_GHOST     = 0x08;
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
 let _activeMapName = 'chase';
-let _showMap = true;  // toggle between tile map view and legacy orbit view
+let _showMap = true;  // map play is the default; orbit view is a sim-only test tool
+let _viewMode = 'map';
+const requestedNodeModes = { 1: 'manual', 2: 'manual' };
 
 async function loadMap(name = 'chase') {
   try {
@@ -569,24 +619,64 @@ function renderMapButtons() {
     <button id="mapbtn-${name}"
       class="control-btn${name === _activeMapName ? ' start' : ''}"
       onclick="selectMap('${name}')">${name}</button>
-  `).join('') + `
-    <button class="control-btn restart" onclick="toggleMapView()"
-      id="map-toggle-btn">${_showMap ? 'Orbit view' : 'Map view'}</button>
+  `).join('');
+}
+
+function renderViewModeButtons() {
+  const el = document.getElementById('view-mode-btns');
+  el.innerHTML = `
+    <button class="control-btn ${_viewMode === 'map' ? 'active-view' : ''}" onclick="setViewMode('map')">Map Play</button>
+    <button class="control-btn ${_viewMode === 'orbit' ? 'active-view' : ''}" onclick="setViewMode('orbit')">Orbit Test</button>
   `;
 }
 
-function toggleMapView() {
-  _showMap = !_showMap;
-  renderMapButtons();
+function setViewMode(mode) {
+  _viewMode = (mode === 'orbit') ? 'orbit' : 'map';
+  _showMap = _viewMode === 'map';
+  renderViewModeButtons();
+  updateOrbitModeControls();
   updateCanvasLabel();
+  if (_showMap) {
+    enforceMapManualModes();
+    loadMap(_activeMapName);
+  }
+}
+
+function requestNodeMode(nodeId, mode, force = false) {
+  if (!force && requestedNodeModes[nodeId] === mode) {
+    updateNodeLinks(latestState?.players || []);
+    return;
+  }
+  requestedNodeModes[nodeId] = mode;
+  sendControl(`node${nodeId}_${mode}`, `node ${nodeId} ${mode} mode`);
+  updateNodeLinks(latestState?.players || []);
+}
+
+function enforceMapManualModes() {
+  requestNodeMode(1, 'manual', true);
+  requestNodeMode(2, 'manual', true);
+}
+
+function updateOrbitModeControls() {
+  const orbitControls = document.getElementById('orbit-mode-controls');
+  const note = document.getElementById('view-mode-note');
+  orbitControls.hidden = _viewMode !== 'orbit';
+  note.textContent = _viewMode === 'orbit'
+    ? 'Orbit test exposes per-node auto/manual controls. Use it only for movement smoke tests.'
+    : 'Map play is the default and forces both simulator nodes back to manual control.';
 }
 
 function updateCanvasLabel() {
   const el = document.getElementById('canvas-label');
   if (_showMap && mapData) {
-    el.textContent = `map: ${_activeMapName}  ${mapData.width}×${mapData.height} tiles · tag radius 20u`;
+    const totalBits = latestState?.bits?.length || 0;
+    const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
+    const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
+    el.textContent = `map play · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles · manual only${bitText}`;
+  } else if (_showMap) {
+    el.textContent = `map play · ${_activeMapName} · loading map…`;
   } else {
-    el.textContent = 'fixed world · orbit 50u · tag radius 20u';
+    el.textContent = 'orbit test · auto/manual enabled · tag radius 20u';
   }
 }
 
@@ -594,10 +684,11 @@ function updateMapSelector(activeMap) {
   if (!activeMap || activeMap === _activeMapName) return;
   _activeMapName = activeMap;
   renderMapButtons();
-  if (_showMap) loadMap(activeMap);
+  loadMap(activeMap);
 }
 
 function selectMap(name) {
+  setViewMode('map');
   sendControl(`set_map:${name}`, `map → ${name}`);
   _activeMapName = name;
   renderMapButtons();
@@ -638,6 +729,14 @@ function normalisePlayers(players) {
 
 function gameModeLabel(mode) {
   return Number(mode) === 1 ? 'chase_bits' : 'chase';
+}
+
+function countActiveBits(bitsMask, totalBits) {
+  let active = 0;
+  for (let i = 0; i < totalBits; i++) {
+    if ((bitsMask & (1 << i)) !== 0) active += 1;
+  }
+  return active;
 }
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
@@ -888,6 +987,35 @@ function updatePlayers(players) {
   });
 }
 
+function updateNodeLinks(players) {
+  const normalised = normalisePlayers(players);
+  [1, 2].forEach((nodeId) => {
+    const el = document.getElementById(`node${nodeId}-link`);
+    const connected = normalised.some((player) => player.id === nodeId);
+    const mode = requestedNodeModes[nodeId];
+    el.textContent = `${connected ? 'connected' : 'offline'} · ${mode}`;
+    el.style.color = connected ? '#baffd8' : '#665a8a';
+  });
+}
+
+function updateBitsPanel(state) {
+  const bits = state?.bits || [];
+  const total = bits.length;
+  const mode = gameModeLabel(state?.game_mode ?? 0);
+  const active = total ? countActiveBits(state?.bits_mask ?? 0, total) : 0;
+  const collected = total - active;
+  const progress = total ? Math.round((collected / total) * 100) : 0;
+
+  document.getElementById('bits-mode').textContent = total ? mode : 'inactive';
+  document.getElementById('bits-remaining').textContent = total ? `${active} / ${total}` : '—';
+  document.getElementById('bits-collected').textContent = total ? `${collected}` : '—';
+  document.getElementById('bits-progress').textContent = total ? `${progress}%` : '—';
+  document.getElementById('bits-fill').style.width = `${progress}%`;
+  document.getElementById('bits-note').textContent = total
+    ? `runner wins after clearing all ${total} bits. grey markers are already collected.`
+    : 'this map has no bit objective; it is pure chase/tag.';
+}
+
 function setReplayStatus(text) {
   document.getElementById('replay-status').textContent = text;
 }
@@ -1108,7 +1236,11 @@ function updateEvents(events) {
     const type = ev.event || 'unknown';
     let text = type;
     if (type === 'player_tagged') text = `P${ev.player_id} tagged  (dist ${ev.dist != null ? (+ev.dist).toFixed(1) : '?'}u)`;
-    else if (type === 'bit_collected') text = `bit ${ev.bit_id ?? '?'} collected  (mask ${(ev.bits_mask ?? 0).toString(16)})`;
+    else if (type === 'bit_collected') {
+      const totalBits = latestState?.bits?.length || 0;
+      const remaining = totalBits ? countActiveBits(ev.bits_mask ?? 0, totalBits) : '?';
+      text = `bit ${ev.bit_id ?? '?'} collected  (${remaining} left)`;
+    }
     else if (type === 'match_start') {
       const humans = ev.human_players ?? ev.players ?? '?';
       const ghosts = ev.ghost_count ?? 0;
@@ -1147,6 +1279,9 @@ function connect() {
     statusEl.className   = 'connected';
     if (!mapData) loadMap('chase');
     loadMapList();
+    renderViewModeButtons();
+    updateOrbitModeControls();
+    enforceMapManualModes();
   };
   ws.onmessage = (evt) => {
     const state = JSON.parse(evt.data);
@@ -1165,6 +1300,8 @@ function connect() {
     }
     latestState = state;
     if (!replayState.active) updatePlayers(state.players);
+    updateNodeLinks(state.players);
+    updateBitsPanel(state);
     updateRedis(state.redis);
     updateServices(state.services);
     updatePipeline(state.pipeline);
@@ -1186,6 +1323,8 @@ function connect() {
   };
   ws.onerror = () => ws.close();
 }
+renderViewModeButtons();
+updateOrbitModeControls();
 connect();
 </script>
 </body>

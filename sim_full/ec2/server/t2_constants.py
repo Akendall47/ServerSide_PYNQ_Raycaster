@@ -12,7 +12,7 @@ TAGS_TO_WIN      = 2      # runner must be tagged this many times to end the mat
 # Spawned when both humans declare RUNNER — max 3 to keep the match fair.
 
 MAX_GHOSTS       = 3
-GHOST_SPEED      = 1.2    # world units per tick (~24 wu/s at 20 Hz — clearly slower than player)
+GHOST_SPEED      = 0.6    # world units per tick (~12 wu/s at 20 Hz — intentionally slow early-game pressure)
 
 # ── Bits (GAME_MODE_CHASE_BITS) ───────────────────────────────────────────────
 

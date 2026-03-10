@@ -32,7 +32,8 @@ from protocol import (
     FLAG_TAGGED, FLAG_MATCH_END, FLAG_GHOST,
     HEADER_SIZE,
     # functions
-    client_input_flags, pack_node_packet, unpack_header, unpack_map_packet, unpack_server_packet,
+    client_input_flags, pack_node_packet, unpack_bits_init_packet, unpack_header,
+    unpack_map_packet, unpack_server_packet,
 )
 
 # ── Display constants ─────────────────────────────────────────────────────────
@@ -268,6 +269,7 @@ class PYNQNode:
         self.movement_mode = MOVEMENT_MODE_INTENT_WITH_PREDICTION
         self.game_mode   = 0
         self.bits_mask   = 0xFFFF
+        self.bits        = []
 
         # Map state
         self.map_w      = 0
@@ -313,7 +315,15 @@ class PYNQNode:
             self.hw.write_map_to_bram(self.map_w, self.map_h, self.tiles)
 
         elif pkt_type == PKT_BITS_INIT:
-            # Bits only affect HUD / gameplay metadata today; the node can ignore the payload safely.
+            raw_bits = unpack_bits_init_packet(data)
+            if raw_bits:
+                max_id = max(bit_id for bit_id, _, _ in raw_bits)
+                self.bits = [None] * (max_id + 1)
+                for bit_id, bit_x, bit_y in raw_bits:
+                    self.bits[bit_id] = (bit_x, bit_y)
+            else:
+                self.bits = []
+            print(f"[Node] received {len(raw_bits)} bit positions")
             return
 
         elif pkt_type == PKT_GAME_STATE:
