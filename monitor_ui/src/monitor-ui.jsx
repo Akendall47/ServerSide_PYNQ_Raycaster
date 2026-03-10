@@ -4,97 +4,8 @@ import * as THREE from 'three';
 import { monitorMarkup } from './templates.generated.js';
 
 const LEGACY_SCRIPTS = ['/monitor-state.js', '/monitor-render.js', '/monitor-app.js'];
-const ABOUT_LOGO_PATH = '/pynqcast-logo.svg';
+const ABOUT_LOGO_PATH = '/PNG_LOGO.png';
 const TAU = Math.PI * 2;
-
-function buildCoinFaceTexture(sourceImage, { size = 256, reverse = false } = {}) {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  const center = size / 2;
-  const outerRadius = size * 0.46;
-  const midRadius = size * 0.415;
-  const innerRadius = size * 0.335;
-  const logoRadius = size * 0.255;
-
-  ctx.clearRect(0, 0, size, size);
-  ctx.imageSmoothingEnabled = false;
-
-  // Chunky concentric bands read better than a smooth gradient at low res.
-  ctx.fillStyle = '#24080a';
-  ctx.beginPath();
-  ctx.arc(center, center, outerRadius, 0, TAU);
-  ctx.fill();
-
-  ctx.fillStyle = '#88262b';
-  ctx.beginPath();
-  ctx.arc(center, center, midRadius, 0, TAU);
-  ctx.fill();
-
-  ctx.fillStyle = reverse ? '#c84245' : '#f05a50';
-  ctx.beginPath();
-  ctx.arc(center, center, innerRadius, 0, TAU);
-  ctx.fill();
-
-  ctx.strokeStyle = reverse ? '#f6c2b9' : '#ffd5c6';
-  ctx.lineWidth = Math.round(size * 0.028);
-  ctx.beginPath();
-  ctx.arc(center, center, size * 0.365, 0, TAU);
-  ctx.stroke();
-
-  ctx.fillStyle = reverse ? 'rgba(255, 213, 198, 0.12)' : 'rgba(255, 213, 198, 0.18)';
-  ctx.beginPath();
-  ctx.arc(center - size * 0.08, center - size * 0.1, size * 0.13, 0, TAU);
-  ctx.fill();
-
-  if (sourceImage) {
-    const maxLogoWidth = size * 0.46;
-    const maxLogoHeight = size * 0.28;
-    const scale = Math.min(maxLogoWidth / sourceImage.width, maxLogoHeight / sourceImage.height);
-    const drawWidth = Math.max(1, Math.round(sourceImage.width * scale));
-    const drawHeight = Math.max(1, Math.round(sourceImage.height * scale));
-    const dx = Math.round(center - drawWidth / 2);
-    const dy = Math.round(center - drawHeight / 2);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(center, center, logoRadius, 0, TAU);
-    ctx.clip();
-    if (reverse) {
-      ctx.translate(size, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(sourceImage, size - dx - drawWidth, dy, drawWidth, drawHeight);
-    } else {
-      ctx.drawImage(sourceImage, dx, dy, drawWidth, drawHeight);
-    }
-    ctx.restore();
-  }
-
-  // Pixel notches around the rim help the disc read as a collectible token.
-  ctx.fillStyle = reverse ? '#f9d4c8' : '#fff0e5';
-  for (let i = 0; i < 10; i += 1) {
-    const angle = (i / 10) * TAU;
-    const x = center + Math.cos(angle) * size * 0.34;
-    const y = center + Math.sin(angle) * size * 0.34;
-    ctx.fillRect(Math.round(x - 3), Math.round(y - 3), 6, 6);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  if ('colorSpace' in texture) {
-    texture.colorSpace = THREE.SRGBColorSpace;
-  }
-  texture.needsUpdate = true;
-  return texture;
-}
 
 function loadLegacyScripts() {
   if (window.__monitorLegacyBootstrapped) return;
@@ -145,11 +56,14 @@ function mountAboutLogoScene(rootEl) {
   let scene = null;
   let camera = null;
   let coinGroup = null;
-  let coin = null;
+  let barrel = null;
+  let frontFace = null;
+  let backFace = null;
   let sparks = null;
   let frontTexture = null;
   let backTexture = null;
-  let geometry = null;
+  let barrelGeometry = null;
+  let faceGeometry = null;
   let sparkGeometry = null;
   let materials = [];
 
@@ -199,46 +113,23 @@ function mountAboutLogoScene(rootEl) {
   camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.set(0, 0.06, 4.9);
 
-  scene.add(new THREE.AmbientLight(0xffe7d8, 0.72));
+  const ambient = new THREE.AmbientLight(0xffeedd, 0.4);
+  scene.add(ambient);
 
-  const keyLight = new THREE.PointLight(0xf05a50, 8.5, 14);
-  keyLight.position.set(2.5, 1.7, 4.2);
+  const keyLight = new THREE.PointLight(0xF05A50, 3.5, 14);
+  keyLight.position.set(2.5, 3, 3);
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0x4d8cff, 2.4, 12);
-  fillLight.position.set(-2.8, -0.3, 2.8);
+  const fillLight = new THREE.PointLight(0x4466cc, 0.9, 12);
+  fillLight.position.set(-3, -1, 2);
   scene.add(fillLight);
 
-  const rimLight = new THREE.PointLight(0xffb08e, 4.8, 12);
-  rimLight.position.set(0, -1.9, -2.4);
+  const rimLight = new THREE.PointLight(0xFF7766, 2.2, 10);
+  rimLight.position.set(0, -2.5, -3);
   scene.add(rimLight);
 
-  frontTexture = buildCoinFaceTexture(null, { reverse: false });
-  backTexture = buildCoinFaceTexture(null, { reverse: true });
-
-  const logoImage = new Image();
-  logoImage.onload = () => {
-    if (frontTexture) {
-      frontTexture.dispose();
-    }
-    if (backTexture) {
-      backTexture.dispose();
-    }
-    frontTexture = buildCoinFaceTexture(logoImage, { reverse: false });
-    backTexture = buildCoinFaceTexture(logoImage, { reverse: true });
-    if (coin?.material?.[1]) {
-      coin.material[1].map = frontTexture;
-      coin.material[1].needsUpdate = true;
-    }
-    if (coin?.material?.[2]) {
-      coin.material[2].map = backTexture;
-      coin.material[2].needsUpdate = true;
-    }
-    renderFrame();
-  };
-  logoImage.src = ABOUT_LOGO_PATH;
-
-  geometry = new THREE.CylinderGeometry(1.14, 1.14, 0.34, 48, 1, false);
+  barrelGeometry = new THREE.CylinderGeometry(1.14, 1.14, 0.34, 48, 1, true);
+  faceGeometry = new THREE.CircleGeometry(1.14, 48);
 
   const edgeMaterial = new THREE.MeshStandardMaterial({
     color: 0x7d2429,
@@ -249,20 +140,24 @@ function mountAboutLogoScene(rootEl) {
     flatShading: true,
   });
   const faceMaterial = new THREE.MeshStandardMaterial({
-    map: frontTexture,
+    map: null,
     metalness: 0.28,
     roughness: 0.38,
     emissive: new THREE.Color('#1e090a'),
     emissiveIntensity: 0.18,
     flatShading: true,
+    transparent: true,
+    alphaTest: 0.1,
   });
   const backFaceMaterial = new THREE.MeshStandardMaterial({
-    map: backTexture,
+    map: null,
     metalness: 0.26,
     roughness: 0.42,
     emissive: new THREE.Color('#160506'),
     emissiveIntensity: 0.12,
     flatShading: true,
+    transparent: true,
+    alphaTest: 0.1,
   });
   const sparkMaterial = new THREE.PointsMaterial({
     color: 0xff9488,
@@ -283,9 +178,49 @@ function mountAboutLogoScene(rootEl) {
   coinGroup.rotation.z = 0.05;
   scene.add(coinGroup);
 
-  coin = new THREE.Mesh(geometry, materials.slice(0, 3));
-  coin.rotation.x = Math.PI / 2;
-  coinGroup.add(coin);
+  barrel = new THREE.Mesh(barrelGeometry, edgeMaterial);
+  barrel.rotation.x = Math.PI / 2;
+  coinGroup.add(barrel);
+
+  frontFace = new THREE.Mesh(faceGeometry, faceMaterial);
+  frontFace.position.z = 0.171;
+  coinGroup.add(frontFace);
+
+  backFace = new THREE.Mesh(faceGeometry, backFaceMaterial);
+  backFace.position.z = -0.171;
+  backFace.rotation.y = Math.PI;
+  coinGroup.add(backFace);
+
+  const textureLoader = new THREE.TextureLoader();
+  frontTexture = textureLoader.load(ABOUT_LOGO_PATH, () => {
+    frontTexture.magFilter = THREE.NearestFilter;
+    frontTexture.minFilter = THREE.NearestFilter;
+    frontTexture.generateMipmaps = false;
+    if ('colorSpace' in frontTexture) {
+      frontTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+    frontTexture.center.set(0.5, 0.5);
+    frontTexture.repeat.set(1, 1);
+    frontTexture.needsUpdate = true;
+
+    backTexture = frontTexture.clone();
+    backTexture.magFilter = THREE.NearestFilter;
+    backTexture.minFilter = THREE.NearestFilter;
+    backTexture.generateMipmaps = false;
+    if ('colorSpace' in backTexture) {
+      backTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+    backTexture.center.set(0.5, 0.5);
+    backTexture.repeat.set(-1, 1);
+    backTexture.offset.set(1, 0);
+    backTexture.needsUpdate = true;
+
+    faceMaterial.map = frontTexture;
+    faceMaterial.needsUpdate = true;
+    backFaceMaterial.map = backTexture;
+    backFaceMaterial.needsUpdate = true;
+    renderFrame();
+  });
 
   sparkGeometry = new THREE.BufferGeometry();
   const sparkCount = 28;
@@ -320,8 +255,8 @@ function mountAboutLogoScene(rootEl) {
       sparks.rotation.y = -spin * 0.32;
     }
 
-    keyLight.position.x = Math.cos(t * 0.72) * 2.7;
-    keyLight.position.z = Math.sin(t * 0.72) * 1.1 + 4.0;
+    keyLight.position.x = Math.cos(t * 0.6) * 3;
+    keyLight.position.z = Math.sin(t * 0.6) * 3 + 1;
 
     if (groundShadow) {
       const scaleX = 1.12 - bobPhase * 0.24;
@@ -361,10 +296,13 @@ function mountAboutLogoScene(rootEl) {
     } else {
       window.removeEventListener('resize', resize);
     }
-    coin?.removeFromParent();
+    barrel?.removeFromParent();
+    frontFace?.removeFromParent();
+    backFace?.removeFromParent();
     sparks?.removeFromParent();
     coinGroup?.removeFromParent();
-    geometry?.dispose();
+    barrelGeometry?.dispose();
+    faceGeometry?.dispose();
     sparkGeometry?.dispose();
     frontTexture?.dispose();
     backTexture?.dispose();
