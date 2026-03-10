@@ -330,6 +330,11 @@ _match_event_keys = []   # newest first json keys matching _match_event_log
 def _event_key(event: dict) -> str:
     return json.dumps(event, sort_keys=True)
 
+def _clear_match_events():
+    global _match_event_log, _match_event_keys
+    _match_event_log = []
+    _match_event_keys = []
+
 def current_match_events(raw_events: list):
     """Return the newest match's events only, newest first, with stable times."""
     global _match_event_log, _match_event_keys
@@ -455,6 +460,10 @@ def collect_state():
     events_raw = redis_rows[10]
     parsed     = [json.loads(e) for e in events_raw if e]
     match_events = current_match_events(parsed)
+    match_is_live = match_started and not match_ended
+    if not match_is_live:
+        _clear_match_events()
+        match_events = []
     matches = poll_dynamodb()
     redis_stats = poll_redis_stats()
 
