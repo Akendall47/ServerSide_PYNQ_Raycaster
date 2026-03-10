@@ -74,6 +74,8 @@ export function mountPYNQCASTCoin(rootEl) {
       powerPreference: 'high-performance',
     });
     renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.8;
   } catch (error) {
     console.error('[monitor-ui] failed to create WebGL renderer:', error);
     wrap.dataset.threeMounted = '0';
@@ -97,18 +99,18 @@ export function mountPYNQCASTCoin(rootEl) {
   camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.set(0, 0.06, 4.9);
 
-  const ambient = new THREE.AmbientLight(0xffeedd, 1.2);
+  const ambient = new THREE.AmbientLight(0xffeedd, 3.0);
   scene.add(ambient);
 
-  const keyLight = new THREE.PointLight(0xF05A50, 5.0, 14);
+  const keyLight = new THREE.PointLight(0xF05A50, 80, 14);
   keyLight.position.set(2.5, 3, 3);
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0x4466cc, 0.9, 12);
+  const fillLight = new THREE.PointLight(0x4466cc, 20, 12);
   fillLight.position.set(-3, -1, 2);
   scene.add(fillLight);
 
-  const rimLight = new THREE.PointLight(0xFF7766, 2.2, 10);
+  const rimLight = new THREE.PointLight(0xFF7766, 50, 10);
   rimLight.position.set(0, -2.5, -3);
   scene.add(rimLight);
 
@@ -130,7 +132,7 @@ export function mountPYNQCASTCoin(rootEl) {
   const faceMaterial = new THREE.MeshStandardMaterial({
     map: null,
     metalness: 0.0,
-    roughness: 0.8,
+    roughness: 0.75,
     emissive: new THREE.Color('#F05A50'),
     emissiveIntensity: 0.15,
     transparent: true,
@@ -141,7 +143,7 @@ export function mountPYNQCASTCoin(rootEl) {
   const backFaceMaterial = new THREE.MeshStandardMaterial({
     map: null,
     metalness: 0.0,
-    roughness: 0.8,
+    roughness: 0.75,
     emissive: new THREE.Color('#F05A50'),
     emissiveIntensity: 0.15,
     transparent: true,
