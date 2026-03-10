@@ -673,11 +673,17 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    justify-self: start;
+    width: min(100%, 560px);
   }
 
   .server-frame-panel #frame-chart {
     width: 100%;
     max-width: none;
+  }
+
+  .server-frame-panel .metric-note {
+    font-size: 18px;
   }
 
   .metric-row {
@@ -1236,20 +1242,33 @@
     height: 128px;
   }
 
+  .sidebar-profiler-panel .stacked-bars {
+    gap: 1px;
+    overflow: hidden;
+  }
+
+  .sidebar-profiler-panel .stacked-col {
+    min-width: 1px;
+    max-width: none;
+  }
+
   .sidebar-profiler-panel .target-label {
-    font-size: 9px;
+    font-size: 8px;
   }
 
   .sidebar-profiler-panel .legend {
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
   }
 
   .sidebar-profiler-panel .legend-item {
-    font-size: 11px;
+    min-width: 0;
+    font-size: 10px;
   }
 
   .sidebar-profiler-panel .profiler-note {
-    font-size: 18px;
+    display: none;
   }
 
   .control-stack {
@@ -1423,6 +1442,10 @@
       top: 78px;
       right: 12px;
       max-height: calc(100% - 92px);
+    }
+
+    .server-frame-panel {
+      width: 100%;
     }
   }
 
