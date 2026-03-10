@@ -1469,25 +1469,28 @@
   .about-light-cone {
     position: absolute;
     left: 50%;
-    bottom: 102px;
-    width: min(420px, 58%);
-    height: 460px;
+    bottom: 86px;
+    width: min(360px, 52%);
+    height: 340px;
     transform: translateX(-50%);
-    background: radial-gradient(ellipse at bottom, rgba(240, 90, 80, 0.18) 0%, rgba(240, 90, 80, 0.11) 30%, rgba(240, 90, 80, 0.04) 56%, transparent 78%);
-    filter: blur(4px);
-    opacity: 0.95;
+    background:
+      linear-gradient(180deg, rgba(255, 170, 150, 0.18) 0%, rgba(240, 90, 80, 0.13) 22%, rgba(240, 90, 80, 0.06) 58%, transparent 100%);
+    clip-path: polygon(50% 0%, 84% 100%, 16% 100%);
+    filter: blur(10px);
+    opacity: 0.9;
     z-index: 0;
   }
 
   .about-ground-shadow {
     position: absolute;
     left: 50%;
-    bottom: 68px;
-    width: min(340px, 64%);
-    height: 58px;
+    bottom: 62px;
+    width: min(390px, 70%);
+    height: 72px;
     transform: translateX(-50%);
-    background: radial-gradient(ellipse at center, rgba(240, 90, 80, 0.38) 0%, rgba(240, 90, 80, 0.18) 40%, transparent 72%);
-    opacity: 0.42;
+    background: radial-gradient(ellipse at center, rgba(240, 90, 80, 0.56) 0%, rgba(240, 90, 80, 0.3) 38%, rgba(240, 90, 80, 0.11) 64%, transparent 82%);
+    box-shadow: 0 0 28px rgba(240, 90, 80, 0.18);
+    opacity: 0.62;
     animation: about-shadow-breathe 2s infinite ease-in-out;
     z-index: 1;
   }
@@ -1616,11 +1619,11 @@
   @keyframes about-shadow-breathe {
     0%, 100% {
       transform: translateX(-50%) scaleX(1) scaleY(1);
-      opacity: 0.42;
+      opacity: 0.62;
     }
     50% {
-      transform: translateX(-50%) scaleX(0.76) scaleY(0.82);
-      opacity: 0.22;
+      transform: translateX(-50%) scaleX(0.8) scaleY(0.86);
+      opacity: 0.34;
     }
   }
 
