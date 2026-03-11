@@ -312,7 +312,7 @@ def test_pynq_packet_handler_queues_single_player_lobby_session():
         assert not any(str(player_addr).startswith("ghost:") for player_addr in state.players)
 
 
-def test_pynq_packet_handler_double_runner_stays_two_human_only():
+def test_pynq_packet_handler_keeps_two_humans_in_lobby_until_manual_start():
     with pynq_import_context():
         import asyncio
 
@@ -356,13 +356,21 @@ def test_pynq_packet_handler_double_runner_stays_two_human_only():
             )
             handler._process_packet({"data": packet, "addr": addr})
 
+        assert state.match_started is False
+        assert match_started == []
+        assert sorted(player["player_id"] for player in state.players.values()) == [0, 0]
+        assert not any(str(addr).startswith("ghost:") for addr in state.players)
+
+        started, message = handler.start_match_from_lobby()
+
+        assert started is True
+        assert message == "match started"
         assert state.match_started is True
         assert match_started == [True]
         assert sorted(player["player_id"] for player in state.players.values()) == [1, 2]
-        assert not any(str(addr).startswith("ghost:") for addr in state.players)
 
 
-def test_pynq_packet_handler_starts_match_when_second_human_joins():
+def test_pynq_packet_handler_start_match_supports_one_human_plus_ghost():
     with pynq_import_context():
         import asyncio
 
@@ -392,7 +400,6 @@ def test_pynq_packet_handler_starts_match_when_second_human_joins():
         )
 
         solo_addr = ("192.168.2.10", 40000)
-        late_addr = ("192.168.2.11", 40001)
         solo_packet = protocol.pack_register_packet(
             seq=1,
             x=0.0,
@@ -402,24 +409,20 @@ def test_pynq_packet_handler_starts_match_when_second_human_joins():
             username="solo",
             movement_mode=protocol.MOVEMENT_MODE_POSE,
         )
-        late_packet = protocol.pack_register_packet(
-            seq=2,
-            x=0.0,
-            y=0.0,
-            angle=0.0,
-            preferred_role=protocol.ROLE_ANY,
-            username="late",
-            movement_mode=protocol.MOVEMENT_MODE_POSE,
-        )
 
         handler._process_packet({"data": solo_packet, "addr": solo_addr})
-        handler._process_packet({"data": late_packet, "addr": late_addr})
+        handler.set_ghost_count(1)
 
+        started, message = handler.start_match_from_lobby()
+
+        assert started is True
+        assert message == "match started"
         assert state.match_started is True
         assert solo_addr in state.players
-        assert late_addr in state.players
         assert state.players[solo_addr]["player_id"] == 1
-        assert state.players[late_addr]["player_id"] == 2
+        ghost_keys = [addr for addr in state.players if str(addr).startswith("ghost:")]
+        assert len(ghost_keys) == 1
+        assert state.players[ghost_keys[0]]["flags"] & protocol.FLAG_GHOST
 
 
 def test_pynq_packet_handler_monitor_ghost_requests_do_not_start_match():
@@ -468,3 +471,153 @@ def test_pynq_packet_handler_monitor_ghost_requests_do_not_start_match():
         assert ghost["flags"] & protocol.FLAG_GHOST
         assert ghost["player_id"] >= 3
         assert write_queue.items == []
+
+
+def test_pynq_packet_handler_return_to_lobby_preserves_humans_and_ghosts():
+    with pynq_import_context():
+        import asyncio
+
+        protocol = importlib.import_module("protocol")
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        class DummyQueue:
+            def __init__(self):
+                self.items = []
+
+            def put(self, item):
+                self.items.append(item)
+
+        state = match_state_mod.MatchState()
+        write_queue = DummyQueue()
+        handler = packet_handler_mod.PacketHandler(
+            state=state,
+            packet_queue=asyncio.Queue(),
+            write_queue=write_queue,
+            udp_transport=None,
+            map_state={
+                "width": 32,
+                "height": 32,
+                "tile_scale": 8,
+                "tiles": bytearray(32 * 32),
+                "bits": [],
+                "spawn_positions": [(0.0, 0.0), (8.0, 0.0), (16.0, 0.0)],
+            },
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_match_pause=lambda event=None: None,
+            on_match_resume=lambda event=None: None,
+            on_event=lambda event=None: None,
+        )
+
+        state.players = {
+            ("runner", 1): {
+                "player_id": 1,
+                "x": 4.0,
+                "y": 4.0,
+                "angle": 0.5,
+                "flags": protocol.FLAG_MATCH_END,
+                "last_seen": 0.0,
+                "last_seq": 2,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_RUNNER,
+            },
+            ("tagger", 2): {
+                "player_id": 2,
+                "x": 12.0,
+                "y": 4.0,
+                "angle": 1.0,
+                "flags": protocol.FLAG_TAGGED,
+                "last_seen": 0.0,
+                "last_seq": 3,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_TAGGER,
+            },
+            "ghost:1": {
+                "player_id": 3,
+                "x": 20.0,
+                "y": 4.0,
+                "angle": 1.57,
+                "flags": protocol.FLAG_GHOST | protocol.FLAG_MATCH_END,
+                "last_seen": 0.0,
+                "last_seq": None,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+            },
+        }
+        state.match_started = True
+        state.match_ended = True
+        state.pending_roles = {("runner", 1): protocol.ROLE_RUNNER, ("tagger", 2): protocol.ROLE_TAGGER}
+
+        handler.return_players_to_lobby()
+
+        assert state.match_started is False
+        assert state.match_ended is False
+        assert state.players[("runner", 1)]["player_id"] == 0
+        assert state.players[("tagger", 2)]["player_id"] == 0
+        assert state.players["ghost:1"]["player_id"] == 3
+        assert state.players["ghost:1"]["flags"] == protocol.FLAG_GHOST
+        assert state.pending_roles[("runner", 1)] == protocol.ROLE_RUNNER
+        assert state.pending_roles[("tagger", 2)] == protocol.ROLE_TAGGER
+        assert [item["key"] for item in write_queue.items] == ["player:1", "player:2", "player:3"]
+
+
+def test_pynq_game_tick_set_map_returns_players_to_lobby_on_new_map():
+    with pynq_import_context():
+        import asyncio
+        import queue
+
+        protocol = importlib.import_module("protocol")
+        game_tick_mod = importlib.import_module("t2_game_tick")
+
+        packet_queue = asyncio.Queue()
+        broadcast_queue = asyncio.Queue()
+        write_queue = queue.SimpleQueue()
+        game_tick = game_tick_mod.GameTick(packet_queue, broadcast_queue, write_queue)
+
+        game_tick.state.players = {
+            ("runner", 1): {
+                "player_id": 1,
+                "x": 4.0,
+                "y": 8.0,
+                "angle": 0.25,
+                "flags": 0,
+                "last_seen": 0.0,
+                "last_seq": 5,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_RUNNER,
+            },
+            "ghost:1": {
+                "player_id": 3,
+                "x": 12.0,
+                "y": 8.0,
+                "angle": 1.57,
+                "flags": protocol.FLAG_GHOST,
+                "last_seen": 0.0,
+                "last_seq": None,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+            },
+        }
+        game_tick.state.match_started = True
+        game_tick.state.pending_roles = {("runner", 1): protocol.ROLE_RUNNER}
+        packet_queue.put_nowait({"data": b"stale", "addr": ("runner", 1)})
+        broadcast_queue.put_nowait({"data": b"stale", "targets": [("runner", 1)]})
+
+        game_tick._apply_control_command({"cmd": "set_map", "map": "ghost_bits"})
+
+        assert game_tick.map_state["name"] == "ghost_bits"
+        assert game_tick.state.match_started is False
+        assert game_tick.state.players[("runner", 1)]["player_id"] == 0
+        assert game_tick.state.players["ghost:1"]["player_id"] == 3
+        assert game_tick.state.players["ghost:1"]["flags"] == protocol.FLAG_GHOST
+        assert packet_queue.empty()
+        assert broadcast_queue.empty()

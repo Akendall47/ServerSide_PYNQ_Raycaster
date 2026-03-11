@@ -4125,7 +4125,7 @@ void main() {
             <div class="viewport-head-meta">
               <span id="canvas-label" class="panel-head-note">fpga live \xB7 loading map\u2026</span>
               <div class="viewport-action-row">
-                <button class="viewport-control-btn start" type="button" onclick="sendControl('restart', 'start match')">Start</button>
+                <button class="viewport-control-btn start" type="button" onclick="sendControl('start_match', 'start match')">Start</button>
                 <button class="viewport-control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">End</button>
                 <button
                   id="archive-toggle"

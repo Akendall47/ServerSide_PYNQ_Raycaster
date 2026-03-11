@@ -8,7 +8,7 @@ import math
 import os
 from t2_constants import MAP_TILE_SCALE, PLAYER_COLLISION_RADIUS, SPAWN_CLEARANCE_RADIUS
 
-DEFAULT_MAP_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'maps', 'chase.txt')
+DEFAULT_MAP_PATH = os.path.join(os.path.dirname(__file__), '..', 'maps', 'chase.txt')
 SPAWN_MARKERS = {str(index): index - 1 for index in range(1, 6)}
 HARDWARE_MAP_WIDTH = 32
 HARDWARE_MAP_HEIGHT = 32

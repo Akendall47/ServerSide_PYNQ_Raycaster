@@ -30,7 +30,7 @@ from game_logic.core_logic import CoreLogic
 from t2_redis_io import RedisIO
 
 _MAPS_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'maps')
+    os.path.join(os.path.dirname(__file__), '..', 'maps')
 )
 
 class GameTick:
@@ -51,7 +51,7 @@ class GameTick:
         self.redis_io = RedisIO(self.state, self.map_state, broadcast_queue, write_queue)
         self.logic    = CoreLogic(self.state, write_queue,
                                   on_event=self._push_event,
-                                  on_force_end_consumed=lambda: None,
+                                  on_force_end_consumed=self._return_to_lobby_after_match_end,
                                   map_state=self.map_state)
         self.packets  = PacketHandler(self.state, packet_queue, write_queue,
                                       udp_transport=udp_transport,
@@ -114,6 +114,9 @@ class GameTick:
         cmd = data.get("cmd")
         if cmd == "force_end":
             self.logic._force_end_flag = True
+        elif cmd == "start_match":
+            started, message = self.packets.start_match_from_lobby()
+            print(f"[T2] start_match: {message}")
         elif cmd == "restart":
             self._reset_session("restart", arm_lockout=False)
         elif cmd == "set_ghost_count":
@@ -126,7 +129,7 @@ class GameTick:
                 self._swap_map(new_map)
 
     def _swap_map(self, new_map: dict):
-        self._reset_session("map_changed", next_map=new_map, arm_lockout=False)
+        self._return_players_to_lobby("map_changed", next_map=new_map)
 
     def _drain_asyncio_queue(self, q: asyncio.Queue) -> int:
         drained = 0
@@ -174,6 +177,44 @@ class GameTick:
         )
         if not had_players and next_map is None:
             print("[T2] restart requested with no active or queued players")
+
+    def _return_players_to_lobby(self, reason: str, next_map: dict | None = None):
+        current_players = list(self.state.players.values())
+        had_players = bool(current_players)
+        was_active = self.state.match_started and not self.state.match_ended
+        if was_active:
+            event = {
+                "event": "match_aborted",
+                "reason": reason,
+                "game_mode": self.state.game_mode,
+                "bits_mask": self.state.bits_mask,
+                "map": self.map_state.get("name"),
+            }
+            if next_map is not None:
+                event["next_map"] = next_map.get("name")
+            self.redis_io.push_event(event)
+
+        if next_map is not None:
+            self.map_state.clear()
+            self.map_state.update(next_map)
+
+        dropped_packets = self._drain_asyncio_queue(self.packet_queue)
+        dropped_broadcasts = self._drain_asyncio_queue(self.broadcast_queue)
+        self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
+        self.packets.return_players_to_lobby()
+        self.logic._force_end_flag = False
+
+        print(
+            f"[T2] returned to lobby ({reason}) — map='{self.map_state.get('name')}' "
+            f"humans={sum(1 for addr in self.state.players if not str(addr).startswith('ghost:'))} "
+            f"ghosts={sum(1 for addr in self.state.players if str(addr).startswith('ghost:'))} "
+            f"packet_backlog={dropped_packets} broadcast_backlog={dropped_broadcasts}"
+        )
+        if not had_players:
+            print("[T2] lobby return requested with no active or queued players")
+
+    def _return_to_lobby_after_match_end(self):
+        self._return_players_to_lobby("match_end_hold_expired")
 
     # ── Match event callbacks ─────────────────────────────────────────────────
 

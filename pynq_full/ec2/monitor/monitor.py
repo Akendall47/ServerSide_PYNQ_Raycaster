@@ -311,7 +311,10 @@ def handle_control_command(cmd: str):
 
     if cmd == "force_end":
         r.publish("game:control", json.dumps({"cmd": "force_end"}))
-        _service_message = "force_end sent — match will end this tick"
+        _service_message = "force_end sent — session will return to the lobby after the end hold"
+    elif cmd == "start_match":
+        r.publish("game:control", json.dumps({"cmd": "start_match"}))
+        _service_message = "start_match sent — queued lobby players will be promoted if enough participants exist"
     elif cmd == "restart":
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
@@ -334,7 +337,7 @@ def handle_control_command(cmd: str):
             payload = json.dumps({"cmd": "set_map", "map": map_name})
             r.publish("game:control", payload)
             _active_map = map_name
-            _service_message = f"map set to {map_name} (takes effect next match)"
+            _service_message = f"map set to {map_name} — active players are returned to the lobby on the new map"
     elif cmd.startswith("set_ghosts_"):
         count = int(cmd.split("_")[-1])
         r.publish("game:control", json.dumps({"cmd": "set_ghost_count", "count": count}))
