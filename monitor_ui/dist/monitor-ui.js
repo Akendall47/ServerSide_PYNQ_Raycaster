@@ -4511,7 +4511,6 @@ void main() {
           <div class="about-sprite-wrap">
             <div class="about-react-board-slot" aria-label="spinning PYNQ board showcase"></div>
           </div>
-          <div class="about-stage-label">dropped relic \xB7 live node cluster</div>
         </div>
 
         <div class="about-copy-column">
@@ -4521,7 +4520,7 @@ void main() {
 
           <div class="about-copy about-copy-credits">
             <span class="about-copy-kicker">Built by</span>
-            <span class="about-copy-names">Archie, Asad, Adil, Louis, Lucca, and Sam</span>
+            <span class="about-copy-names">Archie, Asad, Adil, Louis, Lucca, Nabeel, and Sam</span>
           </div>
         </div>
       </section>
@@ -5002,7 +5001,6 @@ void main() {
           <div class="about-sprite-wrap">
             <div class="about-react-board-slot" aria-label="spinning PYNQ board showcase"></div>
           </div>
-          <div class="about-stage-label">dropped relic \xB7 live node cluster</div>
         </div>
 
         <div class="about-copy-column">
@@ -5012,7 +5010,7 @@ void main() {
 
           <div class="about-copy about-copy-credits">
             <span class="about-copy-kicker">Built by</span>
-            <span class="about-copy-names">Archie, Asad, Adil, Louis, Lucca, and Sam</span>
+            <span class="about-copy-names">Archie, Asad, Adil, Louis, Lucca, Nabeel, and Sam</span>
           </div>
         </div>
       </section>
