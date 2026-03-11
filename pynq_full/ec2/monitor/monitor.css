@@ -1635,6 +1635,28 @@
     text-shadow: 0 0 12px rgba(0, 212, 255, 0.12);
   }
 
+  .about-copy-credits {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    white-space: normal;
+    text-transform: none;
+    letter-spacing: 1px;
+    line-height: 1.4;
+  }
+
+  .about-copy-kicker {
+    font-family: 'Silkscreen', cursive;
+    font-size: clamp(16px, 1.2vw, 18px);
+    color: var(--coral-light);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .about-copy-names {
+    max-width: 16ch;
+  }
+
   .about-credit-strip {
     display: flex;
     flex-wrap: wrap;
@@ -1861,6 +1883,11 @@
     .about-copy {
       font-size: 22px;
       letter-spacing: 1.2px;
+    }
+
+    .about-copy-credits {
+      gap: 6px;
+      letter-spacing: 0.6px;
     }
 
     .pipeline-summary {
