@@ -137,16 +137,24 @@ function BoardStage({ hostSlot }) {
       trace.position.set(x, y, 0.09);
       board.add(trace);
     };
-    addTrace(-0.3,  0.55, 0.9,  0.04);
-    addTrace( 0.4,  0.55, 0.9,  0.04);
-    addTrace(-0.3, -0.35, 0.04, 0.8);
-    addTrace(-0.85, 0.1,  0.7,  0.04);
-    addTrace( 0.3,  0.1,  0.8,  0.04);
-    addTrace( 0.0, -0.55, 1.6,  0.04);
-    addTrace(-1.1,  0.1,  0.04, 1.2);
-    addTrace( 1.1,  0.1,  0.04, 1.0);
-    addTrace(-0.3, -0.1,  0.04, 0.5);
-    addTrace( 0.6, -0.2,  0.6,  0.04);
+    addTrace(-0.18,  0.56, 0.78, 0.035);
+    addTrace( 0.52,  0.56, 0.56, 0.035);
+    addTrace( 0.78,  0.55, 0.035, 0.22);
+    addTrace( 1.05,  0.55, 0.32, 0.035);
+    addTrace(-0.72,  0.12, 0.52, 0.035);
+    addTrace(-0.96,  0.12, 0.035, 0.62);
+    addTrace(-0.96, -0.20, 0.28, 0.035);
+    addTrace( 0.20,  0.12, 0.92, 0.035);
+    addTrace( 0.92,  0.10, 0.035, 0.86);
+    addTrace( 0.64, -0.30, 0.58, 0.035);
+    addTrace(-0.30, -0.26, 0.035, 0.62);
+    addTrace(-0.30, -0.58, 1.46, 0.035);
+    addTrace(-1.18, -0.70, 0.035, 0.30);
+    addTrace(-1.02, -0.82, 0.34, 0.035);
+    addTrace( 0.94, -0.82, 0.035, 0.42);
+    addTrace( 1.14, -0.62, 0.42, 0.035);
+    addTrace(-1.08,  0.76, 1.74, 0.03);
+    addTrace( 0.16,  1.00, 0.03, 0.18);
 
     // ── Large Zynq SoC and supporting components ──
     const fpga = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.12), pcbEdgeMaterial);
@@ -246,14 +254,9 @@ function BoardStage({ hostSlot }) {
       alphaTest: 0.08,
     });
 
-    // Front logo
-    const logoPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 1.52), logoMaterial);
-    logoPlane.position.set(0.02, 0.1, 0.106);
-    board.add(logoPlane);
-
     // Back logo — flipped outward
-    const logoPlaneBack = new THREE.Mesh(new THREE.PlaneGeometry(3.02, 1.7), logoMaterial);
-    logoPlaneBack.position.set(0.02, 0.1, -0.106);
+    const logoPlaneBack = new THREE.Mesh(new THREE.PlaneGeometry(3.18, 1.9), logoMaterial);
+    logoPlaneBack.position.set(0.06, 0.06, -0.106);
     logoPlaneBack.rotation.y = Math.PI;
     board.add(logoPlaneBack);
 
@@ -261,9 +264,9 @@ function BoardStage({ hostSlot }) {
     const materials = [pcbFaceMaterial, pcbEdgeMaterial, goldMaterial, ledMaterial, logoMaterial];
     const geometries = [
       boardBase.geometry, boardCore.geometry, boardBack.geometry,
-      logoPlane.geometry, logoPlaneBack.geometry,
+      logoPlaneBack.geometry,
     ];
-    const staticMeshes = [boardBase, boardCore, boardBack, logoPlane, logoPlaneBack];
+    const staticMeshes = [boardBase, boardCore, boardBack, logoPlaneBack];
     board.children.forEach((child) => {
       if (!staticMeshes.includes(child)) {
         geometries.push(child.geometry);
