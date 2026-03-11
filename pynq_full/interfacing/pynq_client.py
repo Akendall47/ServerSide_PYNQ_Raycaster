@@ -1,19 +1,20 @@
 # pynq_full/interfacing/pynq_client.py — PYNQ-Z1 board client.
 #
 # Wiring:
-#   UDP networking  → protocol.py (same packet format as sim)
-#   Raycaster input → AXI-Lite register writes (player x, y, angle each frame)
-#   Map tiles       → BRAM via AXI-Lite (written once on PKT_MAP)
-#   HDMI output     → VDMA via pynq.lib.video (runs continuously from framebuffer)
+#   UDP networking  → protocol.py (same packet format as the EC2 server)
+#   PKT_MAP         → row-major tile bytes from the server
+#   BRAM writes     → convert map + player pose into the real hardware repo's format
+#   HDMI output     → driven autonomously by the bitstream once BRAM is populated
 #
-# AXI-Lite register map (raycaster IP, base addr from overlay):
-#   0x00  float  player_x
-#   0x04  float  player_y
-#   0x08  float  player_angle
-#   0x0C  uint32 done / output valid flag (read only)
+# Hardware contract taken from ~/Documents/pynq_raycaster:
+#   BRAM base:       0x40000000
+#   BRAM range:      0x2000
+#   Map rows:        32 x 32-bit words at offsets 0x00..0x7C
+#   Player position: 0x80  [31:16]=x, [15:0]=y, unsigned Q6.10 tile coords
+#   Player angle:    0x84  [11:0]=angle, 0..4095 maps a full turn
 #
 # Run on PYNQ-Z1:
-#   python3 pynq_client.py --server <EC2_IP> [--port 9000] [--overlay base.bit]
+#   python3 pynq_client.py --server <EC2_IP> [--port 9000] [--overlay raycaster.bit]
 
 import asyncio
 import socket
@@ -56,22 +57,21 @@ TICK_RATE    = 60                   # Hz — match server
 PLAYER_COLLISION_RADIUS = 2.5
 AUTHORITATIVE_STATE_TIMEOUT_S = 0.4
 
-# ── AXI-Lite register offsets ─────────────────────────────────────────────────
+# ── Real hardware BRAM layout ─────────────────────────────────────────────────
 
-REG_PLAYER_X     = 0x0
-
-REG_PLAYER_Y     = 0x04
-REG_PLAYER_ANGLE = 0x08
-REG_DONE         = 0x0C            # read to check if frame is rendered
-
-# ── BRAM map tile layout ───────────────────────────────────────────────────────
-# Tiles are written as a flat byte array: row-major, 0=empty 1=wall.
-# Each tile occupies one word (4 bytes) in the BRAM to keep addressing simple.
-# BRAM base address and AXI-Lite IP name are set in the overlay; adjust if
-# your HWH names differ.
-
-BRAM_IP_NAME      = "axi_bram_ctrl_0"    # IP block name in Vivado design
-RAYCASTER_IP_NAME = "raycaster_0"        # AXI-Lite slave IP block name
+HW_BRAM_BASE_ADDR      = 0x40000000
+HW_BRAM_RANGE          = 0x2000
+HW_MAP_ROWS            = 32
+HW_MAP_COLS            = 32
+HW_PLAYER_POS_OFFSET   = 0x80
+HW_PLAYER_ANGLE_OFFSET = 0x84
+HW_ENTITY_COUNT_OFFSET = 0x88
+HW_ENTITY_TABLE_OFFSET = 0x8C
+HW_ENTITY_STRIDE       = 0x0C
+MAX_REMOTE_ENTITIES    = 4
+HW_COORD_FRAC_BITS     = 10
+HW_ANGLE_STEPS         = 1 << 12
+HW_ANGLE_MASK          = HW_ANGLE_STEPS - 1
 
 # ── Colour palette (floor / ceiling / wall) ───────────────────────────────────
 
@@ -83,29 +83,72 @@ COLOUR_WALL    = (180, 150, 100)   # tan; brightness scaled by distance
 
 
 def _try_import_pynq():
-    # Import pynq and pynq.lib.video — returns (pynq, video) or (None, None) if unavailable
+    # Import pynq only when available so laptop-side smoke tests still work.
     try:
         import pynq
-        from pynq.lib import video
-        return pynq, video
+        return pynq
     except ImportError:
-        return None, None
+        return None
+
+
+def encode_map_rows_for_bram(width: int, height: int, tiles: bytes):
+    if width != HW_MAP_COLS or height != HW_MAP_ROWS:
+        raise ValueError(
+            f"hardware expects a {HW_MAP_COLS}x{HW_MAP_ROWS} map, got {width}x{height}"
+        )
+    if len(tiles) != width * height:
+        raise ValueError(
+            f"expected {width * height} tile bytes, got {len(tiles)}"
+        )
+
+    rows = []
+    for row in range(height):
+        word = 0
+        base = row * width
+        for col in range(width):
+            if tiles[base + col]:
+                word |= 1 << col
+        rows.append(word)
+    return rows
+
+
+def world_to_hw_q6_10(value: float, tile_scale: int, map_dim: int):
+    tile_units = (value / tile_scale) + (map_dim / 2.0)
+    raw = int(round(tile_units * (1 << HW_COORD_FRAC_BITS)))
+    max_raw = (map_dim << HW_COORD_FRAC_BITS) - 1
+    return max(0, min(max_raw, raw))
+
+
+def radians_to_hw_angle(angle_radians: float):
+    turn = angle_radians % (2.0 * math.pi)
+    return int(round(turn * HW_ANGLE_STEPS / (2.0 * math.pi))) & HW_ANGLE_MASK
+
+
+def build_remote_entities(local_player_id, players, *, limit=MAX_REMOTE_ENTITIES):
+    entities = []
+    for player in players:
+        if player["player_id"] == local_player_id:
+            continue
+        entities.append({
+            "active": True,
+            "entity_id": player["player_id"],
+            "x": player["x"],
+            "y": player["y"],
+            "angle": player["angle"],
+            "flags": player["flags"],
+        })
+    entities.sort(key=lambda entity: entity["entity_id"])
+    return entities[:limit]
 
 
 class HardwareContext:
-    # Wraps PYNQ overlay, AXI-Lite IP, BRAM, and HDMI output.
-    # Falls back to software rendering + no-op register writes if not on a PYNQ board.
-
+    # Wraps the real BRAM-backed hardware interface from the pynq_raycaster repo.
 
     def __init__(self, overlay_path: str):
-        pynq, video = _try_import_pynq()
-        self.pynq    = pynq
-        self.video   = video
+        pynq = _try_import_pynq()
+        self.pynq = pynq
         self.overlay = None
-        self.rc_ip   = None     # AXI-Lite raycaster IP handle
-        self.bram    = None     # BRAM controller handle
-        self.hdmi    = None     # HDMI output pipeline
-        self.frame   = None     # numpy array backed by VDMA buffer (H×W×3 uint8)
+        self.bram_mmio = None
 
         if pynq is None:
             print("[HW] pynq not available — running in software-only mode")
@@ -114,48 +157,70 @@ class HardwareContext:
         try:
             print(f"[HW] loading overlay: {overlay_path}")
             self.overlay = pynq.Overlay(overlay_path)
-            self.rc_ip   = getattr(self.overlay, RAYCASTER_IP_NAME, None)
-            self.bram    = getattr(self.overlay, BRAM_IP_NAME, None)
-            print(f"[HW] raycaster IP: {self.rc_ip}")
-            print(f"[HW] BRAM ctrl:    {self.bram}")
+            self.bram_mmio = pynq.MMIO(HW_BRAM_BASE_ADDR, HW_BRAM_RANGE)
+            print(
+                f"[HW] BRAM MMIO ready at 0x{HW_BRAM_BASE_ADDR:08x} "
+                f"(range=0x{HW_BRAM_RANGE:x})"
+            )
         except Exception as e:
             print(f"[HW] overlay load failed: {e}")
-            return
+            self.overlay = None
+            self.bram_mmio = None
 
-        try:
-            self.hdmi = self.overlay.video.hdmi_out
-            self.hdmi.configure(self.video.VideoMode(SCREEN_W, SCREEN_H, 24))
-            self.hdmi.start()
-            self.frame = self.hdmi.newframe()
-            print(f"[HW] HDMI out started: {SCREEN_W}x{SCREEN_H}")
-        except Exception as e:
-            print(f"[HW] HDMI init failed: {e}")
-            self.hdmi  = None
-            self.frame = None
+    @property
+    def hardware_ready(self) -> bool:
+        return self.bram_mmio is not None
 
-    def write_player_regs(self, x: float, y: float, angle: float):
-        # Write player position to AXI-Lite raycaster registers
-        if self.rc_ip is None:
+    def write_player_pose(self, x: float, y: float, angle: float,
+                          map_w: int, map_h: int, tile_scale: int):
+        if self.bram_mmio is None:
             return
-        self.rc_ip.write(REG_PLAYER_X,     struct.unpack('<I', struct.pack('<f', x))[0])
-        self.rc_ip.write(REG_PLAYER_Y,     struct.unpack('<I', struct.pack('<f', y))[0])
-        self.rc_ip.write(REG_PLAYER_ANGLE, struct.unpack('<I', struct.pack('<f', angle))[0])
+        x_q = world_to_hw_q6_10(x, tile_scale, map_w)
+        y_q = world_to_hw_q6_10(y, tile_scale, map_h)
+        angle_raw = radians_to_hw_angle(angle)
+        self.bram_mmio.write(HW_PLAYER_POS_OFFSET, ((x_q & 0xFFFF) << 16) | (y_q & 0xFFFF))
+        self.bram_mmio.write(HW_PLAYER_ANGLE_OFFSET, angle_raw)
 
     def write_map_to_bram(self, width: int, height: int, tiles: bytes):
-        # Write map tiles to BRAM (one 32-bit word per tile)
-        if self.bram is None:
-            print(f"[HW] BRAM not available — map tiles not written")
+        if self.bram_mmio is None:
+            print("[HW] BRAM not available — map tiles not written")
             return
-        for i, tile in enumerate(tiles):
-            self.bram.write(i * 4, int(tile))
-        print(f"[HW] wrote {len(tiles)} tiles to BRAM ({width}x{height})")
+        try:
+            rows = encode_map_rows_for_bram(width, height, tiles)
+        except ValueError as exc:
+            print(f"[HW] map conversion failed: {exc}")
+            return
+        for row_index, word in enumerate(rows):
+            self.bram_mmio.write(row_index * 4, word & 0xFFFFFFFF)
+        print(f"[HW] wrote {len(rows)} packed map rows to BRAM ({width}x{height})")
+
+    def write_remote_entities(self, remote_entities, map_w: int, map_h: int, tile_scale: int):
+        if self.bram_mmio is None:
+            return
+        self.bram_mmio.write(HW_ENTITY_COUNT_OFFSET, len(remote_entities) & 0xFF)
+        for index in range(MAX_REMOTE_ENTITIES):
+            base = HW_ENTITY_TABLE_OFFSET + (index * HW_ENTITY_STRIDE)
+            if index < len(remote_entities):
+                entity = remote_entities[index]
+                x_q = world_to_hw_q6_10(entity["x"], tile_scale, map_w)
+                y_q = world_to_hw_q6_10(entity["y"], tile_scale, map_h)
+                angle_raw = radians_to_hw_angle(entity["angle"])
+                flags_word = (
+                    (1 << 16)
+                    | ((entity["entity_id"] & 0xFF) << 8)
+                    | (entity["flags"] & 0xFF)
+                )
+                self.bram_mmio.write(base + 0x00, ((x_q & 0xFFFF) << 16) | (y_q & 0xFFFF))
+                self.bram_mmio.write(base + 0x04, angle_raw & HW_ANGLE_MASK)
+                self.bram_mmio.write(base + 0x08, flags_word)
+            else:
+                self.bram_mmio.write(base + 0x00, 0)
+                self.bram_mmio.write(base + 0x04, 0)
+                self.bram_mmio.write(base + 0x08, 0)
 
     def present_frame(self, frame_data):
-        # Copy rendered frame into VDMA buffer and present it on HDMI
-        if self.hdmi is None or self.frame is None:
-            return
-        self.frame[:] = frame_data
-        self.hdmi.writeframe(self.frame)
+        # The real hardware bitstream drives HDMI internally; software mode has no display sink.
+        return
 
 
 # ── Software raycaster fallback ───────────────────────────────────────────────
@@ -218,7 +283,7 @@ def _cast_rays(x: float, y: float, angle: float, map_w: int, map_h: int,
     return results
 
 
-def render_frame_software(x, y, angle, map_w, map_h, tiles, tile_scale):
+def render_frame_software(x, y, angle, map_w, map_h, tiles, tile_scale, remote_entities=None):
     # Render a full frame as a H×W×3 uint8 numpy array (software path)
     try:
         import numpy as np
@@ -232,6 +297,7 @@ def render_frame_software(x, y, angle, map_w, map_h, tiles, tile_scale):
     frame[HALF_H:, :] = COLOUR_FLOOR
 
     rays = _cast_rays(x, y, angle, map_w, map_h, tiles, tile_scale)
+    wall_depths = [dist for dist, _ in rays]
     for col, (dist, side) in enumerate(rays):
         wall_h = min(int(WALL_HEIGHT / (dist + 0.0001)), SCREEN_H)
         top    = HALF_H - wall_h // 2
@@ -242,6 +308,41 @@ def render_frame_software(x, y, angle, map_w, map_h, tiles, tile_scale):
         g = int(COLOUR_WALL[1] * bright * shade)
         b = int(COLOUR_WALL[2] * bright * shade)
         frame[max(0, top):min(SCREEN_H, bot), col] = (r, g, b)
+
+    remote_entities = remote_entities or []
+    for entity in remote_entities:
+        dx = entity["x"] - x
+        dy = entity["y"] - y
+        distance = math.hypot(dx, dy)
+        if distance <= 0.001:
+            continue
+        relative_angle = math.atan2(dy, dx) - angle
+        while relative_angle <= -math.pi:
+            relative_angle += 2.0 * math.pi
+        while relative_angle > math.pi:
+            relative_angle -= 2.0 * math.pi
+        if abs(relative_angle) > (FOV / 2.0) + 0.3:
+            continue
+
+        projected_x = int(((relative_angle + (FOV / 2.0)) / FOV) * SCREEN_W)
+        sprite_h = max(8, min(SCREEN_H, int(WALL_HEIGHT / distance)))
+        sprite_w = max(4, sprite_h // 2)
+        top = max(0, HALF_H - sprite_h // 2)
+        bot = min(SCREEN_H, top + sprite_h)
+        left = max(0, projected_x - sprite_w // 2)
+        right = min(SCREEN_W, projected_x + sprite_w // 2)
+
+        if entity["flags"] & FLAG_GHOST:
+            colour = (100, 160, 220)
+        elif entity["flags"] & FLAG_TAGGED:
+            colour = (220, 80, 80)
+        else:
+            colour = (220, 200, 120)
+
+        for col in range(left, right):
+            if col >= len(wall_depths) or distance >= wall_depths[col]:
+                continue
+            frame[top:bot, col] = colour
 
     return frame
 
@@ -277,11 +378,8 @@ class PYNQNode:
         self.tile_scale = 8
         self.tiles      = bytearray()
 
-        # Peer state (for display)
-        self.peer_x     = 0.0
-        self.peer_y     = 0.0
-        self.peer_angle = 0.0
-        self.peer_server_flags = 0
+        # Remote entities visible in PKT_GAME_STATE (opponent + ghosts).
+        self.remote_entities = []
 
         # asyncio transport
         self.transport  = None
@@ -328,7 +426,7 @@ class PYNQNode:
 
         elif pkt_type == PKT_GAME_STATE:
             _, _, _, self.game_mode, players, self.bits_mask = unpack_server_packet(data)
-            peer_updated = False
+            self.remote_entities = build_remote_entities(self.player_id, players)
             for p in players:
                 if p["player_id"] == self.player_id:
                     self.x = p["x"]
@@ -343,12 +441,6 @@ class PYNQNode:
                     if self.server_flags & FLAG_MATCH_END:
                         print(f"[Node] match ended")
                         self.match_ended = True
-                elif not peer_updated and not (p["flags"] & FLAG_GHOST):
-                    self.peer_x     = p["x"]
-                    self.peer_y     = p["y"]
-                    self.peer_angle = p["angle"]
-                    self.peer_server_flags = p["flags"]
-                    peer_updated = True
 
     def error_received(self, exc):
         print(f"[Node] UDP error: {exc}")
@@ -468,18 +560,24 @@ class PYNQNode:
                     self._step()
                     self._send_state()
 
-                    # Write position to FPGA registers
-                    self.hw.write_player_regs(self.x, self.y, self.angle)
+                    # Translate centred world coords into the BRAM pose format the FPGA expects.
+                    self.hw.write_player_pose(
+                        self.x, self.y, self.angle,
+                        self.map_w, self.map_h, self.tile_scale,
+                    )
+                    self.hw.write_remote_entities(
+                        self.remote_entities,
+                        self.map_w, self.map_h, self.tile_scale,
+                    )
 
-                    # Render frame: use FPGA if available, software otherwise
-                    if self.hw.rc_ip is not None and self.tiles:
-                        # FPGA renders into VDMA framebuffer automatically;
-                        # just trigger start and wait for done.
-                        frame = None    # FPGA drives HDMI directly
+                    # Render frame: use FPGA if BRAM-backed hardware is active, software otherwise
+                    if self.hw.hardware_ready and self.tiles:
+                        frame = None
                     elif self.tiles:
                         frame = render_frame_software(
                             self.x, self.y, self.angle,
                             self.map_w, self.map_h, self.tiles, self.tile_scale,
+                            self.remote_entities,
                         )
                         self.hw.present_frame(frame)
 
@@ -498,7 +596,7 @@ def main():
     parser = argparse.ArgumentParser(description="PYNQ-Z1 raycaster client")
     parser.add_argument("--server",  required=True, help="EC2 server IP")
     parser.add_argument("--port",    type=int, default=9000)
-    parser.add_argument("--overlay", default="base.bit",
+    parser.add_argument("--overlay", default="raycaster.bit",
                         help="Path to FPGA bitstream (.bit)")
     args = parser.parse_args()
 

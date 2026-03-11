@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import PYNQBoard from './components/PYNQBoard.jsx';
-// Swap this import back in if you want the legacy coin centerpiece again.
+
+// Swap this import back in if we want the legacy coin centerpiece again.
 // import PYNQCASTCoin from './components/PYNQCASTCoin.jsx';
+
 import { monitorMarkup } from './templates.generated.js';
 
 const LEGACY_SCRIPTS = ['/monitor-state.js', '/monitor-render.js', '/monitor-app.js'];

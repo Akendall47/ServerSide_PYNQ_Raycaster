@@ -10,11 +10,13 @@ and other remote entities on the PYNQ path.
 - EC2 already sends full player lists in `PKT_GAME_STATE`.
 - Ghosts already exist in authoritative server state and are tagged with
   `FLAG_GHOST`.
-- The PYNQ client currently keeps only:
+- The PYNQ client now keeps:
   - local player pose
-  - one non-ghost peer pose
+  - a capped remote-entity list (other human + ghosts)
   - bit mask / bit positions
 - The FPGA-side register interface currently exposes only the local player pose.
+- The Python client stages remote entities into BRAM, but the current FPGA bitstream
+  does not render them yet.
 
 That means the network/protocol path is mostly ready, but the board-side render
 path is not.
