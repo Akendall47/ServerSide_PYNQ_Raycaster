@@ -107,6 +107,13 @@ function BoardStage({ hostSlot }) {
       emissiveIntensity: 0.15,
       envMapIntensity: 2.5,
     });
+    const ledMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ff44,
+      emissive: new THREE.Color('#00ff44'),
+      emissiveIntensity: 0.8,
+      metalness: 0.0,
+      roughness: 0.5,
+    });
 
     // ── Board geometry ──
     const board = new THREE.Group();
@@ -130,32 +137,92 @@ function BoardStage({ hostSlot }) {
       trace.position.set(x, y, 0.09);
       board.add(trace);
     };
-    addTrace(-0.92,  0.62, 1.12, 0.08);
-    addTrace( 0.38,  0.62, 1.32, 0.08);
-    addTrace(-1.08,  0.16, 0.18, 0.86);
-    addTrace( 1.16,  0.12, 0.18, 0.92);
-    addTrace(-0.24, -0.30, 2.12, 0.08);
-    addTrace( 0.00, -0.72, 1.52, 0.08);
-    addTrace(-0.78, -0.95, 0.18, 0.54);
-    addTrace( 0.84, -0.90, 0.18, 0.42);
+    addTrace(-0.3,  0.55, 0.9,  0.04);
+    addTrace( 0.4,  0.55, 0.9,  0.04);
+    addTrace(-0.3, -0.35, 0.04, 0.8);
+    addTrace(-0.85, 0.1,  0.7,  0.04);
+    addTrace( 0.3,  0.1,  0.8,  0.04);
+    addTrace( 0.0, -0.55, 1.6,  0.04);
+    addTrace(-1.1,  0.1,  0.04, 1.2);
+    addTrace( 1.1,  0.1,  0.04, 1.0);
+    addTrace(-0.3, -0.1,  0.04, 0.5);
+    addTrace( 0.6, -0.2,  0.6,  0.04);
 
-    // ── Main chip ──
-    const chip = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.92, 0.16), pcbEdgeMaterial);
-    chip.position.set(0.08, 0.04, 0.13);
-    board.add(chip);
+    // ── Large Zynq SoC and supporting components ──
+    const fpga = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.12), pcbEdgeMaterial);
+    fpga.position.set(-0.3, 0.1, 0.14);
+    board.add(fpga);
 
-    const chipInset = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.78, 0.04), pcbFaceMaterial);
-    chipInset.position.set(0.08, 0.04, 0.21);
-    board.add(chipInset);
+    const fpgaInset = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.75, 0.03), pcbFaceMaterial);
+    fpgaInset.position.set(-0.3, 0.1, 0.21);
+    board.add(fpgaInset);
 
-    // ── Edge pins ──
-    for (let i = 0; i < 10; i++) {
-      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.06), goldMaterial);
-      pin.position.set(-1.54 + i * 0.34, 1.23, 0.04);
+    const ddr = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 0.08), pcbEdgeMaterial);
+    ddr.position.set(0.95, 0.55, 0.12);
+    board.add(ddr);
+
+    for (let i = 0; i < 3; i++) {
+      const vreg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.10), pcbEdgeMaterial);
+      vreg.position.set(-1.2 + i * 0.26, -0.7, 0.13);
+      board.add(vreg);
+    }
+
+    const usb = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.20), pcbEdgeMaterial);
+    usb.position.set(1.6, 0.2, 0.14);
+    board.add(usb);
+
+    const hdmi = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.18), pcbEdgeMaterial);
+    hdmi.position.set(1.6, -0.15, 0.14);
+    board.add(hdmi);
+
+    const eth = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.22), pcbEdgeMaterial);
+    eth.position.set(1.6, 0.6, 0.14);
+    board.add(eth);
+
+    for (let i = 0; i < 2; i++) {
+      const pmod = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.48, 0.10), pcbEdgeMaterial);
+      pmod.position.set(-1.6, 0.3 - i * 0.6, 0.12);
+      board.add(pmod);
+    }
+
+    const ardu = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.10, 0.08), pcbEdgeMaterial);
+    ardu.position.set(0.1, 1.08, 0.12);
+    board.add(ardu);
+
+    const pwrJack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.24), pcbEdgeMaterial);
+    pwrJack.position.set(-1.45, -0.95, 0.16);
+    board.add(pwrJack);
+
+    const sd = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.10), goldMaterial);
+    sd.position.set(0.9, -1.02, 0.10);
+    board.add(sd);
+
+    for (let i = 0; i < 4; i++) {
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.05), ledMaterial);
+      led.position.set(0.3 + i * 0.12, 0.75, 0.18);
+      board.add(led);
+    }
+
+    for (let i = 0; i < 2; i++) {
+      const btn = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.08), pcbEdgeMaterial);
+      btn.position.set(0.55 + i * 0.18, -0.55, 0.14);
+      board.add(btn);
+    }
+
+    // ── Headers and connectors ──
+    for (let i = 0; i < 14; i++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.12), goldMaterial);
+      pin.position.set(-1.1 + i * 0.18, 1.1, 0.1);
       board.add(pin);
-      const pinB = pin.clone();
-      pinB.position.y = -1.23;
-      board.add(pinB);
+      const pin2 = pin.clone();
+      pin2.position.y = 1.18;
+      board.add(pin2);
+    }
+
+    for (let i = 0; i < 18; i++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.18, 0.04), goldMaterial);
+      pin.position.set(-1.28 + i * 0.145, -1.08, 0.06);
+      board.add(pin);
     }
 
     // ── Logo texture ──
@@ -191,14 +258,14 @@ function BoardStage({ hostSlot }) {
     board.add(logoPlaneBack);
 
     // ── Cleanup arrays ──
-    const materials = [pcbFaceMaterial, pcbEdgeMaterial, goldMaterial, logoMaterial];
+    const materials = [pcbFaceMaterial, pcbEdgeMaterial, goldMaterial, ledMaterial, logoMaterial];
     const geometries = [
       boardBase.geometry, boardCore.geometry, boardBack.geometry,
-      chip.geometry, chipInset.geometry,
       logoPlane.geometry, logoPlaneBack.geometry,
     ];
+    const staticMeshes = [boardBase, boardCore, boardBack, logoPlane, logoPlaneBack];
     board.children.forEach((child) => {
-      if (![boardBase, boardCore, boardBack, chip, chipInset, logoPlane, logoPlaneBack].includes(child)) {
+      if (!staticMeshes.includes(child)) {
         geometries.push(child.geometry);
       }
     });
