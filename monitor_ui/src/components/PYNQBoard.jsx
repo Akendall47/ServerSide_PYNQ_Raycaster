@@ -65,7 +65,7 @@ function BoardStage({ hostSlot }) {
     scene.environment = envMap;
 
     const camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
-    camera.position.set(0, 0.2, 6.2);
+    camera.position.set(0, 0.2, 7.5);
     camera.lookAt(0, 0, 0);
 
     // ── Lights — scaled for Three.js r183 physical units ──
@@ -300,9 +300,13 @@ function BoardStage({ hostSlot }) {
       glint2.position.y = Math.sin(t * 2.1 + Math.PI) * 1.5;
       glint2.position.z = 2.0;
 
+      const shadowScaleX = 0.5 + bobPhase * 0.5;
+      const shadowScaleY = 0.25 + bobPhase * 0.25;
+      const tiltOffset = Math.sin(board.rotation.z) * 12;
+
       shadow.style.transform =
-        `translateX(-50%) scaleX(${(0.88 + bobPhase * 0.28).toFixed(3)}) scaleY(${(0.7 + bobPhase * 0.3).toFixed(3)})`;
-      shadow.style.opacity = (0.4 + bobPhase * 0.45).toFixed(3);
+        `translateX(calc(-50% + ${tiltOffset.toFixed(1)}px)) scaleX(${shadowScaleX.toFixed(3)}) scaleY(${shadowScaleY.toFixed(3)})`;
+      shadow.style.opacity = (0.2 + bobPhase * 0.65).toFixed(3);
 
       renderer.render(scene, camera);
       rafId = requestAnimationFrame(render);
@@ -338,11 +342,12 @@ function BoardStage({ hostSlot }) {
         ref={shadowRef}
         style={{
           position: 'absolute',
-          bottom: 12,
+          bottom: 8,
           left: '50%',
-          width: 240,
+          width: 260,
           height: 22,
-          background: 'radial-gradient(ellipse at center, rgba(180,20,20,0.6) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse at center, rgba(140,10,10,0.7) 0%, rgba(80,0,0,0.3) 40%, transparent 70%)',
+          filter: 'blur(4px)',
           pointerEvents: 'none',
           transformOrigin: 'center center',
         }}
