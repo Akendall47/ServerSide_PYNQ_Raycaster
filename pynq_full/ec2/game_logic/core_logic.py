@@ -200,10 +200,8 @@ class CoreLogic:
         if time.monotonic() < self.state.match_end_at:
             return
 
-        print(f"[T2] match end hold expired — clearing players, lockout {LOCKOUT_S}s")
-        for p in self.state.players.values():
-            self.write_queue.put({"op": "del", "key": f"player:{p['player_id']}"})
-        self.state.clear_match(arm_lockout=True)
+        print(f"[T2] match end hold expired — returning players to lobby")
+        self._on_force_end_consumed()
 
     # ── Proximity / tag detection ─────────────────────────────────────────────
     # Pairwise check — skipped during grace period so players can separate after spawn/reset
