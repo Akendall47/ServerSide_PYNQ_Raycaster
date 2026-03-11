@@ -306,7 +306,7 @@ function BoardStage({ hostSlot }) {
 
       shadow.style.transform =
         `translateX(calc(-50% + ${tiltOffset.toFixed(1)}px)) scaleX(${shadowScaleX.toFixed(3)}) scaleY(${shadowScaleY.toFixed(3)})`;
-      shadow.style.opacity = (0.2 + bobPhase * 0.65).toFixed(3);
+      shadow.style.opacity = (0.15 + bobPhase * 0.45).toFixed(3);
 
       renderer.render(scene, camera);
       rafId = requestAnimationFrame(render);
@@ -344,10 +344,10 @@ function BoardStage({ hostSlot }) {
           position: 'absolute',
           bottom: 8,
           left: '50%',
-          width: 260,
-          height: 22,
-          background: 'radial-gradient(ellipse at center, rgba(140,10,10,0.7) 0%, rgba(80,0,0,0.3) 40%, transparent 70%)',
-          filter: 'blur(4px)',
+          width: 320,
+          height: 28,
+          background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(20,4,4,0.28) 45%, transparent 72%)',
+          filter: 'blur(8px)',
           pointerEvents: 'none',
           transformOrigin: 'center center',
         }}
