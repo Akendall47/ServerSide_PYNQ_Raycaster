@@ -26,19 +26,21 @@ class RoomEnvironment extends THREE.Scene {
 }
 
 function BoardStage({ hostSlot }) {
+  const stageRef = useRef(null);
   const mountRef = useRef(null);
   const shadowRef = useRef(null);
 
   useEffect(() => {
+    const stage = stageRef.current;
     const mount = mountRef.current;
     const shadow = shadowRef.current;
     const wrap = hostSlot?.closest('.about-sprite-wrap');
-    if (!mount || !shadow || !wrap) return () => {};
+    if (!stage || !mount || !shadow || !wrap) return () => {};
 
     wrap.classList.add('board-ready');
 
-    const W = Math.max(420, Math.round(mount.clientWidth || 620));
-    const H = Math.max(360, Math.round(mount.clientHeight || 360));
+    const W = Math.max(420, Math.round(stage.clientWidth || 620));
+    const H = Math.max(360, Math.round(stage.clientHeight || 360));
 
     // ── Renderer ──
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
@@ -286,7 +288,7 @@ function BoardStage({ hostSlot }) {
       board.rotation.y = t * 1.1;
       board.rotation.x = 0.25 + Math.sin(t * 0.5) * 0.08;
       board.rotation.z = Math.sin(t * 0.7) * 0.06;
-      board.position.y = 0.42 + Math.sin(t * 1.4) * 0.18;
+      board.position.y = 0.22 + Math.sin(t * 1.4) * 0.18;
 
       redKey.position.x = Math.cos(t * 0.6) * 4;
       redKey.position.z = Math.sin(t * 0.6) * 4 + 2;
@@ -321,7 +323,15 @@ function BoardStage({ hostSlot }) {
   }, [hostSlot]);
 
   return (
-    <div ref={mountRef} style={{ width: '100%', height: 360, position: 'relative' }}>
+    <div ref={stageRef} style={{ width: '100%', height: 360, position: 'relative' }}>
+      <div
+        ref={mountRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          transform: 'translateY(-56px)',
+        }}
+      />
       <div
         ref={shadowRef}
         style={{
