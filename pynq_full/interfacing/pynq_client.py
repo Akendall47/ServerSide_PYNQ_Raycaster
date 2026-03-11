@@ -76,6 +76,16 @@ def _try_import_pynq():
         return None
 
 
+# Decode the 4-button GPIO word into movement actions for the local player.
+def decode_button_bits(raw_buttons: int):
+    return {
+        "forward": bool(raw_buttons & BUTTON_FORWARD_MASK),
+        "backward": bool(raw_buttons & BUTTON_BACKWARD_MASK),
+        "turn_left": bool(raw_buttons & BUTTON_TURN_LEFT_MASK),
+        "turn_right": bool(raw_buttons & BUTTON_TURN_RIGHT_MASK),
+    }
+
+
 # Convert the server's flat 32x32 tile bytes into the row-bitpacked BRAM format.
 def encode_map_rows_for_bram(width: int, height: int, tiles: bytes):
     if width != HW_MAP_COLS or height != HW_MAP_ROWS:
@@ -97,7 +107,6 @@ def encode_map_rows_for_bram(width: int, height: int, tiles: bytes):
         rows.append(word)
     return rows
 
-
 # Convert centred world-space coordinates into unsigned Q6.10 tile coordinates.
 def world_to_hw_q6_10(value: float, tile_scale: int, map_dim: int):
     tile_units = (value / tile_scale) + (map_dim / 2.0)
@@ -105,12 +114,10 @@ def world_to_hw_q6_10(value: float, tile_scale: int, map_dim: int):
     max_raw = (map_dim << HW_COORD_FRAC_BITS) - 1
     return max(0, min(max_raw, raw))
 
-
 # Map radians onto the FPGA's 12-bit full-turn angle encoding.
 def radians_to_hw_angle(angle_radians: float):
     turn = angle_radians % (2.0 * math.pi)
     return int(round(turn * HW_ANGLE_STEPS / (2.0 * math.pi))) & HW_ANGLE_MASK
-
 
 # Keep every non-local player from PKT_GAME_STATE, including ghosts.
 def build_remote_entities(local_player_id, players, *, limit=MAX_REMOTE_ENTITIES):
@@ -128,17 +135,6 @@ def build_remote_entities(local_player_id, players, *, limit=MAX_REMOTE_ENTITIES
         })
     entities.sort(key=lambda entity: entity["entity_id"])
     return entities[:limit]
-
-
-# Decode the 4-button GPIO word into movement actions for the local player.
-def decode_button_bits(raw_buttons: int):
-    return {
-        "forward": bool(raw_buttons & BUTTON_FORWARD_MASK),
-        "backward": bool(raw_buttons & BUTTON_BACKWARD_MASK),
-        "turn_left": bool(raw_buttons & BUTTON_TURN_LEFT_MASK),
-        "turn_right": bool(raw_buttons & BUTTON_TURN_RIGHT_MASK),
-    }
-
 
 class HardwareContext:
     # Wraps the real BRAM-backed hardware interface from the pynq_raycaster repo.
@@ -209,7 +205,7 @@ class HardwareContext:
             self.bram_mmio.write(row_index * 4, word & 0xFFFFFFFF)
         print(f"[HW] wrote {len(rows)} packed map rows to BRAM ({width}x{height})")
 
-    # Stage a small remote-entity table in BRAM for the future sprite pass.
+    # TODO(hardware): the FPGA bitstream still needs a sprite/entity pass that reads this BRAM table.
     def write_remote_entities(self, remote_entities, map_w: int, map_h: int, tile_scale: int):
         if self.bram_mmio is None:
             return
