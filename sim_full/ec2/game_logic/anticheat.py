@@ -13,6 +13,14 @@ import math
 DEFAULT_MAX_SPEED_PER_TICK = 12.0
 
 
+# Reject a packet whose sequence number is stale or replayed.
+# Uses 16-bit wraparound arithmetic: delta > 0x7FFF means the seq went backwards.
+# Returns True if seq is newer than prev_seq, False if it should be dropped.
+def validate_seq(prev_seq, seq):
+    delta = (seq - prev_seq) & 0xFFFF
+    return delta != 0 and delta <= 0x7FFF
+
+
 # Reject a position update if the move is faster than max_speed_per_tick or out of bounds.
 # Returns True if the new position is plausible, False if it should be dropped.
 def validate_position(prev_seq, prev_x, prev_y, prev_angle,

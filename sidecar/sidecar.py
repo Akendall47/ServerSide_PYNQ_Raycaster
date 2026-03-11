@@ -4,6 +4,7 @@
 import gzip
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -807,6 +808,8 @@ def _finalise_match(status: str, replay_event: dict, meta_fields: dict,
     if match_duration is not None:
         final_meta["duration_ms"] = match_duration
 
+    # Close the multipart upload synchronously — most data was already streamed
+    # during the match, so this only flushes the tail buffer.
     replay_key = mp_close()
     if replay_key is None:
         replay_key = upload_replay(current_match_id, current_match_events, current_match_started_at)
@@ -814,22 +817,36 @@ def _finalise_match(status: str, replay_event: dict, meta_fields: dict,
         final_meta["replay_s3_bucket"] = S3_BUCKET
         final_meta["replay_s3_key"] = replay_key
 
-    try:
-        update_meta_record(current_match_id, final_meta)
-        print(f"DynamoDB: {current_match_id} {status}")
-    except Exception as exc:
-        print(f"DynamoDB update failed for {current_match_id}: {exc}")
-
+    # Cache the summary in Redis immediately so the monitor updates without delay.
     _cache_recent_match(status, replay_key)
 
-    if sns_fields is not None:
-        outbound = dict(sns_fields)
-        if match_duration is not None:
-            outbound["duration_ms"] = match_duration
-        publish_match_end(current_match_id, ended_at, replay_key, outbound)
+    # Capture everything the background thread needs before resetting global state.
+    _match_id      = current_match_id
+    _final_meta    = final_meta
+    _match_duration = match_duration
+    _sns_fields    = dict(sns_fields) if sns_fields is not None else None
 
-    enforce_warm_retention()
+    # Reset global state now so the sidecar can accept the next match immediately.
     reset_match_state()
+
+    # DynamoDB update + SNS publish + warm retention run in a background thread
+    # so the main BRPOP loop is not blocked by network I/O.
+    def _post_match_io():
+        try:
+            update_meta_record(_match_id, _final_meta)
+            print(f"DynamoDB: {_match_id} {status}")
+        except Exception as exc:
+            print(f"DynamoDB update failed for {_match_id}: {exc}")
+
+        if _sns_fields is not None:
+            outbound = dict(_sns_fields)
+            if _match_duration is not None:
+                outbound["duration_ms"] = _match_duration
+            publish_match_end(_match_id, ended_at, replay_key, outbound)
+
+        enforce_warm_retention()
+
+    threading.Thread(target=_post_match_io, daemon=True).start()
 
 
 def handle_match_end(event: dict):

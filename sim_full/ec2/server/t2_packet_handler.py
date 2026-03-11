@@ -28,7 +28,7 @@ from protocol import (
     decode_movement_mode,
     unpack_node_packet,
 )
-from game_logic.anticheat import validate_position, DEFAULT_MAX_SPEED_PER_TICK
+from game_logic.anticheat import validate_position, validate_seq, DEFAULT_MAX_SPEED_PER_TICK
 from game_logic.match_state import MatchState
 from t2_constants import (
     MATCH_PLAYERS,
@@ -131,6 +131,9 @@ class PacketHandler:
             return
 
         last = p["last_seq"]
+        if last is not None and not validate_seq(last, seq):
+            return
+
         min_x, min_y, max_x, max_y = self._world_bounds()
         next_x, next_y = x, y
         if movement_mode != MOVEMENT_MODE_INTENT_ONLY:
@@ -139,7 +142,6 @@ class PacketHandler:
             )
         if (
             movement_mode != MOVEMENT_MODE_INTENT_ONLY
-            and last is not None
             and not validate_position(
                 last, p["x"], p["y"], p["angle"],
                 next_x, next_y, angle, seq,
