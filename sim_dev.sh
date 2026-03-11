@@ -21,6 +21,8 @@ EC2_IP="3.9.71.204"
 EC2="ubuntu@${EC2_IP}"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
+SIM1_USERNAME="${SIM1_USERNAME:-sim-1}"
+SIM2_USERNAME="${SIM2_USERNAME:-sim-2}"
 
 if [ -t 1 ]; then
   CLR_RESET=$'\033[0m'
@@ -53,6 +55,7 @@ fi
 banner() {
   printf "\n%bSIM DEV%b\n" "${CLR_BOLD}${CLR_CYAN}" "${CLR_RESET}"
   printf "%bBootstrapping sim_full on EC2 + tmux%b\n" "${CLR_DIM}" "${CLR_RESET}"
+  printf "%bNode sim usernames:%b %s, %s\n" "${CLR_DIM}" "${CLR_RESET}" "${SIM1_USERNAME}" "${SIM2_USERNAME}"
 }
 
 section() {
@@ -225,11 +228,11 @@ create_redis_tunnel() {
 
 prepare_node_sim_panes() {
   # Node sims are pre-filled but not auto-started.
-  tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1 (RUNNER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 0 --redis-port 6380"
+  tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (${SIM1_USERNAME})  <- press Enter to start"
+  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n' 'Username: ${SIM1_USERNAME}'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 0 --redis-port 6380 --username '${SIM1_USERNAME}'"
 
-  tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2 (TAGGER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 1 --redis-port 6380"
+  tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (${SIM2_USERNAME})  <- press Enter to start"
+  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n' 'Username: ${SIM2_USERNAME}'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 1 --redis-port 6380 --username '${SIM2_USERNAME}'"
 
   tmux select-pane -t "$SESSION:0.5" -T "redis stats"
   tmux send-keys -t "$SESSION:0.5" "clear; printf '\033[1;38;5;81m%s\033[0m\n' 'REDIS STATS'; printf '\033[2m%s\033[0m\n' 'redis-cli --stat'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 Redis telemetry...'; ssh -t -i $KEY $EC2 'redis-cli --stat'" Enter
