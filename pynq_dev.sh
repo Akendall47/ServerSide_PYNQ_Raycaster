@@ -17,7 +17,7 @@
 # PYNQ nodes connect directly to EC2 port 9000 - no node sim panes needed here.
 
 SESSION="pynq"
-EC2="ubuntu@18.175.238.148"
+EC2="ubuntu@3.9.71.204"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 

@@ -12,7 +12,7 @@
 # Requires: tmux, SSH key at repo root raycastpair.pem
 
 SESSION="raycaster"
-EC2="ubuntu@18.175.238.148"
+EC2="ubuntu@3.9.71.204"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 KEY="$REPO/raycastpair.pem"
 SSH="ssh -t -i $KEY $EC2"

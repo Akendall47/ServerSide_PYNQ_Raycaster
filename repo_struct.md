@@ -52,7 +52,7 @@ ServerSide_PYNQ_Raycaster/
 | `./pynq_dev.sh`| Same but for pynq_full — no node sim panes (PYNQ boards connect) |
 
 ## EC2
-- Host: `ubuntu@18.175.238.148`
+- Host: `ubuntu@3.9.71.204`
 - UDP game server: port 9000
 - Monitor dashboard: port 8080 (SSH-tunnelled to localhost)
 - Redis: EC2 localhost:6379, tunnelled to local 6380 via `dev.sh`

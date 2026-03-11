@@ -17,8 +17,7 @@
 # For pynq_full stack: ./pynq_dev.sh
 
 SESSION="seda"
-# EC2="ubuntu@13.60.249.60"
-  EC2="ubuntu@18.175.238.148"
+EC2="ubuntu@3.9.71.204"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEY="$REPO/raycastpair.pem"
 
@@ -226,10 +225,10 @@ create_redis_tunnel() {
 prepare_node_sim_panes() {
   # Node sims are pre-filled but not auto-started.
   tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1 (RUNNER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 0 --redis-port 6380"
+  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1 (RUNNER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 3.9.71.204 9000 --nodes 1 --node-index 0 --redis-port 6380"
 
   tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2 (TAGGER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 1 --redis-port 6380"
+  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2 (TAGGER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 3.9.71.204 9000 --nodes 1 --node-index 1 --redis-port 6380"
 
   tmux select-pane -t "$SESSION:0.5" -T "redis stats"
   tmux send-keys -t "$SESSION:0.5" "clear; printf '\033[1;38;5;81m%s\033[0m\n' 'REDIS STATS'; printf '\033[2m%s\033[0m\n' 'redis-cli --stat'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 Redis telemetry...'; ssh -t -i $KEY $EC2 'redis-cli --stat'" Enter
