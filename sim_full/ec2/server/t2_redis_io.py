@@ -73,6 +73,35 @@ class RedisIO:
                     "is_ghost":        int(bool(p["flags"] & FLAG_GHOST)),
                 },
             })
+        queued_players = [
+            {
+                "queue_slot":      queue_slot,
+                "x":               round(p["x"], 4),
+                "y":               round(p["y"], 4),
+                "angle":           round(p["angle"], 4),
+                "flags":           p["flags"],
+                "username":        p.get("username", ""),
+                "display_name":    p.get("display_name", ""),
+                "profile_key":     p.get("profile_key", ""),
+                "controller_key":  p.get("controller_key", ""),
+                "identity_source": p.get("identity_source", ""),
+            }
+            for queue_slot, p in enumerate(
+                (
+                    player for player in sorted(
+                        self.state.players.values(),
+                        key=lambda player: (
+                            player.get("controller_key", ""),
+                            player.get("display_name", ""),
+                            player.get("x", 0.0),
+                            player.get("y", 0.0),
+                        ),
+                    )
+                    if player["player_id"] == 0 and not (player["flags"] & FLAG_GHOST)
+                ),
+                start=1,
+            )
+        ]
         pause_remaining_s = None
         if self.state.pause_abort_at is not None:
             pause_remaining_s = max(0.0, self.state.pause_abort_at - time.monotonic())
@@ -89,6 +118,7 @@ class RedisIO:
             "pause_reason":      self.state.pause_reason or "",
             "paused_player_ids": json.dumps(self.state.paused_player_ids),
             "pause_remaining_s": "" if pause_remaining_s is None else round(pause_remaining_s, 2),
+            "queued_players":    json.dumps(queued_players),
             "map":               self.map_state.get("name", ""),
             "bits": json.dumps([[round(b[0], 2), round(b[1], 2)]
                                  for b in self.state.bits]),

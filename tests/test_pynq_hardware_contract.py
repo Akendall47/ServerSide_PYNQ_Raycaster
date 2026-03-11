@@ -222,11 +222,12 @@ def test_packet_handler_registers_username_and_profile_metadata():
         assert player["display_name"] == "kat"
         assert player["profile_key"] == "kat"
         assert player["controller_key"] == "controller-192-168-2-10"
-        assert player["player_id"] == 1
-        assert state.match_started is True
+        assert player["player_id"] == 0
+        assert state.match_started is False
+        assert state.pending_roles[addr] == protocol.ROLE_TAGGER
 
 
-def test_pynq_packet_handler_starts_single_player_session():
+def test_pynq_packet_handler_queues_single_player_lobby_session():
     with pynq_import_context():
         import asyncio
 
@@ -234,13 +235,20 @@ def test_pynq_packet_handler_starts_single_player_session():
         packet_handler_mod = importlib.import_module("t2_packet_handler")
         match_state_mod = importlib.import_module("game_logic.match_state")
 
+        class DummyTransport:
+            def __init__(self):
+                self.sent = []
+
+            def sendto(self, data, addr):
+                self.sent.append((data, addr))
+
         state = match_state_mod.MatchState()
-        match_started = []
+        transport = DummyTransport()
         handler = packet_handler_mod.PacketHandler(
             state=state,
             packet_queue=asyncio.Queue(),
             write_queue=[],
-            udp_transport=None,
+            udp_transport=transport,
             map_state={
                 "width": 32,
                 "height": 32,
@@ -249,7 +257,7 @@ def test_pynq_packet_handler_starts_single_player_session():
                 "bits": [],
                 "spawn_positions": [(0.0, 0.0), (8.0, 0.0), (16.0, 0.0)],
             },
-            on_match_start=lambda: match_started.append(True),
+            on_match_start=lambda: None,
             on_match_abort=lambda event=None: None,
             on_match_pause=lambda event=None: None,
             on_match_resume=lambda event=None: None,
@@ -268,9 +276,14 @@ def test_pynq_packet_handler_starts_single_player_session():
         )
         handler._process_packet({"data": packet, "addr": addr})
 
-        assert state.match_started is True
-        assert match_started == [True]
-        assert state.players[addr]["player_id"] == 1
+        assert state.match_started is False
+        assert state.players[addr]["player_id"] == 0
+        assert len(transport.sent) == 2
+        ack_type, _, _ = protocol.unpack_header(transport.sent[0][0])
+        assert ack_type == protocol.PKT_ACK
+        assert transport.sent[0][0][protocol.HEADER_SIZE] == 0
+        map_width, map_height, _, _ = protocol.unpack_map_packet(transport.sent[1][0])
+        assert (map_width, map_height) == (32, 32)
         assert not any(str(player_addr).startswith("ghost:") for player_addr in state.players)
 
 
@@ -324,7 +337,7 @@ def test_pynq_packet_handler_double_runner_stays_two_human_only():
         assert not any(str(addr).startswith("ghost:") for addr in state.players)
 
 
-def test_pynq_packet_handler_allows_late_second_human_join_after_solo_start():
+def test_pynq_packet_handler_starts_match_when_second_human_joins():
     with pynq_import_context():
         import asyncio
 

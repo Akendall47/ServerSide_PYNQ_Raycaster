@@ -288,7 +288,7 @@ class PYNQNode:
             self.registered  = True
             self.match_ended = False
             self.server_flags = 0
-            role = "RUNNER" if player_id == 1 else "TAGGER"
+            role = "LOBBY" if player_id == 0 else ("RUNNER" if player_id == 1 else "TAGGER")
             print(f"[Node] registered as player {player_id} ({role})")
 
         elif pkt_type == PKT_MAP:

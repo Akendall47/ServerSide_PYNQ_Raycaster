@@ -625,7 +625,11 @@ def run_node(server_ip, server_port, player_id, node_index,
                         continue
                     if pkt_type == PKT_GAME_STATE:
                         _, _, _, _, players, _ = unpack_server_packet(data)
-                        active_player_id = assigned_player_id or (node_index + 1)
+                        active_player_id = (
+                            assigned_player_id
+                            if assigned_player_id is not None
+                            else (node_index + 1)
+                        )
                         for p in players:
                             state_names = ",".join(
                                 decode_flag_names(p["flags"], direction="server_to_client")

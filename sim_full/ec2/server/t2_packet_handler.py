@@ -171,6 +171,7 @@ class PacketHandler:
 
     # ── Player registration ───────────────────────────────────────────────────
     # Record preferred role, then assign roles once two humans are present.
+    # Queued humans get ACK(0) so simulator clients can move in the lobby.
 
     def _register_player(self, addr, x=0.0, y=0.0, angle=0.0,
                          preferred_role=ROLE_ANY, username=""):
@@ -198,6 +199,7 @@ class PacketHandler:
 
         human_count = sum(1 for a in self.state.players if not str(a).startswith("ghost:"))
         if human_count < MATCH_PLAYERS:
+            self._send_ack(addr, 0)
             print(f"[T2] player queued from {addr} (waiting for {MATCH_PLAYERS - human_count} more)")
             return
 
@@ -274,7 +276,10 @@ class PacketHandler:
         if ghost_count >= MAX_GHOSTS:
             return
         ghost_addr = f"ghost:{ghost_count + 1}"
-        ghost_id = len(self.state.players) + 1
+        used_ids = {player["player_id"] for player in self.state.players.values()}
+        ghost_id = 3
+        while ghost_id in used_ids:
+            ghost_id += 1
         angle = math.pi / 2
         spawn_positions = self.state.spawn_positions
         x, y = spawn_positions[ghost_id - 1] if ghost_id - 1 < len(spawn_positions) else (0.0, 0.0)

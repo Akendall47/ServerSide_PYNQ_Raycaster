@@ -400,10 +400,14 @@ let replayState = {
 function normalisePlayers(players) {
   return (players || []).map((p) => ({
     id: p.id ?? p.player_id,
+    entityKey: p.entity_key ?? p.entityKey ?? `player:${p.id ?? p.player_id ?? 0}`,
     x: p.x,
     y: p.y,
     angle: p.angle,
     flags: p.flags ?? 0,
+    queued: Boolean(p.queued),
+    queueSlot: p.queue_slot ?? p.queueSlot ?? null,
+    displayName: p.display_name ?? p.displayName ?? '',
   }));
 }
 
