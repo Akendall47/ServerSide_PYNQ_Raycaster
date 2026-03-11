@@ -8,6 +8,14 @@ from pathlib import Path
 
 
 def _load_protocol():
+    local_candidate = Path(__file__).resolve().with_name("protocol.py")
+    if local_candidate.exists():
+        spec = importlib.util.spec_from_file_location("pynq_protocol", local_candidate)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "pynq_full" / "interfacing" / "protocol.py"
         if candidate.exists():
@@ -16,7 +24,7 @@ def _load_protocol():
             assert spec.loader is not None
             spec.loader.exec_module(module)
             return module
-    raise RuntimeError("Could not locate pynq_full/interfacing/protocol.py")
+    raise RuntimeError("Could not locate protocol.py next to test_package.py or under pynq_full/interfacing/")
 
 
 protocol = _load_protocol()
