@@ -1,5 +1,5 @@
 # TODO / Continuation Priorities
-_2026-03-03_
+_2026-03-03_ · updated 2026-03-11
 
 ## What is currently live
 
@@ -16,6 +16,7 @@ _2026-03-03_
   - DynamoDB writes
   - S3 replay uploads
   - SNS publish on `match_end`
+  - post-match I/O (DynamoDB update, SNS, retention sweep) runs in a daemon thread
 - Lambda post-match processing is live:
   - reads replay from S3
   - writes summary fields back to DynamoDB
@@ -33,70 +34,46 @@ _2026-03-03_
 
 ## Pragmatic next improvements (ranked by impact)
 
-### 1. Add packet sequence validation at UDP ingress
+### ~~1. Add packet sequence validation at UDP ingress~~ ✅ Done (2026-03-11)
 
-Why:
-Protect the game from stale, replayed, or out-of-order packets.
+~~Why:~~
+~~Protect the game from stale, replayed, or out-of-order packets.~~
 
-How:
-- Track the last accepted `seq_num` per player
-- Reject packets that are not newer than the last accepted packet
-- Reset that sequence baseline when the player re-registers
+~~How:~~
+~~- Track the last accepted `seq_num` per player~~
+~~- Reject packets that are not newer than the last accepted packet~~
+~~- Reset that sequence baseline when the player re-registers~~
 
-Implementation note:
-This can be done at the T1/T2 boundary, but the cleanest place is where packet
-state is first interpreted per player.
+Completed:
+- `validate_seq()` added to `game_logic/anticheat.py` — 16-bit wraparound arithmetic
+- `t2_packet_handler.py` calls `validate_seq` upfront for **all** movement modes
+- Previously `MOVEMENT_MODE_INTENT_ONLY` packets bypassed sequence checks entirely — now fixed
+- Regression tests in `tests/test_bottleneck_fixes.py` (6 seq-validation tests + 3 packet-handler tests)
 
-Effort:
-1-2 hours
+---
 
-Impact:
-High. Strong protocol hardening, low risk.
+### ~~2. Cache recent match summaries in Redis~~ ✅ Done (already implemented)
 
-Fits:
-Week 1 hardening
+Completed:
+- `monitor.py` checks `game:recent-matches` in Redis first; DynamoDB scan is only a cold-start fallback
+- No additional work required
 
-### 2. Cache recent match summaries in Redis
+---
 
-Why:
-The monitor currently polls DynamoDB every 2 seconds and still relies on a full
-`META` scan for the recent-match list. That is the weakest current read path.
+### ~~3. Offload sidecar replay compression to a background worker~~ ✅ Done (2026-03-11)
 
-How:
-- On `match_end`, have the sidecar write a compact summary into
-  `game:recent-matches`
-- Let the monitor read Redis first for the recent-match panel
-- Keep DynamoDB as the durable warm-tier source, but refresh from it less often
+~~Why:~~
+~~Replay NDJSON compression is currently synchronous during `match_end` handling.~~
+~~As replay files grow, that can delay the sidecar from returning to Redis queue~~
+~~consumption.~~
 
-Effort:
-2-3 hours
+Completed:
+- `sidecar/_finalise_match` captures needed data into locals, calls `reset_match_state()` immediately
+- Slow I/O (DynamoDB `update_meta_record`, SNS publish, `enforce_warm_retention`) runs in a `daemon=True` thread
+- Next match can start before previous match's I/O thread completes
+- Threading invariant tests in `tests/test_bottleneck_fixes.py` (3 threading tests)
 
-Impact:
-Medium. Reduces DynamoDB scan pressure and makes the monitor path cleaner.
-
-Fits:
-Week 2 optimization
-
-### 3. Offload sidecar replay compression to a background worker
-
-Why:
-Replay NDJSON compression is currently synchronous during `match_end` handling.
-As replay files grow, that can delay the sidecar from returning to Redis queue
-consumption.
-
-How:
-- Push replay compression + upload into a background thread or executor
-- Let the main sidecar loop resume event consumption immediately
-- Track replay upload status separately from gameplay completion
-
-Effort:
-3-4 hours
-
-Impact:
-Medium. Better scaling as match length and replay size grow.
-
-Fits:
-Week 2-3 load hardening
+---
 
 ### 4. Add CloudWatch metrics and a simple dashboard
 
@@ -121,7 +98,7 @@ Week 2 observability pass
 
 ## Suggested order for teammates
 
-1. Do packet sequence validation first
-2. Then clean up the monitor read path with Redis-backed recent matches
-3. Then harden sidecar scalability with background replay compression
-4. Then add CloudWatch metrics once the main runtime path is stable
+1. ~~Do packet sequence validation first~~ ✅
+2. ~~Then clean up the monitor read path with Redis-backed recent matches~~ ✅
+3. ~~Then harden sidecar scalability with background replay compression~~ ✅
+4. Add CloudWatch metrics once the main runtime path is stable
