@@ -302,7 +302,7 @@ function BoardStage({ hostSlot }) {
 
       const shadowScaleX = 0.5 + bobPhase * 0.5;
       const shadowScaleY = 0.25 + bobPhase * 0.25;
-      const tiltOffset = Math.sin(board.rotation.z) * 12;
+      const tiltOffset = Math.sin(board.rotation.z) * -18;
 
       shadow.style.transform =
         `translateX(calc(-50% + ${tiltOffset.toFixed(1)}px)) scaleX(${shadowScaleX.toFixed(3)}) scaleY(${shadowScaleY.toFixed(3)})`;
@@ -346,8 +346,8 @@ function BoardStage({ hostSlot }) {
           left: '50%',
           width: 320,
           height: 28,
-          background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(20,4,4,0.28) 45%, transparent 72%)',
-          filter: 'blur(8px)',
+          background: 'radial-gradient(ellipse at center, rgba(160,12,8,0.6) 0%, rgba(90,4,4,0.28) 45%, transparent 72%)',
+          filter: 'blur(10px)',
           pointerEvents: 'none',
           transformOrigin: 'center center',
         }}
