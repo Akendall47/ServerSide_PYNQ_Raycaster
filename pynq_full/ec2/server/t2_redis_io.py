@@ -10,7 +10,7 @@ import json
 import struct
 import time
 
-from protocol import GAME_STATE_EXT_FMT
+from protocol import GAME_STATE_EXT_FMT, FLAG_GHOST
 from t2_constants import REPLAY_KEY, EVENTS_KEY
 from game_logic.match_state import MatchState
 
@@ -61,10 +61,16 @@ class RedisIO:
             self.write_queue.put({
                 "op": "hset", "key": f"player:{p['player_id']}",
                 "mapping": {
-                    "x":     round(p["x"], 4),
-                    "y":     round(p["y"], 4),
-                    "angle": round(p["angle"], 4),
-                    "flags": p["flags"],
+                    "x":               round(p["x"], 4),
+                    "y":               round(p["y"], 4),
+                    "angle":           round(p["angle"], 4),
+                    "flags":           p["flags"],
+                    "username":        p.get("username", ""),
+                    "display_name":    p.get("display_name", ""),
+                    "profile_key":     p.get("profile_key", ""),
+                    "controller_key":  p.get("controller_key", ""),
+                    "identity_source": p.get("identity_source", ""),
+                    "is_ghost":        int(bool(p["flags"] & FLAG_GHOST)),
                 },
             })
         pause_remaining_s = None
@@ -112,6 +118,11 @@ class RedisIO:
                 "y":         round(p["y"], 4),
                 "angle":     round(p["angle"], 4),
                 "flags":     p["flags"],
+                "username":  p.get("username", ""),
+                "display_name": p.get("display_name", ""),
+                "profile_key": p.get("profile_key", ""),
+                "controller_key": p.get("controller_key", ""),
+                "identity_source": p.get("identity_source", ""),
             }
             for p in sorted(self.state.players.values(), key=lambda q: q["player_id"])
         ]

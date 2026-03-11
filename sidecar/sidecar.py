@@ -20,6 +20,7 @@ EVENT_KEY = os.environ.get("EVENT_KEY", "game:seda-events")
 REPLAY_KEY = os.environ.get("REPLAY_KEY", "game:seda-replay")
 
 DYNAMO_TABLE = os.environ.get("DYNAMO_TABLE", "pynq-raycaster-seda-matches")
+PLAYER_TABLE = os.environ.get("PLAYER_TABLE", "pynq-raycaster-players")
 AWS_REGION = os.environ.get("AWS_REGION", "eu-west-2")
 
 S3_BUCKET = os.environ.get("S3_BUCKET", "fpga-raycaster-data").strip()
@@ -40,6 +41,7 @@ r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 print(f"Connecting to DynamoDB table '{DYNAMO_TABLE}' in {AWS_REGION}...")
 dynamo = boto3.resource("dynamodb", region_name=AWS_REGION)
 table = dynamo.Table(DYNAMO_TABLE)
+player_table = dynamo.Table(PLAYER_TABLE)
 
 s3 = boto3.client("s3", region_name=AWS_REGION) if S3_BUCKET else None
 sns = boto3.client("sns", region_name=AWS_REGION) if (SNS_TOPIC_ARN or SNS_TOPIC_NAME) else None
@@ -519,11 +521,12 @@ game_mode = GAME_MODE_CHASE
 game_human_players = 0
 game_ghost_count = 0
 game_map_name = None
+game_match_players = []
 
 
 def game_reset_state():
     global game_tag_count, game_bit_count, game_bits_total
-    global game_mode, game_human_players, game_ghost_count, game_map_name
+    global game_mode, game_human_players, game_ghost_count, game_map_name, game_match_players
     game_tag_count = 0
     game_bit_count = 0
     game_bits_total = 0
@@ -531,19 +534,45 @@ def game_reset_state():
     game_human_players = 0
     game_ghost_count = 0
     game_map_name = None
+    game_match_players = []
 
 
-def game_build_player_snapshot(player_total: int):
+def game_build_player_snapshot(player_total: int, event_players=None):
     """Read the current players from Redis in a game-specific shape."""
     ddb_players = []
     replay_players = []
 
-    for pid in range(1, player_total + 1):
-        pos = r.hgetall(f"player:{pid}")
-        x = float(pos.get("x", "0"))
-        y = float(pos.get("y", "0"))
-        angle = float(pos.get("angle", "0"))
-        flags = int(pos.get("flags", 0))
+    source_players = list(event_players or [])
+    if source_players:
+        rows = sorted(source_players, key=lambda player: int(player.get("player_id", 0)))
+    else:
+        rows = []
+        for pid in range(1, player_total + 1):
+            pos = r.hgetall(f"player:{pid}")
+            rows.append({
+                "player_id": pid,
+                "x": float(pos.get("x", "0")),
+                "y": float(pos.get("y", "0")),
+                "angle": float(pos.get("angle", "0")),
+                "flags": int(pos.get("flags", 0)),
+                "username": pos.get("username", ""),
+                "display_name": pos.get("display_name", ""),
+                "profile_key": pos.get("profile_key", ""),
+                "controller_key": pos.get("controller_key", ""),
+                "identity_source": pos.get("identity_source", ""),
+            })
+
+    for player in rows:
+        pid = int(player.get("player_id", 0))
+        x = float(player.get("x", 0.0))
+        y = float(player.get("y", 0.0))
+        angle = float(player.get("angle", 0.0))
+        flags = int(player.get("flags", 0))
+        username = str(player.get("username", "") or "")
+        display_name = str(player.get("display_name", "") or "")
+        profile_key = str(player.get("profile_key", "") or "")
+        controller_key = str(player.get("controller_key", "") or "")
+        identity_source = str(player.get("identity_source", "") or "")
 
         ddb_players.append({
             "player_id": pid,
@@ -551,6 +580,11 @@ def game_build_player_snapshot(player_total: int):
             "y": Decimal(str(y)),
             "angle": Decimal(str(angle)),
             "flags": flags,
+            "username": username,
+            "display_name": display_name,
+            "profile_key": profile_key,
+            "controller_key": controller_key,
+            "identity_source": identity_source,
         })
         replay_players.append({
             "player_id": pid,
@@ -558,14 +592,131 @@ def game_build_player_snapshot(player_total: int):
             "y": y,
             "angle": angle,
             "flags": flags,
+            "username": username,
+            "display_name": display_name,
+            "profile_key": profile_key,
+            "controller_key": controller_key,
+            "identity_source": identity_source,
         })
 
     return ddb_players, replay_players
 
 
+def game_role_for_player(player_id: int, flags: int) -> str:
+    if flags & 0x08:
+        return "ghost"
+    if player_id == 1:
+        return "runner"
+    if player_id == 2:
+        return "tagger"
+    return f"player-{player_id}"
+
+
+def load_live_player_state(player_id: int) -> dict:
+    raw = r.hgetall(f"player:{player_id}")
+    if not raw:
+        return {}
+    return {
+        "x": float(raw.get("x", 0.0)),
+        "y": float(raw.get("y", 0.0)),
+        "angle": float(raw.get("angle", 0.0)),
+        "flags": int(raw.get("flags", 0)),
+        "username": raw.get("username", ""),
+        "display_name": raw.get("display_name", ""),
+        "profile_key": raw.get("profile_key", ""),
+        "controller_key": raw.get("controller_key", ""),
+        "identity_source": raw.get("identity_source", ""),
+    }
+
+
+def persist_player_history(match_id: str, match_players: list, status: str, ended_at: str, final_meta: dict):
+    for player in match_players:
+        player_id = int(player.get("player_id", 0))
+        flags = int(player.get("flags", 0))
+        if not player_id or flags & 0x08:
+            continue
+
+        live_state = load_live_player_state(player_id)
+        merged = dict(player)
+        merged.update({k: v for k, v in live_state.items() if v not in {"", None}})
+        player_key = str(merged.get("profile_key", "") or "")
+        if not player_key:
+            continue
+
+        role = game_role_for_player(player_id, int(merged.get("flags", 0)))
+        winner = str(final_meta.get("winner", "") or "")
+        won = int(bool(winner) and winner == role)
+        duration_ms = final_meta.get("duration_ms")
+
+        try:
+            player_table.update_item(
+                Key={"player_key": player_key, "record_type": "PROFILE"},
+                UpdateExpression=(
+                    "SET #display_name = :display_name, #username = :username, "
+                    "#controller_key = :controller_key, #identity_source = :identity_source, "
+                    "#last_seen_at = :last_seen_at, #last_match_id = :last_match_id, "
+                    "#first_seen_at = if_not_exists(#first_seen_at, :first_seen_at) "
+                    "ADD #match_count :match_inc"
+                ),
+                ExpressionAttributeNames={
+                    "#display_name": "display_name",
+                    "#username": "username",
+                    "#controller_key": "controller_key",
+                    "#identity_source": "identity_source",
+                    "#last_seen_at": "last_seen_at",
+                    "#last_match_id": "last_match_id",
+                    "#first_seen_at": "first_seen_at",
+                    "#match_count": "match_count",
+                },
+                ExpressionAttributeValues={
+                    ":display_name": str(merged.get("display_name", "") or player_key),
+                    ":username": str(merged.get("username", "") or ""),
+                    ":controller_key": str(merged.get("controller_key", "") or ""),
+                    ":identity_source": str(merged.get("identity_source", "") or ""),
+                    ":last_seen_at": ended_at,
+                    ":last_match_id": match_id,
+                    ":first_seen_at": ended_at,
+                    ":match_inc": 1,
+                },
+            )
+
+            match_item = {
+                "player_key": player_key,
+                "record_type": f"MATCH#{ended_at}#{match_id}",
+                "timestamp": ended_at,
+                "match_id": match_id,
+                "status": status,
+                "player_id": player_id,
+                "role": role,
+                "won": won,
+                "display_name": str(merged.get("display_name", "") or player_key),
+                "username": str(merged.get("username", "") or ""),
+                "controller_key": str(merged.get("controller_key", "") or ""),
+                "identity_source": str(merged.get("identity_source", "") or ""),
+                "game_mode": int(final_meta.get("game_mode", GAME_MODE_CHASE) or GAME_MODE_CHASE),
+                "map_name": str(final_meta.get("map_name", "") or ""),
+                "tag_count": int(final_meta.get("tag_count", 0) or 0),
+                "bits_total": int(final_meta.get("bits_total", 0) or 0),
+                "bits_collected": int(final_meta.get("bits_collected", 0) or 0),
+                "end_reason": str(final_meta.get("end_reason", "") or ""),
+                "winner": winner,
+                "x": Decimal(str(float(merged.get("x", 0.0)))),
+                "y": Decimal(str(float(merged.get("y", 0.0)))),
+                "angle": Decimal(str(float(merged.get("angle", 0.0)))),
+                "flags": int(merged.get("flags", 0) or 0),
+            }
+            if duration_ms is not None:
+                match_item["duration_ms"] = int(duration_ms)
+
+            player_table.put_item(Item=match_item)
+        except Exception as exc:
+            print(f"DynamoDB player history write failed for {player_key}: {exc}")
+
+
 def game_on_match_start(event: dict):
     """Hook: define the META row and replay start payload for this game."""
     global game_mode, game_bits_total, game_human_players, game_ghost_count, game_map_name
+    global game_match_players
     game_mode = int(event.get("game_mode", GAME_MODE_CHASE) or GAME_MODE_CHASE)
     game_bits_total = len(event.get("bits", []) or [])
     game_human_players = int(event.get("human_players", event.get("players", 0)) or 0)
@@ -573,7 +724,10 @@ def game_on_match_start(event: dict):
     game_map_name = event.get("map")
 
     player_total = int(event.get("players", 0))
-    ddb_players, replay_players = game_build_player_snapshot(player_total)
+    ddb_players, replay_players = game_build_player_snapshot(
+        player_total, event.get("player_snapshot")
+    )
+    game_match_players = replay_players
 
     replay_event = dict(event)
     replay_event["player_snapshot"] = replay_players
@@ -822,6 +976,7 @@ def _finalise_match(status: str, replay_event: dict, meta_fields: dict,
 
     # Capture everything the background thread needs before resetting global state.
     _match_id      = current_match_id
+    _match_players = list(game_match_players)
     _final_meta    = final_meta
     _match_duration = match_duration
     _sns_fields    = dict(sns_fields) if sns_fields is not None else None
@@ -837,6 +992,8 @@ def _finalise_match(status: str, replay_event: dict, meta_fields: dict,
             print(f"DynamoDB: {_match_id} {status}")
         except Exception as exc:
             print(f"DynamoDB update failed for {_match_id}: {exc}")
+
+        persist_player_history(_match_id, _match_players, status, ended_at, _final_meta)
 
         if _sns_fields is not None:
             outbound = dict(_sns_fields)

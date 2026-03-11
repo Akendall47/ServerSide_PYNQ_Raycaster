@@ -231,6 +231,21 @@ class GameTick:
         bits = [[round(b[0], 2), round(b[1], 2)] for b in self.state.bits]
         human_players = sum(1 for addr in self.state.players if not str(addr).startswith("ghost:"))
         ghost_count = sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
+        player_snapshot = [
+            {
+                "player_id": p["player_id"],
+                "x": round(p["x"], 4),
+                "y": round(p["y"], 4),
+                "angle": round(p["angle"], 4),
+                "flags": p["flags"],
+                "username": p.get("username", ""),
+                "display_name": p.get("display_name", ""),
+                "profile_key": p.get("profile_key", ""),
+                "controller_key": p.get("controller_key", ""),
+                "identity_source": p.get("identity_source", ""),
+            }
+            for p in sorted(self.state.players.values(), key=lambda player: player["player_id"])
+        ]
         asyncio.ensure_future(self._push_event({
             "event": "match_start",
             "players": len(self.state.players),
@@ -239,6 +254,7 @@ class GameTick:
             "game_mode": self.state.game_mode,
             "bits": bits,
             "map": self.map_state.get("name"),
+            "player_snapshot": player_snapshot,
         }))
 
     def _on_match_abort(self, event=None):

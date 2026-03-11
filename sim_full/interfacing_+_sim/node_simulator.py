@@ -2,7 +2,7 @@
 # node_simulator.py — fake PYNQ node for testing without hardware.
 #
 # State machine: PLAYING (send position @ 20 Hz) ↔ WAITING (on FLAG_TAGGED, wait for restart).
-# Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I
+# Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I --username sim
 
 import socket
 import struct
@@ -32,7 +32,7 @@ from protocol import (
     FLAG_SHOOTING, FLAG_TAGGED, FLAG_MATCH_END,
     # functions
     client_input_flags, decode_flag_names, decode_movement_mode,
-    pack_node_packet, unpack_header, unpack_server_packet,
+    pack_node_packet, pack_register_packet, unpack_header, unpack_server_packet,
 )
 
 # How long to wait after restart signal before re-registering.
@@ -386,7 +386,7 @@ def apply_control_command(tag: str, command: dict, current_mode: str, node_index
 
 
 def run_node(server_ip, server_port, player_id, node_index,
-             redis_host, redis_port, max_ticks=None, mode="auto"):
+             redis_host, redis_port, max_ticks=None, mode="auto", username=""):
     server_addr = (server_ip, server_port)
 
     radius         = ARENA_RADIUS
@@ -557,13 +557,15 @@ def run_node(server_ip, server_port, player_id, node_index,
                 sock.settimeout(0.05)
                 x, y, angle = spawn_pose(map_state, node_index, radius)
                 orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
-                pkt = pack_node_packet(
-                    PKT_REGISTER, seq=0,
+                pkt = pack_register_packet(
+                    seq=0,
                     x=x, y=y, angle=angle, flags=0,
                     movement_mode=MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+                    username=username,
                 )
                 sock.sendto(pkt, server_addr)
-                print(f"{tag} REGISTER sent at ({x:.1f},{y:.1f})")
+                identity_note = f" username={username}" if username else ""
+                print(f"{tag} REGISTER sent at ({x:.1f},{y:.1f}){identity_note}")
                 seq     = 1
                 tick    = 0
                 playing = True
@@ -740,6 +742,8 @@ def main():
     parser.add_argument("--redis-port",       type=int, default=6380)
     parser.add_argument("--mode",             choices=["auto", "manual", "scripted"],
                         default="auto")
+    parser.add_argument("--username",         default="",
+                        help="Optional simulator display name; with --nodes >1 this becomes base-1, base-2, ...")
     args = parser.parse_args()
 
     if args.mode == "manual" and args.nodes != 1:
@@ -766,6 +770,9 @@ def main():
                 redis_port  = args.redis_port,
                 max_ticks   = args.max_ticks,
                 mode        = args.mode,
+                username    = (
+                    f"{args.username}-{i + 1}" if args.username and args.nodes > 1 else args.username
+                ),
             ),
             daemon=False,
         )

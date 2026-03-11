@@ -21,8 +21,7 @@
 # Run on board:
 #   ssh xilinx@<PYNQ_IP>
 #   cd /home/xilinx/jupyter_notebooks
-#***#
-#   python3 pynq_client.py --server 3.9.71.204 --port 9000 --overlay raycaster.bit
+#   python3 pynq_client.py --server 3.9.71.204 --port 9000 --overlay raycaster.bit --username louis
 
 import asyncio
 import socket
@@ -37,10 +36,10 @@ from protocol import (
     # constants
     MOVEMENT_MODE_POSE,
     PKT_REGISTER, PKT_ACK, PKT_GAME_STATE, PKT_MAP, PKT_HEARTBEAT, PKT_BITS_INIT,
-    FLAG_TAGGED, FLAG_MATCH_END,
+    FLAG_TAGGED, FLAG_MATCH_END, FLAG_GHOST,
     HEADER_SIZE,
     # functions
-    pack_node_packet, unpack_bits_init_packet, unpack_header,
+    pack_node_packet, pack_register_packet, unpack_bits_init_packet, unpack_header,
     unpack_map_packet, unpack_server_packet,
 )
 
@@ -240,9 +239,10 @@ class HardwareContext:
 # ── Node state machine ────────────────────────────────────────────────────────
 
 class PYNQNode:
-    def __init__(self, server_ip: str, server_port: int, hw: HardwareContext):
+    def __init__(self, server_ip: str, server_port: int, hw: HardwareContext, username: str = ""):
         self.server_addr = (server_ip, server_port)
         self.hw          = hw
+        self.username    = username.strip()
 
         # Game state
         self.player_id   = None
@@ -399,9 +399,10 @@ class PYNQNode:
     # ── Send helpers ───────────────────────────────────────────────────────
 
     def _send_register(self):
-        pkt = pack_node_packet(
-            PKT_REGISTER, self.seq, self.x, self.y, self.angle,
+        pkt = pack_register_packet(
+            self.seq, self.x, self.y, self.angle,
             movement_mode=self.movement_mode,
+            username=self.username,
         )
         self.seq += 1
         self.transport.sendto(pkt, self.server_addr)
@@ -471,12 +472,14 @@ def main():
     parser.add_argument("--port",    type=int, default=9000)
     parser.add_argument("--overlay", default="raycaster.bit",
                         help="Path to FPGA bitstream (.bit)")
+    parser.add_argument("--username", default=os.environ.get("PYNQ_USERNAME", ""),
+                        help="Optional display name stored with match/player history")
     args = parser.parse_args()
 
     hw = HardwareContext(args.overlay)
     if not hw.hardware_ready:
         raise SystemExit(hw.init_error or "hardware init failed")
-    node = PYNQNode(args.server, args.port, hw)
+    node = PYNQNode(args.server, args.port, hw, username=args.username)
     asyncio.run(node.run())
 
 

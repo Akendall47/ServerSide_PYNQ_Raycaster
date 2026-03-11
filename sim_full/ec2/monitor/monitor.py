@@ -14,6 +14,8 @@ import time
 import redis as redislib
 import boto3
 from aiohttp import web
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
 REDIS_HOST   = "127.0.0.1"
 REDIS_PORT   = 6379
@@ -24,6 +26,7 @@ SERVICE_POLL_INTERVAL_S = 1.0
 REDIS_STATS_POLL_INTERVAL_S = 1.0
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
+PLAYER_TABLE = "pynq-raycaster-players"
 AWS_REGION   = "eu-west-2"
 REPO_ROOT    = Path(__file__).resolve().parents[3]
 MAPS_DIR     = REPO_ROOT / "pynq_full" / "ec2" / "maps"   # shared map files
@@ -62,6 +65,7 @@ SERVICE_SPECS = {
 
 r     = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
+player_dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(PLAYER_TABLE)
 s3    = boto3.client("s3", region_name=AWS_REGION)
 
 # ── DynamoDB poll (slow — every 5s) ───────────────────────────────────────────
@@ -89,6 +93,22 @@ def _as_float(value, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _plain_number(value: Decimal):
+    if value == value.to_integral_value():
+        return int(value)
+    return float(value)
+
+
+def _plain_json(value):
+    if isinstance(value, Decimal):
+        return _plain_number(value)
+    if isinstance(value, dict):
+        return {key: _plain_json(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_plain_json(inner) for inner in value]
+    return value
 
 def poll_dynamodb():
     global _ddb_cache, _ddb_last_fetch
@@ -458,11 +478,17 @@ def collect_state():
         if not raw:
             continue
         players.append({
-            "id":    pid,
-            "x":     float(raw.get("x", 0)),
-            "y":     float(raw.get("y", 0)),
-            "angle": float(raw.get("angle", 0)),
-            "flags": int(raw.get("flags", 0)),
+            "id":              pid,
+            "x":               float(raw.get("x", 0)),
+            "y":               float(raw.get("y", 0)),
+            "angle":           float(raw.get("angle", 0)),
+            "flags":           int(raw.get("flags", 0)),
+            "username":        raw.get("username", ""),
+            "display_name":    raw.get("display_name", ""),
+            "profile_key":     raw.get("profile_key", ""),
+            "controller_key":  raw.get("controller_key", ""),
+            "identity_source": raw.get("identity_source", ""),
+            "is_ghost":        bool(_as_int(raw.get("is_ghost", 0), 0)),
         })
 
     game_raw  = redis_rows[9]
@@ -619,6 +645,47 @@ def fetch_replay(match_id: str):
             _replay_cache.pop(oldest, None)
     return payload
 
+
+def fetch_players():
+    items = []
+    last_evaluated_key = None
+    while True:
+        kwargs = {
+            "FilterExpression": "#rt = :rt",
+            "ExpressionAttributeNames": {"#rt": "record_type"},
+            "ExpressionAttributeValues": {":rt": "PROFILE"},
+        }
+        if last_evaluated_key:
+            kwargs["ExclusiveStartKey"] = last_evaluated_key
+        response = player_dyndb.scan(**kwargs)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if not last_evaluated_key:
+            break
+    items.sort(key=lambda item: item.get("last_seen_at", ""), reverse=True)
+    return {"players": _plain_json(items)}
+
+
+def fetch_player_profile(player_key: str):
+    response = player_dyndb.query(
+        KeyConditionExpression=Key("player_key").eq(player_key)
+    )
+    items = response.get("Items", [])
+    if not items:
+        raise web.HTTPNotFound(text=f"unknown player_key: {player_key}")
+
+    profile = next((item for item in items if item.get("record_type") == "PROFILE"), None)
+    matches = sorted(
+        (item for item in items if str(item.get("record_type", "")).startswith("MATCH#")),
+        key=lambda item: item.get("timestamp", ""),
+        reverse=True,
+    )
+    return {
+        "player_key": player_key,
+        "profile": _plain_json(profile),
+        "matches": _plain_json(matches),
+    }
+
 # ── WebSocket handler ──────────────────────────────────────────────────────────
 
 async def ws_handler(request):
@@ -678,6 +745,27 @@ async def replay_handler(request):
         raise web.HTTPInternalServerError(text="failed to load replay")
     return web.json_response(payload)
 
+
+async def players_handler(request):
+    try:
+        payload = await asyncio.to_thread(fetch_players)
+    except Exception as e:
+        print(f"[monitor] players fetch error: {e}")
+        raise web.HTTPInternalServerError(text="failed to load players")
+    return web.json_response(payload)
+
+
+async def player_handler(request):
+    player_key = request.match_info["player_key"]
+    try:
+        payload = await asyncio.to_thread(fetch_player_profile, player_key)
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        print(f"[monitor] player fetch error for {player_key}: {e}")
+        raise web.HTTPInternalServerError(text="failed to load player history")
+    return web.json_response(payload)
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def maps_list_handler(request):
@@ -727,6 +815,8 @@ async def main():
         app.router.add_get(f"/{logo_asset_name}", asset_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/replay/{match_id}", replay_handler)
+    app.router.add_get("/api/players", players_handler)
+    app.router.add_get("/api/players/{player_key}", player_handler)
     app.router.add_get("/api/maps",         maps_list_handler)
     app.router.add_get("/api/map/{name}",   map_handler)
     await asyncio.to_thread(refresh_state_cache)
