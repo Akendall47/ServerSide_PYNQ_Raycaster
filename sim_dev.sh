@@ -17,9 +17,10 @@
 # For pynq_full stack: ./pynq_dev.sh
 
 SESSION="seda"
-EC2="ubuntu@16.171.174.8"
+EC2_IP="16.171.174.8"
+EC2="ubuntu@${EC2_IP}"
 REPO="$(cd "$(dirname "$0")" && pwd)"
-KEY="$REPO/TestEC2Instance.pem"
+KEY="$HOME/ec2key.pem"
 
 if [ -t 1 ]; then
   CLR_RESET=$'\033[0m'
@@ -206,14 +207,14 @@ build_layout() {
 wire_service_panes() {
   # Auto-start EC2 services (server -> sidecar -> monitor) then leave node sims ready to run manually.
   tmux select-pane -t "$SESSION:0.0" -T "seda server"
-  tmux send-keys -t "$SESSION:0.0" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'SEDA SERVER'; printf '\033[2m%s\033[0m\n' 'sim_full/ec2/server/server.py'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 and starting server...'; ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sim_full/ec2/server && python3 server.py'" Enter
+  tmux send-keys -t "$SESSION:0.0" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'SEDA SERVER'; printf '\033[2m%s\033[0m\n' 'sim_full/ec2/server/server.py'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 and starting server...'; ssh -t -i \"$KEY\" $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sim_full/ec2/server && python3 server.py'" Enter
 
   tmux select-pane -t "$SESSION:0.1" -T "sidecar"
-  tmux send-keys -t "$SESSION:0.1" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'SIDECAR'; printf '\033[2m%s\033[0m\n' 'sidecar/sidecar.py'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 and starting sidecar...'; ssh -t -i $KEY $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sidecar && python3 sidecar.py'" Enter
+  tmux send-keys -t "$SESSION:0.1" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'SIDECAR'; printf '\033[2m%s\033[0m\n' 'sidecar/sidecar.py'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 and starting sidecar...'; ssh -t -i \"$KEY\" $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sidecar && python3 sidecar.py'" Enter
 
   # Monitor: start on EC2, poll until port 8080 is bound, then tail log (tunnel via -L).
   tmux select-pane -t "$SESSION:0.2" -T "monitor :8080"
-  tmux send-keys -t "$SESSION:0.2" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'MONITOR TUNNEL'; printf '\033[2m%s\033[0m\n' 'local :8080 -> EC2 :8080'; printf '\033[36m● %s\033[0m\n\n' 'Opening SSH tunnel and waiting for monitor...'; fuser -k 8080/tcp 2>/dev/null || true; ssh -t -i $KEY -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sim_full/ec2/monitor && nohup python3 monitor.py > /tmp/monitor.log 2>&1 & until nc -z localhost 8080 2>/dev/null; do sleep 0.2; done && echo [monitor] port 8080 ready && tail -f /tmp/monitor.log'" Enter
+  tmux send-keys -t "$SESSION:0.2" "clear; printf '\033[1;38;5;45m%s\033[0m\n' 'MONITOR TUNNEL'; printf '\033[2m%s\033[0m\n' 'local :8080 -> EC2 :8080'; printf '\033[36m● %s\033[0m\n\n' 'Opening SSH tunnel and waiting for monitor...'; fuser -k 8080/tcp 2>/dev/null || true; ssh -t -i \"$KEY\" -L 0.0.0.0:8080:localhost:8080 $EC2 'source ~/venv/bin/activate && cd ~/ServerSide_PYNQ_Raycaster/sim_full/ec2/monitor && nohup python3 monitor.py > /tmp/monitor.log 2>&1 & until nc -z localhost 8080 2>/dev/null; do sleep 0.2; done && echo [monitor] port 8080 ready && tail -f /tmp/monitor.log'" Enter
 }
 
 create_redis_tunnel() {
@@ -225,13 +226,13 @@ create_redis_tunnel() {
 prepare_node_sim_panes() {
   # Node sims are pre-filled but not auto-started.
   tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (runner)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1 (RUNNER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 0 --redis-port 6380"
+  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1 (RUNNER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd \"$REPO\" && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 0 --redis-port 6380"
 
   tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (tagger)  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2 (TAGGER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py 18.175.238.148 9000 --nodes 1 --node-index 1 --redis-port 6380"
+  tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2 (TAGGER)'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd \"$REPO\" && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 1 --redis-port 6380"
 
   tmux select-pane -t "$SESSION:0.5" -T "redis stats"
-  tmux send-keys -t "$SESSION:0.5" "clear; printf '\033[1;38;5;81m%s\033[0m\n' 'REDIS STATS'; printf '\033[2m%s\033[0m\n' 'redis-cli --stat'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 Redis telemetry...'; ssh -t -i $KEY $EC2 'redis-cli --stat'" Enter
+  tmux send-keys -t "$SESSION:0.5" "clear; printf '\033[1;38;5;81m%s\033[0m\n' 'REDIS STATS'; printf '\033[2m%s\033[0m\n' 'redis-cli --stat'; printf '\033[36m● %s\033[0m\n\n' 'Connecting to EC2 Redis telemetry...'; ssh -t -i \"$KEY\" $EC2 'redis-cli --stat'" Enter
 }
 
 open_monitor_browser() {
