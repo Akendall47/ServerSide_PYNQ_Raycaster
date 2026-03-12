@@ -404,14 +404,14 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
     _pendingMapName && (performance.now() - _pendingMapRequestedAt) < MAP_SELECT_GRACE_MS,
   );
   const nextActiveMap = (
-    incomingActiveMap
-    || (pendingAlive ? _pendingMapName : '')
+    (pendingAlive ? _pendingMapName : '')
+    || incomingActiveMap
     || _activeMapName
     || LOBBY_MAP_NAME
   );
   const nextSelectedMap = (
-    incomingSelectedMap
-    || (pendingAlive ? _pendingMapName : '')
+    (pendingAlive ? _pendingMapName : '')
+    || incomingSelectedMap
     || _selectedMapName
     || nextActiveMap
   );
