@@ -490,6 +490,7 @@ if (stackedFrameChart) {
 // Expose functions needed by inline onclick handlers in the template HTML.
 window.stopReplay = stopReplay;
 window.sendControl = sendControl;
+window.setServiceNote = setServiceNote;
 
 setActiveTab(window.location.hash.replace('#', ''));
 initThemeToggle();

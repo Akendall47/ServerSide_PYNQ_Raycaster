@@ -5,6 +5,11 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from botocore.exceptions import ClientError
+except Exception:  # pragma: no cover - botocore is present in runtime, optional in tests
+    ClientError = None
+
 GRID_WIDTH = 32
 GRID_HEIGHT = 32
 GRID_CELLS = GRID_WIDTH * GRID_HEIGHT
@@ -16,6 +21,7 @@ SPAWN_MARKERS = {index: str(index + 1) for index in range(5)}
 RUNTIME_MARKERS = {
     "B": "bit_spawn",
 }
+MAP_RECORD_TYPE = "META"
 
 
 class MapStorageError(ValueError):
@@ -234,6 +240,139 @@ def _metadata_defaults(map_id: str, map_name: str, created_at: str | None = None
     }
 
 
+def _is_missing_table_error(exc: Exception):
+    if ClientError is None or not isinstance(exc, ClientError):
+        return False
+    code = str(exc.response.get("Error", {}).get("Code", "") or "")
+    return code in {"ResourceNotFoundException", "ValidationException"}
+
+
+def _table_get_item(map_table, map_id: str):
+    if map_table is None:
+        return None
+    try:
+        response = map_table.get_item(Key={"map_id": map_id})
+    except Exception as exc:
+        if _is_missing_table_error(exc):
+            return None
+        raise MapStorageError(f"map table read failed: {exc}") from exc
+    item = response.get("Item")
+    if not item:
+        return None
+    if item.get("record_type", MAP_RECORD_TYPE) != MAP_RECORD_TYPE:
+        return None
+    return item
+
+
+def _table_scan_items(map_table):
+    if map_table is None:
+        return []
+    items = []
+    kwargs = {}
+    while True:
+        try:
+            response = map_table.scan(**kwargs)
+        except Exception as exc:
+            if _is_missing_table_error(exc):
+                return []
+            raise MapStorageError(f"map table scan failed: {exc}") from exc
+        items.extend(
+            item for item in response.get("Items", [])
+            if item.get("record_type", MAP_RECORD_TYPE) == MAP_RECORD_TYPE
+        )
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            return items
+        kwargs["ExclusiveStartKey"] = last_key
+
+
+def _table_put_item(map_table, item: dict):
+    if map_table is None:
+        return False
+    try:
+        map_table.put_item(Item=item)
+    except Exception as exc:
+        if _is_missing_table_error(exc):
+            return False
+        raise MapStorageError(f"map table write failed: {exc}") from exc
+    return True
+
+
+def _table_delete_item(map_table, map_id: str):
+    if map_table is None:
+        return False
+    try:
+        map_table.delete_item(Key={"map_id": map_id})
+    except Exception as exc:
+        if _is_missing_table_error(exc):
+            return False
+        raise MapStorageError(f"map table delete failed: {exc}") from exc
+    return True
+
+
+def _metadata_from_table_item(item: dict):
+    if not item:
+        return None
+    return {
+        "schema_version": item.get("schema_version", MAP_SCHEMA_VERSION),
+        "map_id": item.get("map_id"),
+        "map_name": item.get("map_name") or item.get("map_id"),
+        "source": item.get("source") or "editor",
+        "layout_type": item.get("layout_type") or "binary-grid",
+        "grid_size": item.get("grid_size") or {"width": GRID_WIDTH, "height": GRID_HEIGHT},
+        "tile_scale": item.get("tile_scale") or TILE_SCALE,
+        "supported_modes": list(item.get("supported_modes") or DEFAULT_SUPPORTED_MODES),
+        "entity_budget": item.get("entity_budget") or {"human_spawns": 2, "ghost_slots": 3},
+        "deletable": bool(item.get("deletable", False)),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+        "notes": str(item.get("notes") or ""),
+        "tags": list(item.get("tags") or []),
+    }
+
+
+def _build_table_item(map_id: str, runtime_text: str, metadata: dict):
+    return {
+        "map_id": map_id,
+        "record_type": MAP_RECORD_TYPE,
+        "map_name": metadata.get("map_name") or map_id,
+        "runtime_text": runtime_text,
+        "schema_version": int(metadata.get("schema_version", MAP_SCHEMA_VERSION)),
+        "source": metadata.get("source") or "editor",
+        "layout_type": metadata.get("layout_type") or "binary-grid",
+        "grid_size": metadata.get("grid_size") or {"width": GRID_WIDTH, "height": GRID_HEIGHT},
+        "tile_scale": int(metadata.get("tile_scale", TILE_SCALE)),
+        "supported_modes": list(metadata.get("supported_modes") or DEFAULT_SUPPORTED_MODES),
+        "entity_budget": metadata.get("entity_budget") or {"human_spawns": 2, "ghost_slots": 3},
+        "deletable": bool(metadata.get("deletable", False)),
+        "created_at": metadata.get("created_at"),
+        "updated_at": metadata.get("updated_at"),
+        "notes": str(metadata.get("notes") or ""),
+        "tags": list(metadata.get("tags") or []),
+    }
+
+
+def _entry_from_table_item(item: dict, include_grid: bool = True):
+    map_id = sanitise_map_id(item.get("map_id") or "")
+    runtime_text = str(item.get("runtime_text") or "")
+    if not runtime_text:
+        raise MapStorageError(f"map table entry '{map_id}' is missing runtime_text")
+    runtime_payload = parse_runtime_text(runtime_text)
+    return build_map_entry(
+        map_id,
+        runtime_payload,
+        _metadata_from_table_item(item),
+        include_grid=include_grid,
+    )
+
+
+def _load_table_entry(map_table, map_id: str, include_grid: bool = True):
+    item = _table_get_item(map_table, map_id)
+    if not item:
+        return None
+    return _entry_from_table_item(item, include_grid=include_grid)
+
+
 def _read_metadata(maps_dir: Path, map_id: str):
     path = _metadata_path(maps_dir, map_id)
     if not path.is_file():
@@ -279,17 +418,23 @@ def build_map_entry(map_id: str, runtime_payload: dict, metadata: dict | None = 
     return entry
 
 
-def list_map_entries(maps_dir: Path):
-    entries = []
+def list_map_entries(maps_dir: Path, map_table=None):
+    entries_by_id = {}
     for path in sorted(maps_dir.glob("*.txt")):
         map_id = path.stem
         runtime_payload = parse_runtime_text(path.read_text(encoding="utf-8"))
-        entries.append(build_map_entry(map_id, runtime_payload, _read_metadata(maps_dir, map_id)))
-    return entries
+        entries_by_id[map_id] = build_map_entry(map_id, runtime_payload, _read_metadata(maps_dir, map_id))
+    for item in _table_scan_items(map_table):
+        loaded = _entry_from_table_item(item, include_grid=False)
+        entries_by_id[loaded["map_id"]] = loaded
+    return [entries_by_id[key] for key in sorted(entries_by_id)]
 
 
-def load_map_entry(maps_dir: Path, map_id: str, include_grid: bool = True):
+def load_map_entry(maps_dir: Path, map_id: str, include_grid: bool = True, map_table=None):
     safe_map_id = sanitise_map_id(map_id)
+    table_entry = _load_table_entry(map_table, safe_map_id, include_grid=include_grid)
+    if table_entry is not None:
+        return table_entry
     path = _runtime_path(maps_dir, safe_map_id)
     if not path.is_file():
         raise MapStorageError(f"map not found: {safe_map_id}")
@@ -297,7 +442,7 @@ def load_map_entry(maps_dir: Path, map_id: str, include_grid: bool = True):
     return build_map_entry(safe_map_id, runtime_payload, _read_metadata(maps_dir, safe_map_id), include_grid=include_grid)
 
 
-def save_map_entry(maps_dir: Path, payload: dict):
+def save_map_entry(maps_dir: Path, payload: dict, map_table=None):
     map_name = display_name_for_map(payload.get("map_name") or payload.get("name") or "")
     map_id = sanitise_map_id(payload.get("map_id") or map_name)
     grid = coerce_grid(payload.get("grid"))
@@ -307,30 +452,38 @@ def save_map_entry(maps_dir: Path, payload: dict):
 
     runtime_path = _runtime_path(maps_dir, map_id)
     existing_metadata = _read_metadata(maps_dir, map_id)
+    existing_table_item = _table_get_item(map_table, map_id)
+    existing_table_metadata = _metadata_from_table_item(existing_table_item) if existing_table_item else None
     if runtime_path.exists() and (not existing_metadata or existing_metadata.get("source") != "editor"):
         raise MapStorageError(f"system map '{map_id}' is read-only; save under a new name")
+    if existing_table_metadata and existing_table_metadata.get("source") != "editor":
+        raise MapStorageError(f"system map '{map_id}' is read-only; save under a new name")
+
+    existing_editor_metadata = existing_table_metadata or existing_metadata
 
     metadata = _metadata_defaults(
         map_id,
         map_name,
-        created_at=existing_metadata.get("created_at") if existing_metadata else None,
+        created_at=existing_editor_metadata.get("created_at") if existing_editor_metadata else None,
     )
     metadata["map_name"] = map_name
     supported_modes = payload.get("supported_modes")
-    if supported_modes is None and existing_metadata:
-        supported_modes = existing_metadata.get("supported_modes")
+    if supported_modes is None and existing_editor_metadata:
+        supported_modes = existing_editor_metadata.get("supported_modes")
     metadata["supported_modes"] = list(supported_modes or DEFAULT_SUPPORTED_MODES)
-    metadata["notes"] = str(payload.get("notes") or (existing_metadata.get("notes") if existing_metadata else ""))
-    metadata["tags"] = list(payload.get("tags") or (existing_metadata.get("tags") if existing_metadata else ["editor"]))
-    metadata["entity_budget"] = payload.get("entity_budget") or (existing_metadata.get("entity_budget") if existing_metadata else {"human_spawns": 2, "ghost_slots": 3})
+    metadata["notes"] = str(payload.get("notes") or (existing_editor_metadata.get("notes") if existing_editor_metadata else ""))
+    metadata["tags"] = list(payload.get("tags") or (existing_editor_metadata.get("tags") if existing_editor_metadata else ["editor"]))
+    metadata["entity_budget"] = payload.get("entity_budget") or (existing_editor_metadata.get("entity_budget") if existing_editor_metadata else {"human_spawns": 2, "ghost_slots": 3})
     metadata["updated_at"] = _utc_now()
+    runtime_text = serialise_runtime_text(grid, spawns, markers)
 
-    _atomic_write_text(runtime_path, serialise_runtime_text(grid, spawns, markers))
+    _atomic_write_text(runtime_path, runtime_text)
     _atomic_write_json(_metadata_path(maps_dir, map_id), metadata)
-    return load_map_entry(maps_dir, map_id, include_grid=True)
+    _table_put_item(map_table, _build_table_item(map_id, runtime_text, metadata))
+    return load_map_entry(maps_dir, map_id, include_grid=True, map_table=map_table)
 
 
-def delete_map_entry(maps_dir: Path, map_id: str, protected_map_ids=None):
+def delete_map_entry(maps_dir: Path, map_id: str, protected_map_ids=None, map_table=None):
     safe_map_id = sanitise_map_id(map_id)
     protected = set(protected_map_ids or [])
     if safe_map_id in protected:
@@ -338,13 +491,18 @@ def delete_map_entry(maps_dir: Path, map_id: str, protected_map_ids=None):
 
     runtime_path = _runtime_path(maps_dir, safe_map_id)
     metadata = _read_metadata(maps_dir, safe_map_id)
-    if not runtime_path.exists():
+    table_item = _table_get_item(map_table, safe_map_id)
+    table_metadata = _metadata_from_table_item(table_item) if table_item else None
+    effective_metadata = table_metadata or metadata
+    if not runtime_path.exists() and table_item is None:
         raise MapStorageError(f"map not found: {safe_map_id}")
-    if not metadata or metadata.get("source") != "editor" or not metadata.get("deletable", False):
+    if not effective_metadata or effective_metadata.get("source") != "editor" or not effective_metadata.get("deletable", False):
         raise MapStorageError(f"map '{safe_map_id}' is protected")
 
-    runtime_path.unlink(missing_ok=False)
+    if runtime_path.exists():
+        runtime_path.unlink(missing_ok=False)
     meta_path = _metadata_path(maps_dir, safe_map_id)
     if meta_path.exists():
         meta_path.unlink()
+    _table_delete_item(map_table, safe_map_id)
     return {"map_id": safe_map_id, "deleted": True}

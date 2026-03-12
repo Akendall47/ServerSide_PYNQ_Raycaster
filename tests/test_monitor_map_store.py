@@ -11,6 +11,26 @@ from monitor_map_store import (
 )
 
 
+class FakeMapTable:
+    def __init__(self):
+        self.items = {}
+
+    def get_item(self, Key):
+        item = self.items.get(Key["map_id"])
+        return {"Item": dict(item)} if item else {}
+
+    def put_item(self, Item):
+        self.items[Item["map_id"]] = dict(Item)
+        return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    def delete_item(self, Key):
+        self.items.pop(Key["map_id"], None)
+        return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    def scan(self, **kwargs):
+        return {"Items": [dict(item) for item in self.items.values()]}
+
+
 def bordered_grid():
     grid = [0] * (32 * 32)
     for x in range(32):
@@ -87,3 +107,60 @@ def test_delete_protected_active_map(tmp_path: Path):
     result = delete_map_entry(maps_dir, "arena_beta", set())
     assert result["deleted"] is True
     assert not list_map_entries(maps_dir)
+
+
+def test_editor_maps_persist_to_table_and_runtime_mirror(tmp_path: Path):
+    maps_dir = tmp_path / "maps"
+    table = FakeMapTable()
+
+    payload = save_map_entry(maps_dir, {
+        "map_name": "Arena Gamma",
+        "grid": bordered_grid(),
+        "spawns": [{"x": 2, "y": 2}, {"x": 29, "y": 29}],
+        "markers": [{"marker": "B", "x": 8, "y": 8}],
+        "notes": "table-backed",
+    }, table)
+
+    assert payload["map_id"] == "arena_gamma"
+    assert (maps_dir / "arena_gamma.txt").is_file()
+    assert "arena_gamma" in table.items
+    assert table.items["arena_gamma"]["runtime_text"]
+
+    # Delete the runtime mirror to prove table load still works.
+    (maps_dir / "arena_gamma.txt").unlink()
+    loaded = load_map_entry(maps_dir, "arena_gamma", include_grid=True, map_table=table)
+    assert loaded["map_id"] == "arena_gamma"
+    assert loaded["notes"] == "table-backed"
+    assert loaded["markers"][0]["marker"] == "B"
+
+
+def test_table_entries_appear_alongside_system_maps(tmp_path: Path):
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir(parents=True)
+    system_rows = ["#" * 32] + ["#" + ("." * 30) + "#" for _ in range(30)] + ["#" * 32]
+    (maps_dir / "chase.txt").write_text("\n".join(system_rows) + "\n", encoding="utf-8")
+    table = FakeMapTable()
+
+    save_map_entry(maps_dir, {
+        "map_name": "Arena Delta",
+        "grid": bordered_grid(),
+        "spawns": [{"x": 2, "y": 2}, {"x": 29, "y": 29}],
+    }, table)
+
+    entries = list_map_entries(maps_dir, table)
+    assert [entry["map_id"] for entry in entries] == ["arena_delta", "chase"]
+
+
+def test_delete_removes_table_entry_and_runtime_mirror(tmp_path: Path):
+    maps_dir = tmp_path / "maps"
+    table = FakeMapTable()
+    save_map_entry(maps_dir, {
+        "map_name": "Arena Epsilon",
+        "grid": bordered_grid(),
+        "spawns": [{"x": 2, "y": 2}, {"x": 29, "y": 29}],
+    }, table)
+
+    result = delete_map_entry(maps_dir, "arena_epsilon", set(), table)
+    assert result["deleted"] is True
+    assert "arena_epsilon" not in table.items
+    assert not (maps_dir / "arena_epsilon.txt").exists()

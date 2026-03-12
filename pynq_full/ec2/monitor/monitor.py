@@ -41,6 +41,7 @@ LOBBY_MAP_NAME = "lobby"
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
 PLAYER_TABLE = "pynq-raycaster-players"
+MAP_TABLE    = os.environ.get("MAP_TABLE", "pynq-raycaster-maps").strip()
 AWS_REGION   = "eu-west-2"
 MAPS_DIR     = REPO_ROOT / "pynq_full" / "ec2" / "maps"
 MONITOR_DIR  = Path(__file__).resolve().parent
@@ -79,6 +80,7 @@ SERVICE_SPECS = {
 r     = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
 player_dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(PLAYER_TABLE)
+map_dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(MAP_TABLE) if MAP_TABLE else None
 s3    = boto3.client("s3", region_name=AWS_REGION)
 
 # ── DynamoDB poll (slow — every 5s) ───────────────────────────────────────────
@@ -878,7 +880,7 @@ async def control_handler(request):
 async def maps_list_handler(request):
     """GET /api/maps — list all available map names."""
     try:
-        entries = await asyncio.to_thread(list_map_entries, MAPS_DIR)
+        entries = await asyncio.to_thread(list_map_entries, MAPS_DIR, map_dyndb)
     except MapStorageError as exc:
         raise web.HTTPBadRequest(text=str(exc))
     return web.json_response({
@@ -895,7 +897,7 @@ async def map_handler(request):
     """
     name = request.match_info["name"]
     try:
-        payload = await asyncio.to_thread(load_map_entry, MAPS_DIR, name, True)
+        payload = await asyncio.to_thread(load_map_entry, MAPS_DIR, name, True, map_dyndb)
     except MapStorageError as exc:
         message = str(exc)
         if message.startswith("map not found:"):
@@ -912,7 +914,7 @@ async def map_save_handler(request):
 
     apply_map = bool(data.get("apply"))
     try:
-        payload = await asyncio.to_thread(save_map_entry, MAPS_DIR, data)
+        payload = await asyncio.to_thread(save_map_entry, MAPS_DIR, data, map_dyndb)
         if apply_map and len(payload.get("spawns", [])) < 2:
             raise MapStorageError("pushing live requires two spawn points")
         if apply_map:
@@ -943,7 +945,7 @@ async def map_delete_handler(request):
         if _valid_map_name(value)
     }
     try:
-        payload = await asyncio.to_thread(delete_map_entry, MAPS_DIR, name, protected)
+        payload = await asyncio.to_thread(delete_map_entry, MAPS_DIR, name, protected, map_dyndb)
     except MapStorageError as exc:
         message = str(exc)
         if message.startswith("map not found:"):

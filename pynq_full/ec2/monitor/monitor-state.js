@@ -44,6 +44,26 @@ function isValidMapName(name) {
   return Boolean(name) && name !== 'none';
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function normaliseMapEntry(entry) {
+  const mapId = String(entry?.map_id || entry?.name || entry || '').trim();
+  if (!mapId) return null;
+  return {
+    map_id: mapId,
+    map_name: String(entry?.map_name || mapId).trim() || mapId,
+    source: String(entry?.source || 'system').trim() || 'system',
+    deletable: Boolean(entry?.deletable),
+  };
+}
+
 function cloneCachedMapPayload(name, payload) {
   return { ...payload, name };
 }
@@ -103,7 +123,10 @@ async function loadMapList() {
     const resp = await fetch('/api/maps');
     if (!resp.ok) return;
     const data = await resp.json();
-    _availableMaps = data.maps || [];
+    const rawEntries = Array.isArray(data.entries) && data.entries.length
+      ? data.entries
+      : (data.maps || []);
+    _availableMaps = rawEntries.map(normaliseMapEntry).filter(Boolean);
     renderMapButtons();
     updateMapSelector(
       data.active_map,
@@ -144,8 +167,10 @@ function renderMapButtons() {
     return;
   }
 
-  const filteredMaps = _availableMaps.filter((name) => (
-    !_mapFilterText || String(name).toLowerCase().includes(_mapFilterText)
+  const filteredMaps = _availableMaps.filter((entry) => (
+    !_mapFilterText
+    || String(entry.map_name || '').toLowerCase().includes(_mapFilterText)
+    || String(entry.map_id || '').toLowerCase().includes(_mapFilterText)
   ));
 
   if (!filteredMaps.length) {
@@ -156,21 +181,35 @@ function renderMapButtons() {
     return;
   }
 
-  const renderedButtons = filteredMaps.map(name => `
-    <button id="mapbtn-${name}"
-      class="control-btn${
-        name === _activeMapName
-          ? ' start'
-          : (name === _pendingMapName || name === _selectedMapName ? ' active-view' : '')
-      }"
-      onclick="selectMap('${name}')">${name}</button>
-  `).join('');
+  const renderedButtons = filteredMaps.map((entry) => {
+    const mapId = entry.map_id;
+    const subtitle = `${entry.map_id} · ${entry.source === 'editor' ? 'editor' : 'system'}`;
+    const deleteAction = entry.deletable
+      ? `<button class="control-btn stop controls-map-delete" type="button" onclick="deleteMapFromControls('${mapId}')">Delete</button>`
+      : `<button class="control-btn controls-map-protected" type="button" disabled>System</button>`;
+    return `
+      <div class="controls-map-entry">
+        <button id="mapbtn-${mapId}"
+          class="control-btn controls-map-select${
+            mapId === _activeMapName
+              ? ' start'
+              : (mapId === _pendingMapName || mapId === _selectedMapName ? ' active-view' : '')
+          }"
+          type="button"
+          onclick="selectMap('${mapId}')">
+          <span class="controls-map-label">${escapeHtml(entry.map_name)}</span>
+          <span class="controls-map-subtitle">${escapeHtml(subtitle)}</span>
+        </button>
+        ${deleteAction}
+      </div>
+    `;
+  }).join('');
   const nextSignature = [
     _mapFilterText,
     _activeMapName,
     _selectedMapName,
     _pendingMapName,
-    filteredMaps.join('|'),
+    filteredMaps.map((entry) => `${entry.map_id}:${entry.map_name}:${entry.deletable ? 1 : 0}:${entry.source}`).join('|'),
   ].join('::');
   if (_lastMapButtonsSignature === nextSignature) return;
   el.innerHTML = renderedButtons;
@@ -434,6 +473,30 @@ function selectMap(name) {
   renderMapButtons();
 }
 
+async function deleteMapFromControls(mapId) {
+  const entry = _availableMaps.find((candidate) => candidate.map_id === mapId);
+  if (!entry) return;
+  if (!entry.deletable) {
+    window.setServiceNote?.(`map '${mapId}' is protected`);
+    return;
+  }
+  const confirmed = window.confirm(`Delete '${entry.map_name}' (${entry.map_id})?`);
+  if (!confirmed) return;
+  window.setServiceNote?.(`deleting map '${entry.map_id}'...`);
+  try {
+    const response = await fetch(`/api/maps/${encodeURIComponent(entry.map_id)}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `HTTP ${response.status}`);
+    }
+    window.invalidateMonitorMapCache?.(entry.map_id);
+    await window.requestMapListRefresh?.(0);
+    window.setServiceNote?.(`deleted map '${entry.map_id}'`);
+  } catch (error) {
+    window.setServiceNote?.(`delete failed: ${error.message || 'request error'}`);
+  }
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
 window.latestState = latestState;
@@ -491,6 +554,7 @@ function countActiveBits(bitsMask, totalBits) {
 window.setActiveTab = setActiveTab;
 window.setMapFilterText = setMapFilterText;
 window.toggleArchiveDrawer = toggleArchiveDrawer;
+window.deleteMapFromControls = deleteMapFromControls;
 window.loadMapList = loadMapList;
 window.requestMapListRefresh = requestMapListRefresh;
 window.invalidateMonitorMapCache = invalidateMapCache;
