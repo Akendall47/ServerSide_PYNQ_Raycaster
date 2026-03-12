@@ -19,8 +19,9 @@ function computeFallbackWorldLimit(players = [], bits = []) {
 // ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy, renderLimit = null) {
   const pad = MAP_VIEW_PAD;
+  const mapMarginTiles = mapData?.name === 'lobby' ? 2 : 1;
   const limit = renderLimit ?? ((_showMap && mapData && mapData.width > 0)
-    ? ((mapData.width / 2) + 1) * (mapData.tile_scale || TILE_SCALE)
+    ? ((mapData.width / 2) + mapMarginTiles) * (mapData.tile_scale || TILE_SCALE)
     : WORLD_LIMIT);
   const minX = -limit, maxX = limit;
   const minY = -limit, maxY = limit;
