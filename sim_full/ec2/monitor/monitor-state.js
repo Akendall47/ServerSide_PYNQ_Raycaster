@@ -21,6 +21,8 @@ let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
 let _activeMapName = LOBBY_MAP_NAME;
 let _selectedMapName = LOBBY_MAP_NAME;
+let _pendingMapName = '';
+let _pendingMapRequestedAt = 0;
 let _mapFilterText = '';
 let _showMap = true;  // map play is the default; orbit view is a sim-only test tool
 let _viewMode = 'map';
@@ -35,6 +37,7 @@ const STACKED_CHART_HEIGHT = 160;
 const stackedFrameBuffer = [];
 let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
+const MAP_SELECT_GRACE_MS = 1500;
 
 function hasSelectedMap(name) {
   return Boolean(String(name || '').trim());
@@ -94,7 +97,11 @@ function renderMapButtons() {
 
   el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
-      class="control-btn${name === _activeMapName ? ' start' : ''}"
+      class="control-btn${
+        name === _activeMapName
+          ? ' start'
+          : (name === _pendingMapName || name === _selectedMapName ? ' active-view' : '')
+      }"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
 }
@@ -391,11 +398,34 @@ function updateGameHud(state) {
 }
 
 function updateMapSelector(activeMap, selectedMap = activeMap) {
-  const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
-  const nextSelectedMap = String(selectedMap || '').trim() || nextActiveMap;
+  const incomingActiveMap = String(activeMap || '').trim();
+  const incomingSelectedMap = String(selectedMap || '').trim();
+  const pendingAlive = Boolean(
+    _pendingMapName && (performance.now() - _pendingMapRequestedAt) < MAP_SELECT_GRACE_MS,
+  );
+  const nextActiveMap = (
+    incomingActiveMap
+    || (pendingAlive ? _pendingMapName : '')
+    || _activeMapName
+    || LOBBY_MAP_NAME
+  );
+  const nextSelectedMap = (
+    incomingSelectedMap
+    || (pendingAlive ? _pendingMapName : '')
+    || _selectedMapName
+    || nextActiveMap
+  );
   const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;
+  if (_pendingMapName) {
+    const serverAcceptedPending = incomingActiveMap === _pendingMapName || incomingSelectedMap === _pendingMapName;
+    const pendingExpired = !pendingAlive;
+    if (serverAcceptedPending || pendingExpired) {
+      _pendingMapName = '';
+      _pendingMapRequestedAt = 0;
+    }
+  }
   renderMapButtons();
   if (_showMap && (!mapData || mapData.name !== _activeMapName || changed)) {
     loadMap(_activeMapName);
@@ -408,6 +438,8 @@ function selectMap(name) {
   if (_viewMode !== 'map') {
     setViewMode('map');
   }
+  _pendingMapName = name;
+  _pendingMapRequestedAt = performance.now();
   sendControl(`set_map:${name}`, `map → ${name}`);
   _selectedMapName = name;
   _activeMapName = name;
