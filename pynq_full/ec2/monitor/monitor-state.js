@@ -5,8 +5,7 @@ const frameChartCtx = frameChartCanvas.getContext('2d');
 const stackedFrameChart = document.getElementById('stacked-frame-chart');
 const W = canvas.width, H = canvas.height;
 const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
-const ORBIT_RADIUS   = 50.0;   // must match t2_game_tick.py ORBIT_RADIUS
-const WORLD_LIMIT    = ORBIT_RADIUS + TAG_RADIUS + 10.0;  // 80u total safe view
+const WORLD_LIMIT    = 80.0;   // fallback half-extent when no map is loaded
 const TILE_SCALE     = 8;      // world units per tile — must match MAP_TILE_SCALE
 const PLAYER_COLLISION_RADIUS = 2.5;
 const FLAG_TAGGED    = 0x02;
@@ -252,17 +251,28 @@ function deriveMatchStateLabel(state) {
   return 'Lobby';
 }
 
+function setTextIfPresent(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function estimateStateAgeText() {
+  if (wsHz <= 0) return '— ms';
+  return `~${Math.max(1, Math.round(1000 / wsHz))} ms`;
+}
+
 function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
   const liveMap = state?.active_map || _activeMapName;
 
-  document.getElementById('hud-view-mode').textContent = gameModeLabel(state?.game_mode ?? 0);
-  document.getElementById('hud-map-name').textContent = liveMap;
-  document.getElementById('hud-match-state').textContent = deriveMatchStateLabel(state);
-  document.getElementById('hud-player-count').textContent = `${playerCount} entities online`;
-  document.getElementById('hud-ws-rate').textContent = `${wsHz} / s`;
-  document.getElementById('server-view-card').textContent = `fpga live · ${liveMap}`;
+  setTextIfPresent('hud-view-mode', gameModeLabel(state?.game_mode ?? 0));
+  setTextIfPresent('hud-map-name', liveMap);
+  setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
+  setTextIfPresent('hud-player-count', `${playerCount} entities online`);
+  setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
+  setTextIfPresent('hud-latency', estimateStateAgeText());
+  setTextIfPresent('server-view-card', `fpga live · ${liveMap}`);
 }
 
 function updateMapSelector(activeMap) {
@@ -304,10 +314,14 @@ let replayState = {
 function normalisePlayers(players) {
   return (players || []).map((p) => ({
     id: p.id ?? p.player_id,
+    entityKey: p.entity_key ?? p.entityKey ?? String(p.id ?? p.player_id ?? "unknown"),
     x: p.x,
     y: p.y,
     angle: p.angle,
     flags: p.flags ?? 0,
+    queued: Boolean(p.queued),
+    queueSlot: p.queue_slot ?? p.queueSlot ?? null,
+    displayName: p.display_name ?? p.displayName ?? '',
   }));
 }
 

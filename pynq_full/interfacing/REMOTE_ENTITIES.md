@@ -10,18 +10,20 @@ and other remote entities on the PYNQ path.
 - EC2 already sends full player lists in `PKT_GAME_STATE`.
 - Ghosts already exist in authoritative server state and are tagged with
   `FLAG_GHOST`.
-- The PYNQ client currently keeps only:
+- The PYNQ client now keeps:
   - local player pose
-  - one non-ghost peer pose
+  - a capped remote-entity list (other human + ghosts)
   - bit mask / bit positions
 - The FPGA-side register interface currently exposes only the local player pose.
+- The Python client stages remote entities into BRAM, but the current FPGA bitstream
+  does not render them yet.
 
 That means the network/protocol path is mostly ready, but the board-side render
 path is not.
 
 ## Direction
 
-For the real PYNQ build, rendering should be board-side, not software fallback.
+For the real PYNQ build, rendering should be board-side only.
 The Python client should behave as a thin transport/control layer:
 
 - receive world state from EC2
@@ -29,8 +31,8 @@ The Python client should behave as a thin transport/control layer:
 - write a compact entity list into FPGA-visible registers or BRAM
 - let the FPGA renderer draw walls + sprites
 
-The software fallback renderer in `pynq_client.py` is useful for bring-up, but
-it should not be treated as the target architecture.
+`pynq_client.py` should fail loudly if the expected PYNQ/overlay hardware path
+is unavailable, rather than silently switching to a different renderer.
 
 ## Minimum PYNQ Changes
 

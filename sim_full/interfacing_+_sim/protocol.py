@@ -20,6 +20,8 @@ PKT_STATE_UPDATE = 0x0001   # node  → server: position this tick
 PKT_GAME_STATE   = 0x0002   # server → node:  all player positions
 PKT_HEARTBEAT    = 0x0010   # node  → server: keepalive
 PKT_REGISTER     = 0x0020   # node  → server: first contact, triggers ACK
+                             #   optional trailer after the 24-byte NodePacket:
+                             #   username_len (1 byte) + UTF-8 username bytes
 PKT_ACK          = 0x0030   # server → node:  confirms registration
 PKT_BITS_INIT    = 0x0050   # server → node:  bit positions, sent once at match start
                              #   header (8 bytes) + count (1 byte) + N × BitEntry (9 bytes each)
@@ -55,6 +57,7 @@ GAME_MODE_CHASE_BITS = 0x01   # runner collects bits, tagger tries to tag
 # ── Node movement modes ───────────────────────────────────────────────────────
 
 NODE_PROTOCOL_VERSION = 1  # Version of the 24-byte NodePacket wire format; bump only for breaking packet-layout changes.
+MAX_USERNAME_BYTES = 32
 
 MOVEMENT_MODE_POSE = 0x00  # Node sends a raw pose update; server treats x/y/angle as the movement payload for this tick.
 MOVEMENT_MODE_INTENT_ONLY = 0x01  # Node is only declaring intent/inputs; server should ignore predicted x/y/angle and advance movement itself.
@@ -154,6 +157,27 @@ def pack_node_packet(pkt_type, seq, x, y, angle, flags=0,
                        protocol_version & 0xFF, reserved & 0xFF)
 
 
+def pack_register_packet(seq, x, y, angle, *,
+                         preferred_role=ROLE_ANY,
+                         username="",
+                         flags=0,
+                         movement_mode=MOVEMENT_MODE_INTENT_WITH_PREDICTION,
+                         protocol_version=NODE_PROTOCOL_VERSION):
+    username_bytes = (username or "").encode("utf-8")[:MAX_USERNAME_BYTES]
+    base = pack_node_packet(
+        PKT_REGISTER,
+        seq,
+        x,
+        y,
+        angle,
+        flags=flags,
+        movement_mode=movement_mode,
+        protocol_version=protocol_version,
+        reserved=preferred_role,
+    )
+    return base + struct.pack("<B", len(username_bytes)) + username_bytes
+
+
 def client_input_flags(*, shooting=False):
     flags = 0
     if shooting:
@@ -208,6 +232,27 @@ def unpack_node_packet(data):
         "protocol_version": protocol_version,
         "reserved": reserved,
     }
+
+
+def unpack_register_packet(data):
+    pkt = unpack_node_packet(data)
+    if pkt["pkt_type"] != PKT_REGISTER:
+        raise ValueError(f"expected PKT_REGISTER, got 0x{pkt['pkt_type']:04x}")
+
+    username = ""
+    if len(data) > NODE_SIZE:
+        username_len = data[NODE_SIZE]
+        available = len(data) - (NODE_SIZE + 1)
+        if username_len > available:
+            raise ValueError(
+                f"PKT_REGISTER username truncated: wanted {username_len} bytes, only {available} available"
+            )
+        username_bytes = data[NODE_SIZE + 1 : NODE_SIZE + 1 + username_len]
+        username = username_bytes.decode("utf-8", errors="replace").strip()
+
+    pkt["preferred_role"] = pkt["reserved"]
+    pkt["username"] = username
+    return pkt
 
 # Unpack the 8-byte server header — returns (pkt_type, seq, timestamp)
 def unpack_header(data):

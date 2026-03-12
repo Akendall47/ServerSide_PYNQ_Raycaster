@@ -339,6 +339,16 @@ function deriveMatchStateLabel(state) {
   return 'Lobby';
 }
 
+function setTextIfPresent(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function estimateStateAgeText() {
+  if (wsHz <= 0) return '— ms';
+  return `~${Math.max(1, Math.round(1000 / wsHz))} ms`;
+}
+
 function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
@@ -346,14 +356,18 @@ function updateGameHud(state) {
   const liveMap = state?.active_map || _activeMapName;
   const mapLabel = _viewMode === 'orbit' ? `${parkedMap} parked` : liveMap;
 
-  document.getElementById('hud-view-mode').textContent = _viewMode === 'orbit' ? 'Orbit Test' : 'Map Play';
-  document.getElementById('hud-map-name').textContent = mapLabel;
-  document.getElementById('hud-match-state').textContent = deriveMatchStateLabel(state);
-  document.getElementById('hud-player-count').textContent = `${playerCount} entities online`;
-  document.getElementById('hud-ws-rate').textContent = `${wsHz} / s`;
-  document.getElementById('server-view-card').textContent = _viewMode === 'orbit'
-    ? `orbit test · ${playerCount} entities`
-    : `map play · ${liveMap}`;
+  setTextIfPresent('hud-view-mode', _viewMode === 'orbit' ? 'Orbit Test' : 'Map Play');
+  setTextIfPresent('hud-map-name', mapLabel);
+  setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
+  setTextIfPresent('hud-player-count', `${playerCount} entities online`);
+  setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
+  setTextIfPresent('hud-latency', estimateStateAgeText());
+  setTextIfPresent(
+    'server-view-card',
+    _viewMode === 'orbit'
+      ? `orbit test · ${playerCount} entities`
+      : `map play · ${liveMap}`,
+  );
 }
 
 function updateMapSelector(activeMap) {
@@ -400,10 +414,14 @@ let replayState = {
 function normalisePlayers(players) {
   return (players || []).map((p) => ({
     id: p.id ?? p.player_id,
+    entityKey: p.entity_key ?? p.entityKey ?? `player:${p.id ?? p.player_id ?? 0}`,
     x: p.x,
     y: p.y,
     angle: p.angle,
     flags: p.flags ?? 0,
+    queued: Boolean(p.queued),
+    queueSlot: p.queue_slot ?? p.queueSlot ?? null,
+    displayName: p.display_name ?? p.displayName ?? '',
   }));
 }
 

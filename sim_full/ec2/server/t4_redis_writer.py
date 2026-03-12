@@ -14,6 +14,12 @@ import queue
 
 REDIS_HOST = "127.0.0.1"   # change to ElastiCache endpoint on real EC2
 REDIS_PORT = 6379
+RUNTIME_KEYS = (
+    "game:state",
+    "game:monitor-events",
+    "game:seda-events",
+    "game:seda-replay",
+)
 
 
 # Owns the Redis connection and the drain/flush loop; started as a daemon thread
@@ -38,6 +44,7 @@ class RedisWriter:
             self.client = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT,
                                          decode_responses=True)
             self.client.ping()
+            self._clear_runtime_state()
             print(f"[T4 RedisWriter] connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
         except Exception as e:
             print(f"[T4 RedisWriter] Redis not available ({e}) : writes logged only")
@@ -53,6 +60,18 @@ class RedisWriter:
                 except queue.Empty:
                     break
             self._flush(msgs)
+
+    def _clear_runtime_state(self):
+        if not self.client:
+            return
+        try:
+            stale_player_keys = list(self.client.scan_iter(match="player:*"))
+            keys = [*RUNTIME_KEYS, *stale_player_keys]
+            if keys:
+                self.client.delete(*keys)
+                print(f"[T4 RedisWriter] cleared stale runtime keys ({len(keys)})")
+        except Exception as e:
+            print(f"[T4 RedisWriter] startup clear failed: {e}")
 
     # Separate msgs by op-type, then execute DELs → HSET pipeline → LPUSHes
     def _flush(self, msgs: list):

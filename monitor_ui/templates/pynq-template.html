@@ -26,6 +26,7 @@
     <div class="top-status">
       <span id="status" class="disconnected">● DISCONNECTED</span>
       <span id="game-chip">no game</span>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">🌙 Dark</button>
     </div>
   </header>
 
@@ -58,9 +59,9 @@
         </div>
 
         <div class="panel-raised hud-card">
-          <div class="hud-label">Socket Feed</div>
-          <div id="hud-ws-rate" class="hud-value">0 / s</div>
-          <div class="hud-sub">browser update stream</div>
+          <div class="hud-label">Est. Latency</div>
+          <div id="hud-latency" class="hud-value">— ms</div>
+          <div class="hud-sub">server state age</div>
         </div>
 
         <div class="panel-terminal hud-events-card">
@@ -81,7 +82,7 @@
             <div class="viewport-head-meta">
               <span id="canvas-label" class="panel-head-note">fpga live · loading map…</span>
               <div class="viewport-action-row">
-                <button class="viewport-control-btn start" type="button" onclick="sendControl('restart', 'start match')">Start</button>
+                <button class="viewport-control-btn start" type="button" onclick="sendControl('start_match', 'start match')">Start</button>
                 <button class="viewport-control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">End</button>
                 <button
                   id="archive-toggle"
@@ -466,32 +467,18 @@
           <div class="about-stage-grid" aria-hidden="true"></div>
           <div class="about-light-cone" aria-hidden="true"></div>
           <div class="about-sprite-wrap">
-            <img
-              class="about-logo-sprite"
-              src="/PNG_LOGO.png"
-              alt="PYNQCAST logo"
-              draggable="false"
-            >
+            <div class="about-react-board-slot" aria-label="spinning PYNQ board showcase"></div>
           </div>
-          <div class="about-stage-label">dropped relic · live node cluster</div>
         </div>
 
         <div class="about-copy-column">
           <div class="about-title-row">
             <h2 class="about-title">&#9638; About PYNQCAST</h2>
-            <span class="micro-chip">v1.0</span>
           </div>
 
-          <div class="about-copy">
-DISTRIBUTED FPGA RAY CASTER
-4x PYNQ-Z2 · REDIS · KAFKA · AWS
-BUILT @ IMPERIAL COLLEGE LONDON
-          </div>
-
-          <div class="about-credit-strip">
-            <span class="about-credit-chip">retro ops HUD</span>
-            <span class="about-credit-chip">ec2 + fpga transport</span>
-            <span class="about-credit-chip">sidecar archive path</span>
+          <div class="about-copy about-copy-credits">
+            <span class="about-copy-kicker">Built by</span>
+            <span class="about-copy-names">Archie, Asad, Adil, Louis, Lucca, Nabeel, and Sam</span>
           </div>
         </div>
       </section>

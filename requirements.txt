@@ -1,4 +1,7 @@
 # Install with: pip install -r requirements.txt
+# Also required (system package, not pip):
+#   sudo apt-get install python3-tk   (Ubuntu/Debian/WSL)
+# This is needed for the latency benchmark popup (tests/test_server_latency.py).
 
 boto3>=1.34
 redis>=5.0

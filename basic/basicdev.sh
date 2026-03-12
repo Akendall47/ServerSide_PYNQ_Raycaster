@@ -12,15 +12,69 @@
 # Requires: tmux, SSH key at repo root raycastpair.pem
 
 SESSION="raycaster"
-EC2="ubuntu@18.175.238.148"
+EC2_IP="3.9.71.204"
+EC2="ubuntu@${EC2_IP}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 KEY="$REPO/raycastpair.pem"
-SSH="ssh -t -i $KEY $EC2"
+SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+SSH="ssh $SSH_OPTS -t -i $KEY $EC2"
+GIT_BRANCH=""
+GIT_UPSTREAM=""
 
-# Kill existing tmux session and stale EC2 processes, then pull latest code
+resolve_git_target() {
+  GIT_BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ -z "$GIT_BRANCH" ] || [ "$GIT_BRANCH" = "HEAD" ]; then
+    echo "Detached HEAD detected. Check out a branch first."
+    return 1
+  fi
+
+  GIT_UPSTREAM="$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+  if [ -z "$GIT_UPSTREAM" ]; then
+    echo "Branch '$GIT_BRANCH' has no upstream. Push it first:"
+    echo "  git push -u origin $GIT_BRANCH"
+    return 1
+  fi
+
+  case "$GIT_UPSTREAM" in
+    origin/*) ;;
+    *)
+      echo "Branch '$GIT_BRANCH' tracks '$GIT_UPSTREAM'. This script only syncs from origin."
+      echo "  git branch --set-upstream-to=origin/$GIT_BRANCH $GIT_BRANCH"
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+ensure_clean_git() {
+  resolve_git_target || return 1
+
+  if ! git -C "$REPO" diff --quiet || ! git -C "$REPO" diff --cached --quiet; then
+    echo "Uncommitted changes detected. Commit and push first."
+    git -C "$REPO" status --short
+    return 1
+  fi
+
+  if [ "$(git -C "$REPO" rev-list --count "$GIT_UPSTREAM"..HEAD 2>/dev/null | tr -d ' ')" -gt 0 ]; then
+    echo "Unpushed commits detected on '$GIT_BRANCH'. Push first."
+    git -C "$REPO" log --oneline "$GIT_UPSTREAM"..HEAD
+    return 1
+  fi
+
+  return 0
+}
+
+sync_remote_repo() {
+  ssh $SSH_OPTS -i "$KEY" "$EC2" "pkill -f server.py 2>/dev/null; pkill -f sidecar.py 2>/dev/null; cd ~/ServerSide_PYNQ_Raycaster && git fetch origin && git checkout -B '$GIT_BRANCH' '$GIT_UPSTREAM' && git branch --set-upstream-to='$GIT_UPSTREAM' '$GIT_BRANCH' && git reset --hard '$GIT_UPSTREAM'"
+}
+
+# Kill existing tmux session and stale EC2 processes, then sync the matching branch on EC2.
+resolve_git_target || exit 1
+ensure_clean_git || exit 1
 tmux kill-session -t "$SESSION" 2>/dev/null
-echo "--- pulling latest code on EC2 ---"
-ssh -i "$KEY" "$EC2" "pkill -f server.py; pkill -f sidecar.py; cd ~/ServerSide_PYNQ_Raycaster && git pull"
+echo "--- syncing EC2 to $GIT_UPSTREAM ---"
+sync_remote_repo || exit 1
 echo "--- done ---"
 
 # Create session

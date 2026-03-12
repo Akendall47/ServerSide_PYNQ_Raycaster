@@ -27,9 +27,11 @@ from protocol import (
     FLAG_GHOST,
     decode_movement_mode,
     unpack_node_packet,
+    unpack_register_packet,
 )
 from game_logic.anticheat import validate_position, validate_seq, DEFAULT_MAX_SPEED_PER_TICK
 from game_logic.match_state import MatchState
+from player_profiles import build_player_identity
 from t2_constants import (
     MATCH_PLAYERS,
     NODE_TIMEOUT_S,
@@ -89,6 +91,8 @@ class PacketHandler:
             return
 
         pkt = unpack_node_packet(data)
+        if pkt["pkt_type"] == PKT_REGISTER:
+            pkt = unpack_register_packet(data)
         pkt_type         = pkt["pkt_type"]
         seq              = pkt["seq"]
         x, y, angle      = pkt["x"], pkt["y"], pkt["angle"]
@@ -101,7 +105,8 @@ class PacketHandler:
                 return
             self._register_player(
                 addr, x, y, angle,
-                preferred_role=pkt.get("reserved", ROLE_ANY),
+                preferred_role=pkt.get("preferred_role", ROLE_ANY),
+                username=pkt.get("username", ""),
             )
 
         if addr not in self.state.players:
@@ -113,6 +118,8 @@ class PacketHandler:
         p["timed_out"] = False
 
         if pkt_type == PKT_REGISTER:
+            if pkt.get("username", ""):
+                p.update(build_player_identity(pkt["username"], addr))
             if not self.state.match_started or p["player_id"] == 0:
                 p["x"], p["y"], p["angle"] = x, y, angle
             p["last_seq"] = seq
@@ -164,8 +171,10 @@ class PacketHandler:
 
     # ── Player registration ───────────────────────────────────────────────────
     # Record preferred role, then assign roles once two humans are present.
+    # Queued humans get ACK(0) so simulator clients can move in the lobby.
 
-    def _register_player(self, addr, x=0.0, y=0.0, angle=0.0, preferred_role=ROLE_ANY):
+    def _register_player(self, addr, x=0.0, y=0.0, angle=0.0,
+                         preferred_role=ROLE_ANY, username=""):
         if self.state.is_in_lockout():
             return
 
@@ -176,6 +185,7 @@ class PacketHandler:
 
         self.state.clear_lockout()
         self.state.pending_roles[addr] = preferred_role
+        identity = build_player_identity(username, addr)
         self.state.players[addr] = {
             "player_id":        0,
             "x": x, "y": y, "angle": angle, "flags": 0,
@@ -184,10 +194,12 @@ class PacketHandler:
             "movement_mode":    0,
             "protocol_version": 0,
             "timed_out":        False,
+            **identity,
         }
 
         human_count = sum(1 for a in self.state.players if not str(a).startswith("ghost:"))
         if human_count < MATCH_PLAYERS:
+            self._send_ack(addr, 0)
             print(f"[T2] player queued from {addr} (waiting for {MATCH_PLAYERS - human_count} more)")
             return
 
@@ -264,7 +276,10 @@ class PacketHandler:
         if ghost_count >= MAX_GHOSTS:
             return
         ghost_addr = f"ghost:{ghost_count + 1}"
-        ghost_id = len(self.state.players) + 1
+        used_ids = {player["player_id"] for player in self.state.players.values()}
+        ghost_id = 3
+        while ghost_id in used_ids:
+            ghost_id += 1
         angle = math.pi / 2
         spawn_positions = self.state.spawn_positions
         x, y = spawn_positions[ghost_id - 1] if ghost_id - 1 < len(spawn_positions) else (0.0, 0.0)
@@ -277,6 +292,11 @@ class PacketHandler:
             "movement_mode":    0,
             "protocol_version": 0,
             "timed_out":        False,
+            "username":         "",
+            "display_name":     f"ghost-{ghost_id}",
+            "profile_key":      "",
+            "controller_key":   "",
+            "identity_source":  "ghost",
         }
         print(f"[T2] spawned ghost tagger (player_id={ghost_id}) at {ghost_addr}")
 

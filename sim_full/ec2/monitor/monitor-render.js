@@ -82,6 +82,7 @@ function drawArena(players, bits, bitsMask) {
   }
 
   const now = performance.now();
+  const activePlayers = players.filter((p) => !p.queued);
   // Expire finished animations even if a player key disappears briefly.
   for (const playerId of Object.keys(tagFlash)) {
     if ((now - tagFlash[playerId]) >= TAG_ANIM_MS) {
@@ -92,25 +93,25 @@ function drawArena(players, bits, bitsMask) {
 
   // Server can set FLAG_TAGGED and reset to spawn in the same tick.
   // Latch everyone at their previous live pose so the freeze shows the actual tag point.
-  const tagStartedThisFrame = players.some((p) => {
+  const tagStartedThisFrame = activePlayers.some((p) => {
     const tagged = (p.flags & FLAG_TAGGED) !== 0;
-    return tagged && !prevFlags[p.id];
+    return tagged && !prevFlags[p.entityKey];
   });
   if (tagStartedThisFrame) {
-    players.forEach((p) => {
-      const frozen = lastLivePos[p.id] || p;
-      tagFlash[p.id] = now;
-      tagPos[p.id] = { x: frozen.x, y: frozen.y, angle: frozen.angle };
+    activePlayers.forEach((p) => {
+      const frozen = lastLivePos[p.entityKey] || p;
+      tagFlash[p.entityKey] = now;
+      tagPos[p.entityKey] = { x: frozen.x, y: frozen.y, angle: frozen.angle };
     });
   }
 
   const drawPoseById = {};
   players.forEach((p) => {
-    const flashStart = tagFlash[p.id];
+    const flashStart = tagFlash[p.entityKey];
     const t = (flashStart !== undefined) ? Math.min((now - flashStart) / TAG_ANIM_MS, 1.0) : null;
     const isAnimating = t !== null && t < 1.0;
-    const frozenPose = (isAnimating && tagPos[p.id]) ? tagPos[p.id] : null;
-    drawPoseById[p.id] = {
+    const frozenPose = (isAnimating && tagPos[p.entityKey]) ? tagPos[p.entityKey] : null;
+    drawPoseById[p.entityKey] = {
       x: frozenPose ? frozenPose.x : p.x,
       y: frozenPose ? frozenPose.y : p.y,
       angle: frozenPose ? frozenPose.angle : p.angle,
@@ -120,9 +121,9 @@ function drawArena(players, bits, bitsMask) {
   });
 
   // Distance line follows frozen draw poses, so it stays in sync with flash hold.
-  if (players.length >= 2) {
-    const a = drawPoseById[players[0].id];
-    const b = drawPoseById[players[1].id];
+  if (activePlayers.length >= 2) {
+    const a = drawPoseById[activePlayers[0].entityKey];
+    const b = drawPoseById[activePlayers[1].entityKey];
     const [ax,ay] = worldToCanvas(a.x, a.y);
     const [bx,by] = worldToCanvas(b.x, b.y);
     const dx = b.x - a.x;
@@ -140,13 +141,14 @@ function drawArena(players, bits, bitsMask) {
 
   players.forEach((p, i) => {
     const isGhost = (p.flags & FLAG_GHOST) !== 0;
-    const colour  = isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const isQueued = Boolean(p.queued);
+    const colour  = isQueued ? '#4da3ff' : (isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length]);
     const tagged  = (p.flags & FLAG_TAGGED) !== 0;
     const matchEnded = (p.flags & FLAG_MATCH_END) !== 0;
 
-    prevFlags[p.id] = tagged;
+    prevFlags[p.entityKey] = tagged;
 
-    const pose = drawPoseById[p.id] || { x: p.x, y: p.y, angle: p.angle, t: null, isAnimating: false };
+    const pose = drawPoseById[p.entityKey] || { x: p.x, y: p.y, angle: p.angle, t: null, isAnimating: false };
     const { x: drawX, y: drawY, angle: drawAngle, t, isAnimating } = pose;
     const [cx,cy] = worldToCanvas(drawX, drawY);
 
@@ -186,12 +188,15 @@ function drawArena(players, bits, bitsMask) {
     ctx.fill();
 
     // Label
-    const role = isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger';
-    ctx.fillStyle = isGhost ? '#888' : '#fff'; ctx.font = 'bold 11px Courier New';
-    ctx.fillText(`P${p.id} ${role}`, cx + arrowLen + 4, cy - bodyBase);
+    const role = isQueued ? 'queued' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
+    const label = isQueued
+      ? `${p.displayName || `Q${p.queueSlot ?? '?'}`} ${role}`
+      : `P${p.id} ${role}`;
+    ctx.fillStyle = isQueued ? '#9bd2ff' : (isGhost ? '#888' : '#fff'); ctx.font = 'bold 11px Courier New';
+    ctx.fillText(label, cx + arrowLen + 4, cy - bodyBase);
 
     // Cache the latest live server pose for edge-triggered freeze latching.
-    lastLivePos[p.id] = { x: p.x, y: p.y, angle: p.angle };
+    lastLivePos[p.entityKey] = { x: p.x, y: p.y, angle: p.angle };
   });
 }
 
@@ -211,9 +216,14 @@ function renderLoop() {
   }
   renderCount++;
   if (now - renderLastTime >= 1000) {
-    document.getElementById('fps').textContent = String(renderCount);
+    document.getElementById('fps').textContent = String(wsHz);
     document.getElementById('hud-frame-ms').textContent = `${averageFrameMs().toFixed(1)} ms/frame`;
-    document.getElementById('hud-ws-rate').textContent = `${wsHz} / s`;
+    let latencyText = '— ms';
+    if (latestState?.timestamp) {
+      const stateAge = (now - latestState.timestamp) * 1000;
+      latencyText = `${Math.round(stateAge)} ms`;
+    }
+    document.getElementById('hud-latency').textContent = latencyText;
     renderCount = 0; renderLastTime = now;
   }
   requestAnimationFrame(renderLoop);

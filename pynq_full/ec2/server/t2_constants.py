@@ -38,7 +38,6 @@ GRACE_TICKS      = 30     # 0.5 s at 60 Hz
 # Map-relative spawn points for a 32×32 tile map at MAP_TILE_SCALE=8 (256×256 wu).
 # Runner and tagger start in opposite quadrants; ghosts spread to other corners.
 # All points are inside open corridors of the default chase.txt map.
-ORBIT_RADIUS     = 50.0   # kept for legacy node_simulator orbit mode
 SPAWN_POSITIONS  = [
     (-56.0, -56.0),   # player_id 1 — runner   (upper-left quadrant)
     ( 56.0,  56.0),   # player_id 2 — tagger   (lower-right quadrant)

@@ -27,7 +27,7 @@ from protocol import (
     HEADER_SIZE,
 )
 
-SERVER_IP   = "18.175.238.148"  # EC2 elastic IP
+SERVER_IP   = "3.9.71.204"
 SERVER_PORT = 9000
 
 MOVE_SPEED  = 0.1   # units per keypress

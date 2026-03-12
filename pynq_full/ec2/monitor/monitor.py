@@ -14,6 +14,8 @@ import time
 import redis as redislib
 import boto3
 from aiohttp import web
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
 REDIS_HOST   = "127.0.0.1"
 REDIS_PORT   = 6379
@@ -24,12 +26,17 @@ SERVICE_POLL_INTERVAL_S = 1.0
 REDIS_STATS_POLL_INTERVAL_S = 1.0
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
+PLAYER_TABLE = "pynq-raycaster-players"
 AWS_REGION   = "eu-west-2"
 REPO_ROOT    = Path(__file__).resolve().parents[3]
 MAPS_DIR     = REPO_ROOT / "pynq_full" / "ec2" / "maps"
 MONITOR_DIR  = Path(__file__).resolve().parent
-LOGO_ASSET_NAMES = ("PNG_LOGO.png", "BNW_LOGO.png")
-LOGO_ASSET_PATHS = {name: REPO_ROOT / name for name in LOGO_ASSET_NAMES}
+LOGO_ASSET_PATHS = {
+    "PNG_LOGO.png": REPO_ROOT / "PNG_LOGO.png",
+    "BNW_LOGO.png": REPO_ROOT / "BNW_LOGO.png",
+    "assets/pynqcast-white.png": REPO_ROOT / "BNW_LOGO.png",
+}
+LOGO_ASSET_NAMES = tuple(LOGO_ASSET_PATHS.keys())
 MONITOR_UI_ASSET_NAME = "monitor-ui.js"
 MONITOR_UI_ASSET_PATH = REPO_ROOT / "monitor_ui" / "dist" / MONITOR_UI_ASSET_NAME
 MONITOR_ASSETS = {
@@ -58,6 +65,7 @@ SERVICE_SPECS = {
 
 r     = redislib.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(DYNAMO_TABLE)
+player_dyndb = boto3.resource("dynamodb", region_name=AWS_REGION).Table(PLAYER_TABLE)
 s3    = boto3.client("s3", region_name=AWS_REGION)
 
 # ── DynamoDB poll (slow — every 5s) ───────────────────────────────────────────
@@ -88,6 +96,22 @@ def _as_float(value, default=0.0):
 
 def _valid_map_name(value):
     return isinstance(value, str) and bool(value) and value != "none"
+
+
+def _plain_number(value: Decimal):
+    if value == value.to_integral_value():
+        return int(value)
+    return float(value)
+
+
+def _plain_json(value):
+    if isinstance(value, Decimal):
+        return _plain_number(value)
+    if isinstance(value, dict):
+        return {key: _plain_json(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_plain_json(inner) for inner in value]
+    return value
 
 def poll_dynamodb():
     global _ddb_cache, _ddb_last_fetch
@@ -287,7 +311,10 @@ def handle_control_command(cmd: str):
 
     if cmd == "force_end":
         r.publish("game:control", json.dumps({"cmd": "force_end"}))
-        _service_message = "force_end sent — match will end this tick"
+        _service_message = "force_end sent — session will return to the lobby after the end hold"
+    elif cmd == "start_match":
+        r.publish("game:control", json.dumps({"cmd": "start_match"}))
+        _service_message = "start_match sent — queued lobby players will be promoted if enough participants exist"
     elif cmd == "restart":
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
@@ -310,7 +337,7 @@ def handle_control_command(cmd: str):
             payload = json.dumps({"cmd": "set_map", "map": map_name})
             r.publish("game:control", payload)
             _active_map = map_name
-            _service_message = f"map set to {map_name} (takes effect next match)"
+            _service_message = f"map set to {map_name} — active players are returned to the lobby on the new map"
     elif cmd.startswith("set_ghosts_"):
         count = int(cmd.split("_")[-1])
         r.publish("game:control", json.dumps({"cmd": "set_ghost_count", "count": count}))
@@ -448,11 +475,20 @@ def collect_state():
         if not raw:
             continue
         players.append({
-            "id":    pid,
-            "x":     float(raw.get("x", 0)),
-            "y":     float(raw.get("y", 0)),
-            "angle": float(raw.get("angle", 0)),
-            "flags": int(raw.get("flags", 0)),
+            "id":              pid,
+            "entity_key":      f"player:{pid}",
+            "x":               float(raw.get("x", 0)),
+            "y":               float(raw.get("y", 0)),
+            "angle":           float(raw.get("angle", 0)),
+            "flags":           int(raw.get("flags", 0)),
+            "username":        raw.get("username", ""),
+            "display_name":    raw.get("display_name", ""),
+            "profile_key":     raw.get("profile_key", ""),
+            "controller_key":  raw.get("controller_key", ""),
+            "identity_source": raw.get("identity_source", ""),
+            "is_ghost":        bool(_as_int(raw.get("is_ghost", 0), 0)),
+            "queued":          False,
+            "queue_slot":      None,
         })
 
     game_raw  = redis_rows[9]
@@ -469,6 +505,36 @@ def collect_state():
             paused_player_ids = json.loads(game_raw["paused_player_ids"])
         except Exception:
             paused_player_ids = []
+    queued_players = []
+    if game_raw and game_raw.get("queued_players"):
+        try:
+            queued_players = json.loads(game_raw["queued_players"])
+        except Exception:
+            queued_players = []
+    for index, raw in enumerate(queued_players, start=1):
+        queue_slot = _as_int(raw.get("queue_slot", index), index)
+        entity_key = (
+            raw.get("controller_key")
+            or raw.get("profile_key")
+            or raw.get("display_name")
+            or f"queued:{queue_slot}"
+        )
+        players.append({
+            "id":              0,
+            "entity_key":      f"queued:{entity_key}",
+            "x":               _as_float(raw.get("x"), 0.0),
+            "y":               _as_float(raw.get("y"), 0.0),
+            "angle":           _as_float(raw.get("angle"), 0.0),
+            "flags":           _as_int(raw.get("flags", 0), 0),
+            "username":        raw.get("username", ""),
+            "display_name":    raw.get("display_name", ""),
+            "profile_key":     raw.get("profile_key", ""),
+            "controller_key":  raw.get("controller_key", ""),
+            "identity_source": raw.get("identity_source", ""),
+            "is_ghost":        False,
+            "queued":          True,
+            "queue_slot":      queue_slot,
+        })
 
     events_raw = redis_rows[10]
     parsed     = [json.loads(e) for e in events_raw if e]
@@ -608,6 +674,47 @@ def fetch_replay(match_id: str):
             _replay_cache.pop(oldest, None)
     return payload
 
+
+def fetch_players():
+    items = []
+    last_evaluated_key = None
+    while True:
+        kwargs = {
+            "FilterExpression": "#rt = :rt",
+            "ExpressionAttributeNames": {"#rt": "record_type"},
+            "ExpressionAttributeValues": {":rt": "PROFILE"},
+        }
+        if last_evaluated_key:
+            kwargs["ExclusiveStartKey"] = last_evaluated_key
+        response = player_dyndb.scan(**kwargs)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if not last_evaluated_key:
+            break
+    items.sort(key=lambda item: item.get("last_seen_at", ""), reverse=True)
+    return {"players": _plain_json(items)}
+
+
+def fetch_player_profile(player_key: str):
+    response = player_dyndb.query(
+        KeyConditionExpression=Key("player_key").eq(player_key)
+    )
+    items = response.get("Items", [])
+    if not items:
+        raise web.HTTPNotFound(text=f"unknown player_key: {player_key}")
+
+    profile = next((item for item in items if item.get("record_type") == "PROFILE"), None)
+    matches = sorted(
+        (item for item in items if str(item.get("record_type", "")).startswith("MATCH#")),
+        key=lambda item: item.get("timestamp", ""),
+        reverse=True,
+    )
+    return {
+        "player_key": player_key,
+        "profile": _plain_json(profile),
+        "matches": _plain_json(matches),
+    }
+
 # ── WebSocket handler ──────────────────────────────────────────────────────────
 
 async def ws_handler(request):
@@ -668,6 +775,27 @@ async def replay_handler(request):
     return web.json_response(payload)
 
 
+async def players_handler(request):
+    try:
+        payload = await asyncio.to_thread(fetch_players)
+    except Exception as e:
+        print(f"[monitor] players fetch error: {e}")
+        raise web.HTTPInternalServerError(text="failed to load players")
+    return web.json_response(payload)
+
+
+async def player_handler(request):
+    player_key = request.match_info["player_key"]
+    try:
+        payload = await asyncio.to_thread(fetch_player_profile, player_key)
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        print(f"[monitor] player fetch error for {player_key}: {e}")
+        raise web.HTTPInternalServerError(text="failed to load player history")
+    return web.json_response(payload)
+
+
 async def maps_list_handler(request):
     """GET /api/maps — list all available map names."""
     names = sorted(p.stem for p in MAPS_DIR.glob("*.txt"))
@@ -715,6 +843,8 @@ async def main():
         app.router.add_get(f"/{logo_asset_name}", asset_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/replay/{match_id}", replay_handler)
+    app.router.add_get("/api/players", players_handler)
+    app.router.add_get("/api/players/{player_key}", player_handler)
     app.router.add_get("/api/maps", maps_list_handler)
     app.router.add_get("/api/map/{name}", map_handler)
     await asyncio.to_thread(refresh_state_cache)

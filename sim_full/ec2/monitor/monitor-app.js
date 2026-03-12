@@ -4,27 +4,32 @@ function updatePlayers(players) {
   const tbody = document.getElementById('player-tbody');
   tbody.innerHTML = '';
   let dist = '—';
-  if (players.length >= 2) {
-    const dx = players[1].x - players[0].x;
-    const dy = players[1].y - players[0].y;
+  const activePlayers = players.filter((p) => !p.queued);
+  const firstActiveKey = activePlayers.length ? activePlayers[0].entityKey : null;
+  if (activePlayers.length >= 2) {
+    const dx = activePlayers[1].x - activePlayers[0].x;
+    const dy = activePlayers[1].y - activePlayers[0].y;
     dist = Math.sqrt(dx*dx + dy*dy).toFixed(1) + 'u';
   }
   players.forEach((p, i) => {
     const tagged  = (p.flags & FLAG_TAGGED) !== 0;
     const matchEnded = (p.flags & FLAG_MATCH_END) !== 0;
     const isGhost = (p.flags & FLAG_GHOST) !== 0;
-    const colour  = isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length];
+    const isQueued = Boolean(p.queued);
+    const colour  = isQueued ? '#4da3ff' : (isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length]);
     const tr = document.createElement('tr');
-    const role      = isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger';
-    const roleColour = isGhost ? '#666' : (p.id === 1) ? '#888' : '#ffaa00';
-    const statusText = tagged ? '★ TAGGED' : (matchEnded ? 'MATCH END' : '—');
+    const role      = isQueued ? 'queued' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
+    const roleDetail = isQueued && p.displayName ? ` · ${p.displayName}` : '';
+    const roleColour = isQueued ? '#7dc3ff' : (isGhost ? '#666' : (p.id === 1) ? '#888' : '#ffaa00');
+    const statusText = isQueued ? 'WAITING FOR P2' : (tagged ? '★ TAGGED' : (matchEnded ? 'MATCH END' : '—'));
+    const idLabel = isQueued ? `Q${p.queueSlot ?? 0}` : `P${p.id}`;
     tr.innerHTML = `
-      <td class="pid" style="color:${colour}">P${p.id}</td>
-      <td style="color:${roleColour};font-size:10px">${role}</td>
+      <td class="pid" style="color:${colour}">${idLabel}</td>
+      <td style="color:${roleColour};font-size:10px">${role}${roleDetail}</td>
       <td>${p.x.toFixed(1)}</td>
       <td>${p.y.toFixed(1)}</td>
       <td>${(p.angle * 180/Math.PI).toFixed(0)}°</td>
-      <td>${i === 0 ? dist : ''}</td>
+      <td>${!isQueued && p.entityKey === firstActiveKey ? dist : ''}</td>
       <td class="${tagged ? 'tagged' : ''}">${statusText}</td>
     `;
     tbody.appendChild(tr);
@@ -382,6 +387,47 @@ function connect() {
   };
   ws.onerror = () => ws.close();
 }
+
+function initThemeToggle() {
+  const toggle = document.getElementById('theme-toggle');
+  const html = document.documentElement;
+
+  const savedTheme = localStorage.getItem('monitor-theme');
+  let currentTheme = savedTheme;
+
+  if (!currentTheme) {
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    currentTheme = prefersLight ? 'light' : 'dark';
+  }
+
+  html.setAttribute('data-theme', currentTheme);
+  updateThemeButton(toggle, currentTheme);
+
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('monitor-theme')) {
+      const nextTheme = e.matches ? 'light' : 'dark';
+      html.setAttribute('data-theme', nextTheme);
+      updateThemeButton(toggle, nextTheme);
+    }
+  });
+
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const current = html.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('monitor-theme', next);
+      updateThemeButton(toggle, next);
+    });
+  }
+}
+
+function updateThemeButton(button, theme) {
+  if (!button) return;
+  button.textContent = theme === 'light' ? '☀️ Light' : '🌙 Dark';
+  button.setAttribute('aria-pressed', theme === 'light' ? 'false' : 'true');
+}
+
 renderViewModeButtons();
 updateOrbitModeControls();
 updateGameHud(null);
@@ -391,4 +437,5 @@ if (stackedFrameChart) {
   setInterval(() => pushStackedFrame(generateDummyPipelineFrame()), 100);
 }
 setActiveTab(window.location.hash.replace('#', ''));
+initThemeToggle();
 connect();
