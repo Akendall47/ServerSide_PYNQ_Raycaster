@@ -235,31 +235,6 @@ export default function PlayerStatsTab() {
         </div>
       </div>
 
-      <div className="panel-raised entity-section-panel">
-        <div className="panel-head">
-          <div>
-            <div className="panel-head-note">server-side live entities</div>
-            <h2>Server Entities</h2>
-          </div>
-          <span className="micro-chip">{`${Math.min(ghosts.length, 3)}/3 ghost lanes active`}</span>
-        </div>
-        <div className="metric-note entity-section-note">
-          Ghosts are live websocket-only server actors today. These three lanes stay reserved so we can add future
-          server-side traits and non-human entity types without mixing them into the human career cards.
-        </div>
-        <div className="entity-stats-grid">
-          {ghostSlots.map((slot) => (
-            <ServerEntityCard key={slot.key} slot={slot} pageVisible={pageVisible} />
-          ))}
-        </div>
-        {hiddenGhostCount ? (
-          <div className="metric-note entity-section-note">
-            {hiddenGhostCount} additional live ghost{hiddenGhostCount === 1 ? '' : 's'} exist beyond the visible
-            three-slot entity bank.
-          </div>
-        ) : null}
-      </div>
-
       {loading ? (
         <div className="panel-raised player-status-panel">
           <div className="player-detail-status">
@@ -307,6 +282,31 @@ export default function PlayerStatsTab() {
           })}
         </div>
       ) : null}
+
+      <div className="panel-raised entity-section-panel">
+        <div className="panel-head">
+          <div>
+            <div className="panel-head-note">server-side live entities</div>
+            <h2>Server Entities</h2>
+          </div>
+          <span className="micro-chip">{`${Math.min(ghosts.length, 3)}/3 ghost lanes active`}</span>
+        </div>
+        <div className="metric-note entity-section-note">
+          Ghosts are live websocket-only server actors today. These three lanes stay reserved so we can add future
+          server-side traits and non-human entity types without mixing them into the human career cards.
+        </div>
+        <div className="entity-stats-grid">
+          {ghostSlots.map((slot) => (
+            <ServerEntityCard key={slot.key} slot={slot} pageVisible={pageVisible} />
+          ))}
+        </div>
+        {hiddenGhostCount ? (
+          <div className="metric-note entity-section-note">
+            {hiddenGhostCount} additional live ghost{hiddenGhostCount === 1 ? '' : 's'} exist beyond the visible
+            three-slot entity bank.
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
