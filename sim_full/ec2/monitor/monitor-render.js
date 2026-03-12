@@ -188,7 +188,7 @@ function drawArena(players, bits, bitsMask) {
     ctx.fill();
 
     // Label
-    const role = isQueued ? 'queued' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
+    const role = isQueued ? 'lobby' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
     const label = isQueued
       ? `${p.displayName || `Q${p.queueSlot ?? '?'}`} ${role}`
       : `P${p.id} ${role}`;

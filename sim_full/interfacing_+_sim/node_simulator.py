@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # node_simulator.py — fake PYNQ node for testing without hardware.
 #
-# State machine: PLAYING (send position @ 20 Hz) ↔ WAITING (on FLAG_TAGGED, wait for restart).
+# State machine: CONNECTED (send position @ 20 Hz) ↔ DISCONNECTED/REJOINING.
+# The simulator now auto-registers into the lobby on launch; explicit reconnect
+# controls are only needed when the operator wants to drop a node manually.
 # Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I --username sim
 
 import socket
@@ -365,24 +367,28 @@ def apply_control_command(tag: str, command: dict, current_mode: str, node_index
     if target_index is not None:
         try:
             if int(target_index) != node_index:
-                return current_mode, False, None, None
+                return current_mode, None, None, None
         except (TypeError, ValueError):
-            return current_mode, False, None, None
+            return current_mode, None, None, None
 
     cmd = command.get("cmd")
     if cmd == "set_mode":
         requested = normalize_mode(str(command.get("mode", "")).lower())
         if requested in ("auto", "manual") and requested != current_mode:
             print(f"{tag} mode switch requested: {current_mode} -> {requested}")
-            return requested, False, None, None
+            return requested, None, None, None
     elif cmd == "restart":
-        return current_mode, True, None, None
+        return current_mode, "restart", None, None
+    elif cmd == "disconnect":
+        return current_mode, "disconnect", None, None
+    elif cmd == "reconnect":
+        return current_mode, "reconnect", None, None
     elif cmd == "set_map":
-        return current_mode, False, str(command.get("map", DEFAULT_MAP_NAME)), None
+        return current_mode, None, str(command.get("map", DEFAULT_MAP_NAME)), None
     elif cmd == "set_sim_view":
         requested_view = str(command.get("view", "map")).lower()
-        return current_mode, False, None, ("orbit" if requested_view == "orbit" else "map")
-    return current_mode, False, None, None
+        return current_mode, None, None, ("orbit" if requested_view == "orbit" else "map")
+    return current_mode, None, None, None
 
 
 def run_node(server_ip, server_port, player_id, node_index,
@@ -412,12 +418,12 @@ def run_node(server_ip, server_port, player_id, node_index,
             ps.subscribe("game:control")
             print(f"{tag} subscribed to game:control ({redis_host}:{redis_port})")
         except Exception as e:
-            print(f"{tag} Redis unavailable ({e}) — restart requires Ctrl+C and re-run")
+            print(f"{tag} Redis unavailable ({e}) — dashboard reconnect/mode controls disabled")
             ps = None
 
     sock    = None
-    playing = False   # start in WAITING; first game needs explicit RESTART
-    rejoin_at = None
+    playing = False
+    rejoin_at = time.monotonic()
     assigned_player_id = None
     have_authoritative_state = False
     last_authoritative_state_at = 0.0
@@ -477,6 +483,26 @@ def run_node(server_ip, server_port, player_id, node_index,
         print(f"{tag} sim view switched to {sim_view_mode}")
         return True
 
+    def schedule_rejoin(delay_s: float, reason: str):
+        nonlocal playing, rejoin_at, assigned_player_id
+        nonlocal have_authoritative_state, last_authoritative_state_at
+        playing = False
+        rejoin_at = time.monotonic() + delay_s
+        assigned_player_id = None
+        have_authoritative_state = False
+        last_authoritative_state_at = 0.0
+        print(f"{tag} {reason} — rejoining in {delay_s:.2f}s...")
+
+    def disconnect_node(reason: str):
+        nonlocal playing, rejoin_at, assigned_player_id
+        nonlocal have_authoritative_state, last_authoritative_state_at
+        playing = False
+        rejoin_at = None
+        assigned_player_id = None
+        have_authoritative_state = False
+        last_authoritative_state_at = 0.0
+        print(f"{tag} {reason} — disconnected")
+
     def sync_runtime_from_redis():
         nonlocal selected_map_name
         if rc is None:
@@ -502,7 +528,7 @@ def run_node(server_ip, server_port, player_id, node_index,
             print(f"{tag} manual mode: arrows move/turn, space shoots")
         while True:
             sync_runtime_from_redis()
-            # ── WAITING: block until dashboard sends restart ──────────────────
+            # ── DISCONNECTED / REJOINING ─────────────────────────────────────
             if not playing:
                 if ps:
                     while True:
@@ -515,41 +541,33 @@ def run_node(server_ip, server_port, player_id, node_index,
                             command = json.loads(msg["data"])
                         except Exception:
                             continue
-                        next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
+                        next_mode, lifecycle_cmd, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
                         switch_mode(next_mode)
                         if next_map:
                             load_selected_map(next_map)
                             print(f"{tag} map selected as {selected_map_name}")
                         if next_view:
                             switch_sim_view(next_view)
-                        if should_restart:
+                        if lifecycle_cmd == "restart":
                             rejoin_at = time.monotonic() + RESTART_DELAY_S
                             print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
-                    if rejoin_at is None:
-                        print(f"{tag} ── GAME OVER — waiting for ▶ RESTART...")
-                    while rejoin_at is None or time.monotonic() < rejoin_at:
-                        msg = ps.get_message()
-                        if msg and msg["type"] == "message":
-                            try:
-                                command = json.loads(msg["data"])
-                            except Exception:
-                                command = None
-                            if command:
-                                next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
-                                switch_mode(next_mode)
-                                if next_map:
-                                    load_selected_map(next_map)
-                                    print(f"{tag} map selected as {selected_map_name}")
-                                if next_view:
-                                    switch_sim_view(next_view)
-                                if should_restart:
-                                    rejoin_at = time.monotonic() + RESTART_DELAY_S
-                                    print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
-                        time.sleep(0.1)
-                else:
-                    print(f"{tag} no Redis — Ctrl+C and re-run to restart")
+                        elif lifecycle_cmd == "reconnect":
+                            rejoin_at = time.monotonic()
+                            print(f"{tag} reconnect received — joining lobby now")
+                        elif lifecycle_cmd == "disconnect":
+                            rejoin_at = None
+                            print(f"{tag} disconnect received — waiting for reconnect")
+                elif rejoin_at is None:
+                    print(f"{tag} no Redis — disconnected until process restart")
                     while True:
                         time.sleep(1)
+
+                if rejoin_at is None:
+                    time.sleep(0.1)
+                    continue
+                if time.monotonic() < rejoin_at:
+                    time.sleep(0.1)
+                    continue
 
                 if sock:
                     sock.close()
@@ -588,33 +606,29 @@ def run_node(server_ip, server_port, player_id, node_index,
                         command = json.loads(msg["data"])
                     except Exception:
                         continue
-                    next_mode, should_restart, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
+                    next_mode, lifecycle_cmd, next_map, next_view = apply_control_command(tag, command, normalized_mode, node_index)
                     switch_mode(next_mode)
                     if next_map:
                         load_selected_map(next_map)
-                        rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
-                        playing = False
-                        print(f"{tag} map selected as {selected_map_name} — rejoining")
+                        schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, f"map selected as {selected_map_name}")
                         break
                     if next_view and switch_sim_view(next_view):
-                        rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
-                        playing = False
-                        print(f"{tag} sim view changed to {sim_view_mode} — rejoining")
+                        schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, f"sim view changed to {sim_view_mode}")
                         break
-                    if should_restart:
-                        rejoin_at = time.monotonic() + RESTART_DELAY_S
-                        playing = False
-                        have_authoritative_state = False
-                        last_authoritative_state_at = 0.0
-                        print(f"{tag} restart received — rejoining in {RESTART_DELAY_S}s...")
+                    if lifecycle_cmd == "restart":
+                        schedule_rejoin(RESTART_DELAY_S, "restart received")
+                        break
+                    if lifecycle_cmd == "reconnect":
+                        schedule_rejoin(0.0, "reconnect received")
+                        break
+                    if lifecycle_cmd == "disconnect":
+                        disconnect_node("disconnect received")
                         break
 
             if playing and sync_runtime_from_redis():
-                rejoin_at = time.monotonic() + MAP_CHANGE_REJOIN_DELAY_S
-                playing = False
-                print(f"{tag} runtime state changed via Redis snapshot — rejoining")
+                schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, "runtime state changed via Redis snapshot")
 
-            # receive all queued broadcasts; stop playing if FLAG_TAGGED seen
+            # receive all queued broadcasts
             while playing:
                 try:
                     data, _ = sock.recvfrom(1024)
@@ -622,19 +636,24 @@ def run_node(server_ip, server_port, player_id, node_index,
                     if pkt_type == PKT_ACK and len(data) >= HEADER_SIZE + 1:
                         assigned_player_id = struct.unpack_from('<B', data, HEADER_SIZE)[0]
                         print(f"{tag} assigned server player_id={assigned_player_id}")
+                        if assigned_player_id == 0:
+                            x, y, angle = spawn_pose(map_state, node_index, radius)
+                            orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
+                            have_authoritative_state = False
+                            last_authoritative_state_at = 0.0
                         continue
                     if pkt_type == PKT_GAME_STATE:
                         _, _, _, _, players, _ = unpack_server_packet(data)
                         active_player_id = (
                             assigned_player_id
-                            if assigned_player_id is not None
-                            else (node_index + 1)
+                            if assigned_player_id is not None and assigned_player_id > 0
+                            else None
                         )
                         for p in players:
                             state_names = ",".join(
                                 decode_flag_names(p["flags"], direction="server_to_client")
                             ) or "none"
-                            if p["player_id"] == active_player_id:
+                            if active_player_id is not None and p["player_id"] == active_player_id:
                                 x = p["x"]
                                 y = p["y"]
                                 angle = p["angle"]
@@ -642,12 +661,9 @@ def run_node(server_ip, server_port, player_id, node_index,
                                     orbit_phase = math.atan2(y, x)
                                 have_authoritative_state = True
                                 last_authoritative_state_at = time.monotonic()
-                            if p["flags"] & FLAG_MATCH_END:
-                                print(f"{tag} P{p['player_id']} state={state_names} — stopping")
-                                playing = False
-                                have_authoritative_state = False
-                                last_authoritative_state_at = 0.0
-                            elif p["player_id"] == active_player_id and p["flags"] & FLAG_TAGGED:
+                            if active_player_id is not None and p["player_id"] == active_player_id and p["flags"] & FLAG_MATCH_END:
+                                print(f"{tag} P{p['player_id']} state={state_names} — awaiting lobby return")
+                            elif active_player_id is not None and p["player_id"] == active_player_id and p["flags"] & FLAG_TAGGED:
                                 print(f"{tag} P{p['player_id']} state={state_names}")
                 except socket.timeout:
                     break
@@ -658,7 +674,7 @@ def run_node(server_ip, server_port, player_id, node_index,
             if not playing:
                 sock.close()
                 sock = None
-                continue   # → WAITING
+                continue
 
             if (
                 have_authoritative_state
@@ -667,7 +683,7 @@ def run_node(server_ip, server_port, player_id, node_index,
                 have_authoritative_state = False
 
             # send position update
-            if not have_authoritative_state:
+            if not have_authoritative_state and assigned_player_id != 0:
                 input_flags = 0
             elif normalized_mode == "manual":
                 actions = manual_controller.read_actions() if manual_controller else []

@@ -129,6 +129,11 @@ function requestNodeMode(nodeId, mode, force = false) {
   updateNodeLinks(latestState?.players || []);
 }
 
+function requestNodeConnection(nodeId, action) {
+  const verb = action === 'disconnect' ? 'disconnect' : 'reconnect';
+  sendControl(`node${nodeId}_${verb}`, `node ${nodeId} ${verb}`);
+}
+
 function enforceMapManualModes() {
   requestNodeMode(1, 'manual', true);
   requestNodeMode(2, 'manual', true);
@@ -168,9 +173,9 @@ function updateCanvasLabel() {
 }
 
 function setActiveTab(tab) {
-  const target = (tab === 'server' || tab === 'controls' || tab === 'about') ? tab : 'game';
+  const target = (tab === 'server' || tab === 'controls' || tab === 'about' || tab === 'players') ? tab : 'game';
   _activePage = target;
-  ['game', 'server', 'controls', 'about'].forEach((page) => {
+  ['game', 'server', 'controls', 'about', 'players'].forEach((page) => {
     const panel = document.getElementById(`page-${page}`);
     const tabBtn = document.getElementById(`tab-${page}`);
     if (panel) panel.hidden = page !== target;
@@ -391,6 +396,7 @@ function selectMap(name) {
 
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
+window.latestState = latestState;
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
 let renderCount = 0, renderLastTime = performance.now();
 
@@ -436,3 +442,7 @@ function countActiveBits(bitsMask, totalBits) {
   }
   return active;
 }
+
+// Expose tab/UI functions needed by inline onclick handlers in the template HTML.
+window.setActiveTab = setActiveTab;
+window.toggleArchiveDrawer = toggleArchiveDrawer;

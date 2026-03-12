@@ -29,8 +29,20 @@ function BoardStage({ hostSlot }) {
   const stageRef = useRef(null);
   const mountRef = useRef(null);
   const shadowRef = useRef(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const section = document.getElementById('page-about');
+    if (!section) return;
+    const check = () => setVisible(!section.hidden);
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(section, { attributes: true, attributeFilter: ['hidden'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return () => {};
     const stage = stageRef.current;
     const mount = mountRef.current;
     const shadow = shadowRef.current;
@@ -279,10 +291,11 @@ function BoardStage({ hostSlot }) {
 
     // ── Animation ──
     let rafId = 0;
-    const clock = new THREE.Clock();
+    const timer = new THREE.Timer();
 
     const render = () => {
-      const t = clock.getElapsedTime();
+      timer.update();
+      const t = timer.getElapsed();
       const bob = Math.sin(t * 1.4);
       const bobPhase = (bob + 1) / 2;
 
@@ -325,7 +338,7 @@ function BoardStage({ hostSlot }) {
         mount.removeChild(renderer.domElement);
       }
     };
-  }, [hostSlot]);
+  }, [hostSlot, visible]);
 
   return (
     <div ref={stageRef} style={{ width: '100%', height: 420, position: 'relative', overflow: 'visible' }}>
@@ -356,14 +369,7 @@ function BoardStage({ hostSlot }) {
   );
 }
 
-export default function PYNQBoard({ hostRef }) {
-  const [portalTarget, setPortalTarget] = useState(null);
-
-  useEffect(() => {
-    const target = hostRef?.current?.querySelector('.about-react-board-slot');
-    setPortalTarget(target || null);
-  }, [hostRef]);
-
+export default function PYNQBoard({ portalTarget }) {
   if (!portalTarget) return null;
 
   return createPortal(<BoardStage hostSlot={portalTarget} />, portalTarget);

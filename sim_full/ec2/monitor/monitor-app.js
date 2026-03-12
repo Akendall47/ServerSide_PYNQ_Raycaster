@@ -18,10 +18,10 @@ function updatePlayers(players) {
     const isQueued = Boolean(p.queued);
     const colour  = isQueued ? '#4da3ff' : (isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length]);
     const tr = document.createElement('tr');
-    const role      = isQueued ? 'queued' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
+    const role      = isQueued ? 'lobby' : (isGhost ? 'ghost' : (p.id === 1) ? 'runner' : 'tagger');
     const roleDetail = isQueued && p.displayName ? ` · ${p.displayName}` : '';
     const roleColour = isQueued ? '#7dc3ff' : (isGhost ? '#666' : (p.id === 1) ? '#888' : '#ffaa00');
-    const statusText = isQueued ? 'WAITING FOR P2' : (tagged ? '★ TAGGED' : (matchEnded ? 'MATCH END' : '—'));
+    const statusText = isQueued ? 'CONNECTED' : (tagged ? '★ TAGGED' : (matchEnded ? 'MATCH END' : '—'));
     const idLabel = isQueued ? `Q${p.queueSlot ?? 0}` : `P${p.id}`;
     tr.innerHTML = `
       <td class="pid" style="color:${colour}">${idLabel}</td>
@@ -40,10 +40,13 @@ function updateNodeLinks(players) {
   const normalised = normalisePlayers(players);
   [1, 2].forEach((nodeId) => {
     const el = document.getElementById(`node${nodeId}-link`);
-    const connected = normalised.some((player) => player.id === nodeId);
+    const activePlayer = normalised.find((player) => player.id === nodeId);
+    const queuedPlayer = normalised.find((player) => player.queued && player.queueSlot === nodeId);
     const mode = requestedNodeModes[nodeId];
-    el.textContent = `${connected ? 'connected' : 'offline'} · ${mode}`;
-    el.style.color = connected ? '#baffd8' : '#665a8a';
+    const statusText = activePlayer ? 'connected' : queuedPlayer ? 'lobby' : 'offline';
+    const statusColour = activePlayer ? '#baffd8' : queuedPlayer ? '#7dc3ff' : '#665a8a';
+    el.textContent = `${statusText} · ${mode}`;
+    el.style.color = statusColour;
   });
 }
 
@@ -151,7 +154,7 @@ function updateRedis(redis) {
 
   let note = `monitor polls Redis at ${redis.monitor_push_hz} Hz (~${redis.monitor_cmds_per_sec} commands/sec from this page). `;
   note += `Clients ${redis.connected_clients} = ${breakdown}. `;
-  note += `Blocked is usually the sidecar on BRPOP; pub/sub clients are usually node simulators waiting for restart.`;
+  note += `Blocked is usually the sidecar on BRPOP; pub/sub clients are usually local node simulators listening for mode/lobby commands.`;
   document.getElementById('redis-note').textContent = note;
 }
 
@@ -186,7 +189,7 @@ function updateServices(services) {
   applyState('svc-server', services.server);
   applyState('svc-sidecar', services.sidecar);
   applyState('svc-monitor', services.monitor);
-  setServiceNote(services.last_action || 'controls run on EC2 only; node simulators still start locally');
+  setServiceNote(services.last_action || 'controls run on EC2 only; local node simulators join the lobby after launch');
 }
 
 function describePausedPlayers(playerIds) {
@@ -324,16 +327,30 @@ function updateEvents(events) {
 // ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
 let ws = null;
-function sendControl(cmd, label) {
+async function sendControl(cmd, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
     setServiceNote(`${label} requested...`);
     return;
   }
-  setServiceNote('websocket disconnected');
+  setServiceNote(`${label} requested via HTTP...`);
+  try {
+    const resp = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+  } catch (error) {
+    setServiceNote(`control failed: ${error.message || 'request error'}`);
+  }
 }
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
   ws.onopen = () => {
     statusEl.textContent = '● LIVE';
     statusEl.className   = 'connected';
@@ -358,6 +375,7 @@ function connect() {
       for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
     }
     latestState = state;
+    window.latestState = state;
     syncViewMode(state.sim_view_mode || 'map');
     updateGameHud(state);
     maybeEnforceMapManual(state.players || []);
@@ -436,6 +454,10 @@ if (stackedFrameChart) {
   seedStackedFrameChart();
   setInterval(() => pushStackedFrame(generateDummyPipelineFrame()), 100);
 }
+// Expose functions needed by inline onclick handlers in the template HTML.
+window.stopReplay = stopReplay;
+window.sendControl = sendControl;
+
 setActiveTab(window.location.hash.replace('#', ''));
 initThemeToggle();
 connect();

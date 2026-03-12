@@ -5,6 +5,7 @@
 import asyncio
 import gzip
 import json
+import mimetypes
 import os
 from pathlib import Path
 import signal
@@ -38,7 +39,7 @@ LOGO_ASSET_PATHS = {
 }
 LOGO_ASSET_NAMES = tuple(LOGO_ASSET_PATHS.keys())
 MONITOR_UI_ASSET_NAME = "monitor-ui.js"
-MONITOR_UI_ASSET_PATH = REPO_ROOT / "monitor_ui" / "dist" / MONITOR_UI_ASSET_NAME
+MONITOR_UI_DIST_DIR = REPO_ROOT / "monitor_ui" / "dist"
 MONITOR_ASSETS = {
     "monitor.css",
     "monitor-state.js",
@@ -513,15 +514,15 @@ def collect_state():
             queued_players = []
     for index, raw in enumerate(queued_players, start=1):
         queue_slot = _as_int(raw.get("queue_slot", index), index)
-        entity_key = (
-            raw.get("controller_key")
-            or raw.get("profile_key")
+        entity_key_seed = (
+            raw.get("profile_key")
             or raw.get("display_name")
-            or f"queued:{queue_slot}"
+            or raw.get("controller_key")
+            or "unknown"
         )
         players.append({
             "id":              0,
-            "entity_key":      f"queued:{entity_key}",
+            "entity_key":      f"queued:{queue_slot}:{entity_key_seed}",
             "x":               _as_float(raw.get("x"), 0.0),
             "y":               _as_float(raw.get("y"), 0.0),
             "angle":           _as_float(raw.get("angle"), 0.0),
@@ -752,15 +753,41 @@ async def index_handler(request):
     return web.FileResponse(MONITOR_DIR / "index.html")
 
 
+def _resolve_monitor_ui_asset(name: str):
+    candidate = (MONITOR_UI_DIST_DIR / name).resolve()
+    try:
+      candidate.relative_to(MONITOR_UI_DIST_DIR.resolve())
+    except ValueError:
+      return None
+    if not candidate.is_file():
+      return None
+    return candidate
+
+
+def _asset_response(request, path: Path, public_name: str):
+    headers = {
+        "Vary": "Accept-Encoding",
+        "Cache-Control": "public, max-age=31536000, immutable" if public_name.startswith("chunks/") else "no-cache",
+    }
+    gzip_path = Path(f"{path}.gz")
+    if "gzip" in request.headers.get("Accept-Encoding", "") and gzip_path.is_file():
+        content_type = mimetypes.guess_type(public_name)[0] or "application/octet-stream"
+        headers["Content-Encoding"] = "gzip"
+        headers["Content-Type"] = content_type
+        return web.FileResponse(gzip_path, headers=headers)
+    return web.FileResponse(path, headers=headers)
+
+
 async def asset_handler(request):
     name = request.path.lstrip("/")
+    dist_asset = _resolve_monitor_ui_asset(name)
+    if dist_asset is not None:
+        return _asset_response(request, dist_asset, name)
     if name not in MONITOR_ASSETS:
         raise web.HTTPNotFound(text=f"unknown asset: {name}")
     if name in LOGO_ASSET_PATHS:
-        return web.FileResponse(LOGO_ASSET_PATHS[name])
-    if name == MONITOR_UI_ASSET_NAME:
-        return web.FileResponse(MONITOR_UI_ASSET_PATH)
-    return web.FileResponse(MONITOR_DIR / name)
+        return _asset_response(request, LOGO_ASSET_PATHS[name], name)
+    return _asset_response(request, MONITOR_DIR / name, name)
 
 
 async def replay_handler(request):
@@ -794,6 +821,24 @@ async def player_handler(request):
         print(f"[monitor] player fetch error for {player_key}: {e}")
         raise web.HTTPInternalServerError(text="failed to load player history")
     return web.json_response(payload)
+
+
+async def control_handler(request):
+    try:
+        data = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="invalid control payload")
+
+    cmd = str(data.get("cmd", "") or "").strip()
+    if not cmd:
+        raise web.HTTPBadRequest(text="missing cmd")
+
+    try:
+        await asyncio.to_thread(handle_control_command, cmd)
+    except Exception as exc:
+        print(f"[monitor] control error for {cmd}: {exc}")
+        raise web.HTTPInternalServerError(text="failed to apply control")
+    return web.json_response({"ok": True, "cmd": cmd})
 
 
 async def maps_list_handler(request):
@@ -839,12 +884,14 @@ async def main():
     app.router.add_get("/monitor-render.js", asset_handler)
     app.router.add_get("/monitor-app.js", asset_handler)
     app.router.add_get(f"/{MONITOR_UI_ASSET_NAME}", asset_handler)
+    app.router.add_get("/chunks/{chunk_path:.+}", asset_handler)
     for logo_asset_name in LOGO_ASSET_NAMES:
         app.router.add_get(f"/{logo_asset_name}", asset_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/replay/{match_id}", replay_handler)
     app.router.add_get("/api/players", players_handler)
     app.router.add_get("/api/players/{player_key}", player_handler)
+    app.router.add_post("/api/control", control_handler)
     app.router.add_get("/api/maps", maps_list_handler)
     app.router.add_get("/api/map/{name}", map_handler)
     await asyncio.to_thread(refresh_state_cache)

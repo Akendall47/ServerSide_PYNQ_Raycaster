@@ -1,7 +1,9 @@
 import { build } from 'esbuild';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzip } from 'node:zlib';
+import { promisify } from 'node:util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +11,7 @@ const rootDir = path.resolve(__dirname, '..');
 const srcDir = path.join(__dirname, 'src');
 const templateDir = path.join(__dirname, 'templates');
 const distDir = path.join(__dirname, 'dist');
+const gzipAsync = promisify(gzip);
 
 function extractBody(html, label) {
   const match = html.match(/<body[^>]*>([\s\S]*?)(?:<\/body>|<\/html>)/i);
@@ -33,19 +36,40 @@ async function generateTemplateModule() {
   await writeFile(path.join(srcDir, 'templates.generated.js'), moduleSource, 'utf8');
 }
 
+async function gzipDistAssets(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  await Promise.all(entries.map(async (entry) => {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await gzipDistAssets(entryPath);
+      return;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.js')) return;
+    const data = await readFile(entryPath);
+    const compressed = await gzipAsync(data, { level: 9 });
+    await writeFile(`${entryPath}.gz`, compressed);
+  }));
+}
+
 async function main() {
+  await rm(distDir, { recursive: true, force: true });
   await mkdir(distDir, { recursive: true });
   await generateTemplateModule();
 
   await build({
-    entryPoints: [path.join(srcDir, 'monitor-ui.jsx')],
-    outfile: path.join(distDir, 'monitor-ui.js'),
+    entryPoints: {
+      'monitor-ui': path.join(srcDir, 'monitor-ui.jsx'),
+    },
+    outdir: distDir,
     bundle: true,
+    splitting: true,
     minify: true,
     sourcemap: false,
-    format: 'iife',
+    format: 'esm',
     platform: 'browser',
     target: ['es2020'],
+    entryNames: '[name]',
+    chunkNames: 'chunks/[name]-[hash]',
     jsx: 'automatic',
     loader: {
       '.js': 'jsx',
@@ -55,6 +79,8 @@ async function main() {
     },
     absWorkingDir: rootDir,
   });
+
+  await gzipDistAssets(distDir);
 }
 
 main().catch((error) => {

@@ -21,6 +21,7 @@
       <button id="tab-server" class="nav-tab" type="button" onclick="setActiveTab('server')">Server Monitoring</button>
       <button id="tab-controls" class="nav-tab" type="button" onclick="setActiveTab('controls')">Controls &amp; Config</button>
       <button id="tab-about" class="nav-tab" type="button" onclick="setActiveTab('about')">About</button>
+      <button id="tab-players" class="nav-tab" type="button" onclick="setActiveTab('players')">Player Stats</button>
     </nav>
     <div class="top-status">
       <span id="status" class="disconnected">● DISCONNECTED</span>
@@ -81,7 +82,7 @@
             <div class="viewport-head-meta">
               <span id="canvas-label" class="panel-head-note">map play · loading map…</span>
               <div class="viewport-action-row">
-                <button class="viewport-control-btn start" type="button" onclick="sendControl('restart', 'start match')">Start</button>
+                <button class="viewport-control-btn start" type="button" onclick="sendControl('start_match', 'start match')">Start</button>
                 <button class="viewport-control-btn stop" type="button" onclick="sendControl('force_end', 'force end match')">End</button>
                 <button
                   id="archive-toggle"
@@ -419,7 +420,7 @@
             <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
             <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
           </div>
-          <div class="metric-note" id="svc-note">controls run on EC2 only; node simulators still start locally</div>
+          <div class="metric-note" id="svc-note">controls run on EC2 only; local node simulators now join the lobby immediately after launch.</div>
         </div>
 
         <div class="panel-raised controls-sim">
@@ -436,10 +437,18 @@
             <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
             <div class="metric-note" style="margin-top:12px;">Node 1</div>
             <div class="control-pair">
+              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            </div>
+            <div class="control-pair">
               <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
               <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
             </div>
             <div class="metric-note" style="margin-top:12px;">Node 2</div>
+            <div class="control-pair">
+              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+            </div>
             <div class="control-pair">
               <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
               <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
@@ -447,6 +456,16 @@
           </div>
 
           <div id="map-play-controls">
+            <div class="metric-note" style="margin-top:12px;">Lobby Links</div>
+            <div class="control-pair">
+              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            </div>
+            <div class="control-pair">
+              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+            </div>
+            <div class="metric-note">Local node simulators should appear in the lobby as soon as their tmux pane is launched. Use disconnect/reconnect to test lobby behaviour without restarting the whole session.</div>
             <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
             <div class="control-stack">
               <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count → 0')">0 Ghosts</button>
@@ -499,6 +518,11 @@
           </div>
         </div>
       </section>
+    </section>
+
+    <section id="page-players" class="page player-stats-page" hidden>
+      <div class="section-label">Player Stats</div>
+      <div id="player-stats-react-slot"></div>
     </section>
   </main>
 </div>

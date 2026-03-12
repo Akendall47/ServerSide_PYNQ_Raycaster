@@ -41,6 +41,9 @@ class MatchState:
 
     def clear_match(self, arm_lockout: bool):
         self.players       = {}   # addr → player dict (ghost addrs use sentinel "ghost:<id>")
+        self.reset_match_runtime(arm_lockout=arm_lockout)
+
+    def reset_match_runtime(self, arm_lockout: bool):
         self.next_id       = 1
         self.match_started = False
         self.match_ended   = False

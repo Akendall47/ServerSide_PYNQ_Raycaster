@@ -5,6 +5,7 @@
 import asyncio
 import gzip
 import json
+import mimetypes
 import os
 from pathlib import Path
 import signal
@@ -38,7 +39,7 @@ LOGO_ASSET_PATHS = {
 }
 LOGO_ASSET_NAMES = tuple(LOGO_ASSET_PATHS.keys())
 MONITOR_UI_ASSET_NAME = "monitor-ui.js"
-MONITOR_UI_ASSET_PATH = REPO_ROOT / "monitor_ui" / "dist" / MONITOR_UI_ASSET_NAME
+MONITOR_UI_DIST_DIR = REPO_ROOT / "monitor_ui" / "dist"
 MONITOR_ASSETS = {
     "monitor.css",
     "monitor-state.js",
@@ -74,7 +75,7 @@ _ddb_cache      = []
 _ddb_last_fetch = 0.0
 _service_cache  = {}
 _service_last_fetch = 0.0
-_service_message = "controls run on EC2 only; node simulators still start locally"
+_service_message = "controls run on EC2 only; local node simulators join the lobby after launch"
 _replay_cache = {}
 _active_map = "chase"    # tracks which map the server is using
 _redis_stats_cache = {}
@@ -313,15 +314,30 @@ def handle_control_command(cmd: str):
 
     if cmd == "force_end":
         r.publish("game:control", json.dumps({"cmd": "force_end"}))
-        _service_message = "force_end sent — match will end this tick"
+        _service_message = "force_end sent — session will return to the lobby after the end hold"
+    elif cmd == "start_match":
+        r.publish("game:control", json.dumps({"cmd": "start_match"}))
+        _service_message = "start_match sent — queued lobby players will be promoted if enough participants exist"
     elif cmd == "restart":
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
         _service_message = "restart signal sent to node simulators"
+    elif cmd == "node1_disconnect":
+        r.publish("game:control", json.dumps({"cmd": "disconnect", "node_index": 0}))
+        _service_message = "disconnect sent to node 1"
+    elif cmd == "node1_reconnect":
+        r.publish("game:control", json.dumps({"cmd": "reconnect", "node_index": 0}))
+        _service_message = "reconnect sent to node 1"
     elif cmd == "node1_auto":
         _service_message = publish_node_mode(0, "auto")
     elif cmd == "node1_manual":
         _service_message = publish_node_mode(0, "manual")
+    elif cmd == "node2_disconnect":
+        r.publish("game:control", json.dumps({"cmd": "disconnect", "node_index": 1}))
+        _service_message = "disconnect sent to node 2"
+    elif cmd == "node2_reconnect":
+        r.publish("game:control", json.dumps({"cmd": "reconnect", "node_index": 1}))
+        _service_message = "reconnect sent to node 2"
     elif cmd == "node2_auto":
         _service_message = publish_node_mode(1, "auto")
     elif cmd == "node2_manual":
@@ -377,6 +393,11 @@ _match_event_keys = []   # newest first json keys matching _match_event_log
 
 def _event_key(event: dict) -> str:
     return json.dumps(event, sort_keys=True)
+
+def _clear_match_events():
+    global _match_event_log, _match_event_keys
+    _match_event_log = []
+    _match_event_keys = []
 
 def current_match_events(raw_events: list):
     """Return the newest match's events only, newest first, with stable times."""
@@ -479,6 +500,7 @@ def collect_state():
             continue
         players.append({
             "id":              pid,
+            "entity_key":      f"player:{pid}",
             "x":               float(raw.get("x", 0)),
             "y":               float(raw.get("y", 0)),
             "angle":           float(raw.get("angle", 0)),
@@ -489,6 +511,8 @@ def collect_state():
             "controller_key":  raw.get("controller_key", ""),
             "identity_source": raw.get("identity_source", ""),
             "is_ghost":        bool(_as_int(raw.get("is_ghost", 0), 0)),
+            "queued":          False,
+            "queue_slot":      None,
         })
 
     game_raw  = redis_rows[9]
@@ -507,12 +531,46 @@ def collect_state():
             paused_player_ids = json.loads(game_raw["paused_player_ids"])
         except Exception:
             paused_player_ids = []
+    queued_players = []
+    if game_raw and game_raw.get("queued_players"):
+        try:
+            queued_players = json.loads(game_raw["queued_players"])
+        except Exception:
+            queued_players = []
+    for index, raw in enumerate(queued_players, start=1):
+        queue_slot = _as_int(raw.get("queue_slot", index), index)
+        entity_key_seed = (
+            raw.get("profile_key")
+            or raw.get("display_name")
+            or raw.get("controller_key")
+            or "unknown"
+        )
+        players.append({
+            "id":              0,
+            "entity_key":      f"queued:{queue_slot}:{entity_key_seed}",
+            "x":               _as_float(raw.get("x"), 0.0),
+            "y":               _as_float(raw.get("y"), 0.0),
+            "angle":           _as_float(raw.get("angle"), 0.0),
+            "flags":           _as_int(raw.get("flags", 0), 0),
+            "username":        raw.get("username", ""),
+            "display_name":    raw.get("display_name", ""),
+            "profile_key":     raw.get("profile_key", ""),
+            "controller_key":  raw.get("controller_key", ""),
+            "identity_source": raw.get("identity_source", ""),
+            "is_ghost":        False,
+            "queued":          True,
+            "queue_slot":      queue_slot,
+        })
 
     # game:monitor-events is written by T4 alongside game:seda-events but
     # never drained by the sidecar — so every event is visible here.
     events_raw = redis_rows[10]
     parsed     = [json.loads(e) for e in events_raw if e]
     match_events = current_match_events(parsed)
+    match_is_live = match_started and not match_ended
+    if not match_is_live:
+        _clear_match_events()
+        match_events = []
     matches = poll_dynamodb()
     redis_stats = poll_redis_stats()
 
@@ -723,15 +781,41 @@ async def index_handler(request):
     return web.FileResponse(MONITOR_DIR / "index.html")
 
 
+def _resolve_monitor_ui_asset(name: str):
+    candidate = (MONITOR_UI_DIST_DIR / name).resolve()
+    try:
+      candidate.relative_to(MONITOR_UI_DIST_DIR.resolve())
+    except ValueError:
+      return None
+    if not candidate.is_file():
+      return None
+    return candidate
+
+
+def _asset_response(request, path: Path, public_name: str):
+    headers = {
+        "Vary": "Accept-Encoding",
+        "Cache-Control": "public, max-age=31536000, immutable" if public_name.startswith("chunks/") else "no-cache",
+    }
+    gzip_path = Path(f"{path}.gz")
+    if "gzip" in request.headers.get("Accept-Encoding", "") and gzip_path.is_file():
+        content_type = mimetypes.guess_type(public_name)[0] or "application/octet-stream"
+        headers["Content-Encoding"] = "gzip"
+        headers["Content-Type"] = content_type
+        return web.FileResponse(gzip_path, headers=headers)
+    return web.FileResponse(path, headers=headers)
+
+
 async def asset_handler(request):
     name = request.path.lstrip("/")
+    dist_asset = _resolve_monitor_ui_asset(name)
+    if dist_asset is not None:
+        return _asset_response(request, dist_asset, name)
     if name not in MONITOR_ASSETS:
         raise web.HTTPNotFound(text=f"unknown asset: {name}")
     if name in LOGO_ASSET_PATHS:
-        return web.FileResponse(LOGO_ASSET_PATHS[name])
-    if name == MONITOR_UI_ASSET_NAME:
-        return web.FileResponse(MONITOR_UI_ASSET_PATH)
-    return web.FileResponse(MONITOR_DIR / name)
+        return _asset_response(request, LOGO_ASSET_PATHS[name], name)
+    return _asset_response(request, MONITOR_DIR / name, name)
 
 
 async def replay_handler(request):
@@ -765,6 +849,24 @@ async def player_handler(request):
         print(f"[monitor] player fetch error for {player_key}: {e}")
         raise web.HTTPInternalServerError(text="failed to load player history")
     return web.json_response(payload)
+
+
+async def control_handler(request):
+    try:
+        data = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="invalid control payload")
+
+    cmd = str(data.get("cmd", "") or "").strip()
+    if not cmd:
+        raise web.HTTPBadRequest(text="missing cmd")
+
+    try:
+        await asyncio.to_thread(handle_control_command, cmd)
+    except Exception as exc:
+        print(f"[monitor] control error for {cmd}: {exc}")
+        raise web.HTTPInternalServerError(text="failed to apply control")
+    return web.json_response({"ok": True, "cmd": cmd})
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -811,12 +913,14 @@ async def main():
     app.router.add_get("/monitor-render.js", asset_handler)
     app.router.add_get("/monitor-app.js", asset_handler)
     app.router.add_get(f"/{MONITOR_UI_ASSET_NAME}", asset_handler)
+    app.router.add_get("/chunks/{chunk_path:.+}", asset_handler)
     for logo_asset_name in LOGO_ASSET_NAMES:
         app.router.add_get(f"/{logo_asset_name}", asset_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/replay/{match_id}", replay_handler)
     app.router.add_get("/api/players", players_handler)
     app.router.add_get("/api/players/{player_key}", player_handler)
+    app.router.add_post("/api/control", control_handler)
     app.router.add_get("/api/maps",         maps_list_handler)
     app.router.add_get("/api/map/{name}",   map_handler)
     await asyncio.to_thread(refresh_state_cache)

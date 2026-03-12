@@ -319,10 +319,11 @@ export function mountPYNQCASTCoin(rootEl) {
     renderFrame();
   });
 
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
   const animate = () => {
     if (destroyed) return;
-    const t = clock.getElapsedTime();
+    timer.update();
+    const t = timer.getElapsed();
     const bob = Math.sin(t * 1.55) * 0.18;
     const bobPhase = (Math.sin(t * 1.55) + 1) / 2;
     const spin = t * 2.02;
