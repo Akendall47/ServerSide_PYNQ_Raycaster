@@ -1,1 +1,0 @@
-monitor-ui.js should build automatically 

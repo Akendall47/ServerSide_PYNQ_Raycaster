@@ -236,7 +236,7 @@ function buildGhostModel(group, pColor) {
   }
 }
 
-function PlayerTrophy({ player, pageVisible }) {
+function PlayerTrophy({ player, pageVisible, animated }) {
   const shellRef = useRef(null);
   const mountRef = useRef(null);
   const [inView, setInView] = useState(false);
@@ -335,38 +335,45 @@ function PlayerTrophy({ player, pageVisible }) {
     const timer = new THREE.Timer();
     let rafId = 0;
 
-    const animate = () => {
+    const renderFrame = (t) => {
       timer.update();
-      const t = timer.getElapsed();
-      charGroup.rotation.y = Math.sin(t * 0.7) * 0.45;
+      const elapsed = t ?? timer.getElapsed();
+      charGroup.rotation.y = animated ? Math.sin(elapsed * 0.7) * 0.45 : 0.32;
 
       if (isGhost) {
-        charGroup.position.y = 0.15 + Math.sin(t * 1.2) * 0.22;
+        charGroup.position.y = animated ? 0.15 + Math.sin(elapsed * 1.2) * 0.22 : 0.18;
         charGroup.children.forEach((child) => {
           if (child.userData.tentacleIndex !== undefined) {
             child.position.y = 0.35 - (child.userData.tentacleIndex % 2) * 0.15 +
-              Math.sin(t * 3 + child.userData.tentacleIndex * 1.5) * 0.1;
+              (animated ? Math.sin(elapsed * 3 + child.userData.tentacleIndex * 1.5) * 0.1 : 0);
           }
         });
       } else {
-        charGroup.position.y = Math.sin(t * 1.5) * 0.08;
+        charGroup.position.y = animated ? Math.sin(elapsed * 1.5) * 0.08 : 0.03;
       }
 
-      keyLight.intensity = 140 + Math.sin(t * 2.2) * 40;
+      keyLight.intensity = animated ? 140 + Math.sin(elapsed * 2.2) * 40 : 160;
 
       particles.forEach((particle, index) => {
-        const angle = particle.baseAngle + t * (isGhost ? 0.8 : 1.3);
-        const radius = 1.0 + Math.sin(t * 2.5 + index) * 0.12;
+        const angle = particle.baseAngle + (animated ? elapsed * (isGhost ? 0.8 : 1.3) : 0);
+        const radius = 1.0 + (animated ? Math.sin(elapsed * 2.5 + index) * 0.12 : 0);
         particle.mesh.position.x = Math.cos(angle) * radius;
         particle.mesh.position.z = Math.sin(angle) * radius;
-        particle.mesh.position.y = Math.sin(t * 3.5 + index * 0.7) * 0.06;
+        particle.mesh.position.y = animated ? Math.sin(elapsed * 3.5 + index * 0.7) * 0.06 : 0;
       });
 
       renderer.render(scene, camera);
-      rafId = requestAnimationFrame(animate);
     };
 
-    animate();
+    if (animated) {
+      const animate = () => {
+        renderFrame();
+        rafId = requestAnimationFrame(animate);
+      };
+      animate();
+    } else {
+      renderFrame(0.75);
+    }
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -385,7 +392,7 @@ function PlayerTrophy({ player, pageVisible }) {
       renderer.dispose();
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
-  }, [inView, pageVisible, player.player_key, player.profile_key, player.currentRole]);
+  }, [animated, inView, pageVisible, player.player_key, player.profile_key, player.currentRole]);
 
   return (
     <div ref={shellRef} className={`player-trophy-shell${player.isOnline ? '' : ' offline'}`}>
@@ -590,6 +597,7 @@ export default function PlayerStatsTab() {
   }, []);
 
   useEffect(() => {
+    if (!pageVisible) return () => {};
     const syncLivePlayers = () => {
       const snapshot = Array.isArray(window.latestState?.players) ? window.latestState.players.slice() : [];
       startTransition(() => setLivePlayers(snapshot));
@@ -598,7 +606,7 @@ export default function PlayerStatsTab() {
     syncLivePlayers();
     const intervalId = setInterval(syncLivePlayers, 500);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [pageVisible]);
 
   const liveByProfileKey = new Map();
   livePlayers.forEach((player) => {
@@ -738,7 +746,7 @@ export default function PlayerStatsTab() {
                 </button>
 
                 <div className="player-card-summary">
-                  <PlayerTrophy player={player} pageVisible={pageVisible} />
+                  <PlayerTrophy player={player} pageVisible={pageVisible} animated={selected} />
 
                   <div className="player-card-metrics">
                     <div className="metric-row"><span>career win rate</span><span>{formatPercent(player.total_wins, totalMatches)}</span></div>

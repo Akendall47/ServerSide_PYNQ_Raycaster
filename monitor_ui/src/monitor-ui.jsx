@@ -1,13 +1,14 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
-import PYNQBoard from './components/PYNQBoard.jsx';
-import PlayerStatsTab from './components/PlayerStatsTab.jsx';
 
 // Swap this import back in if we want the legacy coin centerpiece again.
 // import PYNQCASTCoin from './components/PYNQCASTCoin.jsx';
 
 import { monitorMarkup } from './templates.generated.js';
+
+const PYNQBoard = lazy(() => import('./components/PYNQBoard.jsx'));
+const PlayerStatsTab = lazy(() => import('./components/PlayerStatsTab.jsx'));
 
 const LEGACY_SCRIPTS = ['/monitor-state.js', '/monitor-render.js', '/monitor-app.js'];
 
@@ -37,6 +38,8 @@ function loadLegacyScripts() {
 function MonitorPortals({ hostRef, mode }) {
   const [aboutSlot, setAboutSlot] = useState(null);
   const [playerSlot, setPlayerSlot] = useState(null);
+  const [aboutActivated, setAboutActivated] = useState(false);
+  const [playersActivated, setPlayersActivated] = useState(false);
 
   useLayoutEffect(() => {
     const root = hostRef.current;
@@ -44,8 +47,15 @@ function MonitorPortals({ hostRef, mode }) {
 
     let rafId = 0;
     const syncSlots = () => {
+      const aboutPage = root.querySelector('#page-about');
+      const playersPage = root.querySelector('#page-players');
+      const aboutVisible = Boolean(aboutPage && !aboutPage.hidden);
+      const playersVisible = Boolean(playersPage && !playersPage.hidden);
+
       setAboutSlot(root.querySelector('.about-react-board-slot') || null);
       setPlayerSlot(root.querySelector('#player-stats-react-slot') || null);
+      if (aboutVisible) setAboutActivated(true);
+      if (playersVisible) setPlayersActivated(true);
     };
 
     syncSlots();
@@ -64,8 +74,15 @@ function MonitorPortals({ hostRef, mode }) {
 
   return (
     <>
-      <PYNQBoard portalTarget={aboutSlot} />
-      {playerSlot ? createPortal(<PlayerStatsTab />, playerSlot) : null}
+      <Suspense fallback={null}>
+        {aboutSlot && aboutActivated ? <PYNQBoard portalTarget={aboutSlot} /> : null}
+      </Suspense>
+      {playerSlot && playersActivated ? createPortal(
+        <Suspense fallback={null}>
+          <PlayerStatsTab />
+        </Suspense>,
+        playerSlot,
+      ) : null}
     </>
   );
 }

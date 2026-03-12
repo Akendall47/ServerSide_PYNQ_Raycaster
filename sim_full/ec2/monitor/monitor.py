@@ -5,6 +5,7 @@
 import asyncio
 import gzip
 import json
+import mimetypes
 import os
 from pathlib import Path
 import signal
@@ -38,7 +39,7 @@ LOGO_ASSET_PATHS = {
 }
 LOGO_ASSET_NAMES = tuple(LOGO_ASSET_PATHS.keys())
 MONITOR_UI_ASSET_NAME = "monitor-ui.js"
-MONITOR_UI_ASSET_PATH = REPO_ROOT / "monitor_ui" / "dist" / MONITOR_UI_ASSET_NAME
+MONITOR_UI_DIST_DIR = REPO_ROOT / "monitor_ui" / "dist"
 MONITOR_ASSETS = {
     "monitor.css",
     "monitor-state.js",
@@ -723,15 +724,41 @@ async def index_handler(request):
     return web.FileResponse(MONITOR_DIR / "index.html")
 
 
+def _resolve_monitor_ui_asset(name: str):
+    candidate = (MONITOR_UI_DIST_DIR / name).resolve()
+    try:
+      candidate.relative_to(MONITOR_UI_DIST_DIR.resolve())
+    except ValueError:
+      return None
+    if not candidate.is_file():
+      return None
+    return candidate
+
+
+def _asset_response(request, path: Path, public_name: str):
+    headers = {
+        "Vary": "Accept-Encoding",
+        "Cache-Control": "public, max-age=31536000, immutable" if public_name.startswith("chunks/") else "no-cache",
+    }
+    gzip_path = Path(f"{path}.gz")
+    if "gzip" in request.headers.get("Accept-Encoding", "") and gzip_path.is_file():
+        content_type = mimetypes.guess_type(public_name)[0] or "application/octet-stream"
+        headers["Content-Encoding"] = "gzip"
+        headers["Content-Type"] = content_type
+        return web.FileResponse(gzip_path, headers=headers)
+    return web.FileResponse(path, headers=headers)
+
+
 async def asset_handler(request):
     name = request.path.lstrip("/")
+    dist_asset = _resolve_monitor_ui_asset(name)
+    if dist_asset is not None:
+        return _asset_response(request, dist_asset, name)
     if name not in MONITOR_ASSETS:
         raise web.HTTPNotFound(text=f"unknown asset: {name}")
     if name in LOGO_ASSET_PATHS:
-        return web.FileResponse(LOGO_ASSET_PATHS[name])
-    if name == MONITOR_UI_ASSET_NAME:
-        return web.FileResponse(MONITOR_UI_ASSET_PATH)
-    return web.FileResponse(MONITOR_DIR / name)
+        return _asset_response(request, LOGO_ASSET_PATHS[name], name)
+    return _asset_response(request, MONITOR_DIR / name, name)
 
 
 async def replay_handler(request):
@@ -811,6 +838,7 @@ async def main():
     app.router.add_get("/monitor-render.js", asset_handler)
     app.router.add_get("/monitor-app.js", asset_handler)
     app.router.add_get(f"/{MONITOR_UI_ASSET_NAME}", asset_handler)
+    app.router.add_get("/chunks/{chunk_path:.+}", asset_handler)
     for logo_asset_name in LOGO_ASSET_NAMES:
         app.router.add_get(f"/{logo_asset_name}", asset_handler)
     app.router.add_get("/ws", ws_handler)
