@@ -54,6 +54,7 @@ async function loadMapList() {
     if (!resp.ok) return;
     const data = await resp.json();
     _availableMaps = data.maps || [];
+    renderMapButtons();
     updateMapSelector(
       data.active_map,
       Object.prototype.hasOwnProperty.call(data, 'selected_map')
@@ -313,9 +314,7 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
   const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;
-  if (changed) {
-    renderMapButtons();
-  }
+  renderMapButtons();
   if (!mapData || mapData.name !== _activeMapName || changed) {
     loadMap(_activeMapName);
   }
