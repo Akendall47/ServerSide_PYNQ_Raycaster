@@ -119,6 +119,9 @@ class GameTick:
         if cmd == "force_end":
             self.logic._force_end_flag = True
         elif cmd == "start_match":
+            if self._selected_map.get("name") == _LOBBY_MAP_NAME:
+                print("[T2] start_match blocked: select a game map before starting")
+                return
             started, message = self.packets.start_match_from_lobby()
             print(f"[T2] start_match: {message}")
         elif cmd == "restart":

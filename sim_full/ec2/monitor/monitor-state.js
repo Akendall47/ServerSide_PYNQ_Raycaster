@@ -415,7 +415,7 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
     || _selectedMapName
     || nextActiveMap
   );
-  const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
+  const activeChanged = nextActiveMap !== _activeMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;
   if (_pendingMapName) {
@@ -427,7 +427,7 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
     }
   }
   renderMapButtons();
-  if (_showMap && (!mapData || mapData.name !== _activeMapName || changed)) {
+  if (_showMap && (!mapData || mapData.name !== _activeMapName || activeChanged)) {
     loadMap(_activeMapName);
   } else {
     updateCanvasLabel();
@@ -442,9 +442,7 @@ function selectMap(name) {
   _pendingMapRequestedAt = performance.now();
   sendControl(`set_map:${name}`, `map → ${name}`);
   _selectedMapName = name;
-  _activeMapName = name;
   renderMapButtons();
-  loadMap(name);
 }
 
 // ── State ──────────────────────────────────────────────────────────────────

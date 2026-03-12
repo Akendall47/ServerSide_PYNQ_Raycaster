@@ -338,7 +338,7 @@ function scheduleMapRefresh(cmd) {
 }
 
 async function sendControl(cmd, label) {
-  if (cmd === 'start_match' && !(latestState?.selected_map || _selectedMapName)) {
+  if (cmd === 'start_match' && !isValidMapName(latestState?.selected_map || _selectedMapName)) {
     setServiceNote('select a map before starting the match');
     return;
   }
