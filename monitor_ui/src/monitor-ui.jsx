@@ -34,23 +34,48 @@ function loadLegacyScripts() {
   loadAt(0);
 }
 
-function MonitorRoot({ mode }) {
-  const rootRef = useRef(null);
+function MonitorPortals({ hostRef, mode }) {
   const [aboutSlot, setAboutSlot] = useState(null);
   const [playerSlot, setPlayerSlot] = useState(null);
+
+  useLayoutEffect(() => {
+    const root = hostRef.current;
+    if (!root) return () => {};
+
+    let rafId = 0;
+    const syncSlots = () => {
+      setAboutSlot(root.querySelector('.about-react-board-slot') || null);
+      setPlayerSlot(root.querySelector('#player-stats-react-slot') || null);
+    };
+
+    syncSlots();
+    rafId = requestAnimationFrame(syncSlots);
+
+    const observer = new MutationObserver(syncSlots);
+    observer.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [hostRef, mode]);
+
+  if (!aboutSlot && !playerSlot) return null;
+
+  return (
+    <>
+      <PYNQBoard portalTarget={aboutSlot} />
+      {playerSlot ? createPortal(<PlayerStatsTab />, playerSlot) : null}
+    </>
+  );
+}
+
+function MonitorRoot({ mode }) {
+  const rootRef = useRef(null);
 
   useEffect(() => {
     loadLegacyScripts();
   }, []);
-
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    // The slots are static — baked into the template HTML. Query once.
-    setAboutSlot(root.querySelector('.about-react-board-slot') || null);
-    setPlayerSlot(root.querySelector('#player-stats-react-slot') || null);
-  }, [mode]);
 
   return (
     <>
@@ -59,8 +84,7 @@ function MonitorRoot({ mode }) {
         className="react-monitor-root"
         dangerouslySetInnerHTML={{ __html: monitorMarkup[mode] || monitorMarkup.pynq }}
       />
-      <PYNQBoard portalTarget={aboutSlot} />
-      {playerSlot ? createPortal(<PlayerStatsTab />, playerSlot) : null}
+      <MonitorPortals hostRef={rootRef} mode={mode} />
     </>
   );
 }

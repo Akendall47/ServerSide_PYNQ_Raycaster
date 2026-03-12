@@ -491,16 +491,7 @@ function PlayerDetail({ matches, loading, error }) {
   );
 }
 
-// STUB — replace with full implementation once portal is confirmed working
 export default function PlayerStatsTab() {
-  return (
-    <div style={{ padding: '1rem', color: 'lime', fontFamily: 'monospace', fontSize: '1.2rem' }}>
-      ✅ PlayerStatsTab portal working
-    </div>
-  );
-}
-
-function PlayerStatsTab_FULL_DISABLED() {
   const [profiles, setProfiles] = useState([]);
   const [livePlayers, setLivePlayers] = useState([]);
   const [selectedKey, setSelectedKey] = useState(null);
