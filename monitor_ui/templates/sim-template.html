@@ -409,88 +409,94 @@
       <div class="section-label">Controls &amp; Config</div>
 
       <div class="controls-grid">
-        <div class="panel-raised controls-actions">
+        <div class="panel-raised controls-actions scroll-panel">
           <div class="panel-head">
             <h2>EC2 Service Controls</h2>
             <span class="micro-chip">services</span>
           </div>
-          <div class="control-stack">
-            <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
-            <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
-            <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+          <div class="scroll-panel-body">
+            <div class="control-stack">
+              <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+              <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+              <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+            </div>
+            <div class="metric-note" id="svc-note">controls run on EC2 only; local node simulators now join the lobby immediately after launch.</div>
           </div>
-          <div class="metric-note" id="svc-note">controls run on EC2 only; local node simulators now join the lobby immediately after launch.</div>
         </div>
 
-        <div class="panel-raised controls-sim">
+        <div class="panel-raised controls-sim scroll-panel">
           <div class="panel-head">
             <h2>Simulation Mode</h2>
             <span class="micro-chip">manual / auto</span>
           </div>
-          <div class="metric-note">View Mode</div>
-          <div class="control-pair" id="view-mode-btns"></div>
-          <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
+          <div class="scroll-panel-body">
+            <div class="metric-note">View Mode</div>
+            <div class="control-pair" id="view-mode-btns"></div>
+            <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
 
-          <div id="orbit-mode-controls" hidden>
-            <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
-            <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
-            <div class="metric-note" style="margin-top:12px;">Node 1</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            <div id="orbit-mode-controls" hidden>
+              <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
+              <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
+              <div class="metric-note" style="margin-top:12px;">Node 1</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
+                <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
+              </div>
+              <div class="metric-note" style="margin-top:12px;">Node 2</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
+                <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
+              </div>
             </div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
-              <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
-            </div>
-            <div class="metric-note" style="margin-top:12px;">Node 2</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
-            </div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
-              <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
-            </div>
-          </div>
 
-          <div id="map-play-controls">
-            <div class="metric-note" style="margin-top:12px;">Lobby Links</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            <div id="map-play-controls">
+              <div class="metric-note" style="margin-top:12px;">Lobby Links</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+              </div>
+              <div class="metric-note">Local node simulators should appear in the lobby as soon as their tmux pane is launched. Use disconnect/reconnect to test lobby behaviour without restarting the whole session.</div>
+              <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
+              <div class="control-stack">
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count → 0')">0 Ghosts</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_1', 'ghost count → 1')">1 Ghost</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
+              </div>
+              <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
+              <div class="control-stack" id="map-btn-list">
+                <span style="color:#90a3c4">loading maps...</span>
+              </div>
+              <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
             </div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
-            </div>
-            <div class="metric-note">Local node simulators should appear in the lobby as soon as their tmux pane is launched. Use disconnect/reconnect to test lobby behaviour without restarting the whole session.</div>
-            <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
-            <div class="control-stack">
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count → 0')">0 Ghosts</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_1', 'ghost count → 1')">1 Ghost</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
-            </div>
-            <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
-            <div class="control-stack" id="map-btn-list">
-              <span style="color:#90a3c4">loading maps...</span>
-            </div>
-            <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
           </div>
         </div>
 
-        <div class="panel-raised controls-notes">
+        <div class="panel-raised controls-notes scroll-panel">
           <div class="panel-head">
             <h2>Operator Notes</h2>
             <span class="micro-chip">quick guide</span>
           </div>
-          <div class="note-list">
-            <div class="metric-note">Game View is the showpiece: viewport, player state, bit progress, and frame timing stay together there.</div>
-            <div class="metric-note">Server Monitoring is the ops deck: health, pipeline throughput, storage tiers, replay archive, and the stacked frame profiler.</div>
-            <div class="metric-note">Controls &amp; Config keeps the active knobs isolated so runtime actions stop fighting with the visual telemetry pages.</div>
+          <div class="scroll-panel-body">
+            <div class="note-list">
+              <div class="metric-note">Game View is the showpiece: viewport, player state, bit progress, and frame timing stay together there.</div>
+              <div class="metric-note">Server Monitoring is the ops deck: health, pipeline throughput, storage tiers, replay archive, and the stacked frame profiler.</div>
+              <div class="metric-note">Controls &amp; Config keeps the active knobs isolated so runtime actions stop fighting with the visual telemetry pages.</div>
+            </div>
           </div>
         </div>
       </div>

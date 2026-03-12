@@ -405,27 +405,29 @@ Error generating stack: `+n.message+`
       <div class="section-label">Controls &amp; Config</div>
 
       <div class="controls-grid">
-        <div class="panel-raised controls-actions">
+        <div class="panel-raised controls-actions scroll-panel">
           <div class="panel-head">
             <h2>EC2 Service Controls</h2>
             <span class="micro-chip">services</span>
           </div>
-          <div class="control-stack">
-            <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
-            <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
-            <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+          <div class="scroll-panel-body">
+            <div class="control-stack">
+              <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+              <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+              <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+            </div>
+            <div class="metric-note" id="svc-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
           </div>
-          <div class="metric-note" id="svc-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
         </div>
 
-        <div class="panel-raised controls-sim">
+        <div class="panel-raised controls-sim scroll-panel">
           <div class="panel-head">
             <h2>Match Config</h2>
             <span class="micro-chip">fpga live</span>
           </div>
-          <div>
+          <div class="scroll-panel-body">
             <div class="metric-note">Server ghost controls add pressure on the EC2 side without changing the board firmware.</div>
             <div class="metric-note" style="margin-top:12px;">Ghost Taggers</div>
             <div class="control-stack">
@@ -442,15 +444,17 @@ Error generating stack: `+n.message+`
           </div>
         </div>
 
-        <div class="panel-raised controls-notes">
+        <div class="panel-raised controls-notes scroll-panel">
           <div class="panel-head">
             <h2>Operator Notes</h2>
             <span class="micro-chip">quick guide</span>
           </div>
-          <div class="note-list">
-            <div class="metric-note">Game View keeps the FPGA arena, player state, replay drawer, and browser-side timing together in one place.</div>
-            <div class="metric-note">Server Monitoring is the EC2 ops deck: service health, SEDA flow, Redis, warm/cold storage, and the stacked frame profiler.</div>
-            <div class="metric-note">Controls &amp; Config only changes server-side match state. Board-side firmware and transport behavior still live in the PYNQ clients.</div>
+          <div class="scroll-panel-body">
+            <div class="note-list">
+              <div class="metric-note">Game View keeps the FPGA arena, player state, replay drawer, and browser-side timing together in one place.</div>
+              <div class="metric-note">Server Monitoring is the EC2 ops deck: service health, SEDA flow, Redis, warm/cold storage, and the stacked frame profiler.</div>
+              <div class="metric-note">Controls &amp; Config only changes server-side match state. Board-side firmware and transport behavior still live in the PYNQ clients.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -890,88 +894,94 @@ Error generating stack: `+n.message+`
       <div class="section-label">Controls &amp; Config</div>
 
       <div class="controls-grid">
-        <div class="panel-raised controls-actions">
+        <div class="panel-raised controls-actions scroll-panel">
           <div class="panel-head">
             <h2>EC2 Service Controls</h2>
             <span class="micro-chip">services</span>
           </div>
-          <div class="control-stack">
-            <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
-            <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
-            <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+          <div class="scroll-panel-body">
+            <div class="control-stack">
+              <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+              <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+              <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+            </div>
+            <div class="metric-note" id="svc-note">controls run on EC2 only; local node simulators now join the lobby immediately after launch.</div>
           </div>
-          <div class="metric-note" id="svc-note">controls run on EC2 only; local node simulators now join the lobby immediately after launch.</div>
         </div>
 
-        <div class="panel-raised controls-sim">
+        <div class="panel-raised controls-sim scroll-panel">
           <div class="panel-head">
             <h2>Simulation Mode</h2>
             <span class="micro-chip">manual / auto</span>
           </div>
-          <div class="metric-note">View Mode</div>
-          <div class="control-pair" id="view-mode-btns"></div>
-          <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
+          <div class="scroll-panel-body">
+            <div class="metric-note">View Mode</div>
+            <div class="control-pair" id="view-mode-btns"></div>
+            <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
 
-          <div id="orbit-mode-controls" hidden>
-            <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
-            <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
-            <div class="metric-note" style="margin-top:12px;">Node 1</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            <div id="orbit-mode-controls" hidden>
+              <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
+              <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
+              <div class="metric-note" style="margin-top:12px;">Node 1</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
+                <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
+              </div>
+              <div class="metric-note" style="margin-top:12px;">Node 2</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
+                <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
+              </div>
             </div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="requestNodeMode(1, 'auto')">P1 Auto</button>
-              <button class="control-btn restart" type="button" onclick="requestNodeMode(1, 'manual')">P1 Manual</button>
-            </div>
-            <div class="metric-note" style="margin-top:12px;">Node 2</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
-            </div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="requestNodeMode(2, 'auto')">P2 Auto</button>
-              <button class="control-btn restart" type="button" onclick="requestNodeMode(2, 'manual')">P2 Manual</button>
-            </div>
-          </div>
 
-          <div id="map-play-controls">
-            <div class="metric-note" style="margin-top:12px;">Lobby Links</div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+            <div id="map-play-controls">
+              <div class="metric-note" style="margin-top:12px;">Lobby Links</div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(1, 'disconnect')">P1 Disconnect</button>
+              </div>
+              <div class="control-pair">
+                <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
+                <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
+              </div>
+              <div class="metric-note">Local node simulators should appear in the lobby as soon as their tmux pane is launched. Use disconnect/reconnect to test lobby behaviour without restarting the whole session.</div>
+              <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
+              <div class="control-stack">
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count \u2192 0')">0 Ghosts</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_1', 'ghost count \u2192 1')">1 Ghost</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count \u2192 2')">2 Ghosts</button>
+                <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count \u2192 3')">3 Ghosts</button>
+              </div>
+              <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
+              <div class="control-stack" id="map-btn-list">
+                <span style="color:#90a3c4">loading maps...</span>
+              </div>
+              <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
             </div>
-            <div class="control-pair">
-              <button class="control-btn" type="button" onclick="requestNodeConnection(2, 'reconnect')">P2 Connect</button>
-              <button class="control-btn stop" type="button" onclick="requestNodeConnection(2, 'disconnect')">P2 Disconnect</button>
-            </div>
-            <div class="metric-note">Local node simulators should appear in the lobby as soon as their tmux pane is launched. Use disconnect/reconnect to test lobby behaviour without restarting the whole session.</div>
-            <div class="metric-note" style="margin-top:12px;">Ghost Taggers (simulates PYNQ menu)</div>
-            <div class="control-stack">
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_0', 'ghost count \u2192 0')">0 Ghosts</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_1', 'ghost count \u2192 1')">1 Ghost</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count \u2192 2')">2 Ghosts</button>
-              <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count \u2192 3')">3 Ghosts</button>
-            </div>
-            <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
-            <div class="control-stack" id="map-btn-list">
-              <span style="color:#90a3c4">loading maps...</span>
-            </div>
-            <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
           </div>
         </div>
 
-        <div class="panel-raised controls-notes">
+        <div class="panel-raised controls-notes scroll-panel">
           <div class="panel-head">
             <h2>Operator Notes</h2>
             <span class="micro-chip">quick guide</span>
           </div>
-          <div class="note-list">
-            <div class="metric-note">Game View is the showpiece: viewport, player state, bit progress, and frame timing stay together there.</div>
-            <div class="metric-note">Server Monitoring is the ops deck: health, pipeline throughput, storage tiers, replay archive, and the stacked frame profiler.</div>
-            <div class="metric-note">Controls &amp; Config keeps the active knobs isolated so runtime actions stop fighting with the visual telemetry pages.</div>
+          <div class="scroll-panel-body">
+            <div class="note-list">
+              <div class="metric-note">Game View is the showpiece: viewport, player state, bit progress, and frame timing stay together there.</div>
+              <div class="metric-note">Server Monitoring is the ops deck: health, pipeline throughput, storage tiers, replay archive, and the stacked frame profiler.</div>
+              <div class="metric-note">Controls &amp; Config keeps the active knobs isolated so runtime actions stop fighting with the visual telemetry pages.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1012,7 +1022,7 @@ Error generating stack: `+n.message+`
       <div id="map-editor-react-slot"></div>
     </section>
   </main>
-</div>`};var pl=nn(bs()),ko=()=>import("./chunks/PYNQBoard-GZPSGRXT.js"),Wo=()=>import("./chunks/PlayerStatsTab-QH5OCWSJ.js"),Fo=()=>import("./chunks/MapEditorTab-SN33ZFOI.js"),Mm=(0,W.lazy)(ko),Dm=(0,W.lazy)(Wo),Om=(0,W.lazy)(Fo),ps=["/monitor-state.js","/monitor-render.js","/monitor-app.js"];function Um(){if(window.__monitorLegacyBootstrapped)return;window.__monitorLegacyBootstrapped=!0;let l=a=>{if(a>=ps.length){window.dispatchEvent(new Event("monitor:legacy-ready"));return}let t=document.createElement("script");t.src=ps[a],t.async=!1,t.onload=()=>l(a+1),t.onerror=()=>{console.error(`[monitor-ui] failed to load legacy script: ${ps[a]}`)},document.body.appendChild(t)};l(0)}function _m({hostRef:l,mode:a}){let[t,n]=(0,W.useState)(null),[e,i]=(0,W.useState)(null),[u,c]=(0,W.useState)(null),[s,v]=(0,W.useState)(!1),[h,b]=(0,W.useState)(!1),[p,m]=(0,W.useState)(!1);return(0,W.useLayoutEffect)(()=>{let r=l.current;if(!r)return()=>{};let A=0,q=()=>{let d=r.querySelector("#page-about"),o=r.querySelector("#page-players"),y=r.querySelector("#page-editor"),z=!!(d&&!d.hidden),H=!!(o&&!o.hidden),S=!!(y&&!y.hidden);n(r.querySelector(".about-react-board-slot")||null),i(r.querySelector("#player-stats-react-slot")||null),c(r.querySelector("#map-editor-react-slot")||null),z&&v(!0),H&&b(!0),S&&m(!0)};q(),A=requestAnimationFrame(q);let f=new MutationObserver(q);return f.observe(r,{childList:!0,subtree:!0}),()=>{cancelAnimationFrame(A),f.disconnect()}},[l,a]),!t&&!e&&!u?null:(0,pl.jsxs)(pl.Fragment,{children:[(0,pl.jsx)(W.Suspense,{fallback:null,children:t&&s?(0,pl.jsx)(Mm,{portalTarget:t}):null}),e&&h?(0,ms.createPortal)((0,pl.jsx)(W.Suspense,{fallback:null,children:(0,pl.jsx)(Dm,{})}),e):null,u&&p?(0,ms.createPortal)((0,pl.jsx)(W.Suspense,{fallback:null,children:(0,pl.jsx)(Om,{})}),u):null]})}function Nm({mode:l}){let a=(0,W.useRef)(null);return(0,W.useEffect)(()=>{Um()},[]),(0,W.useEffect)(()=>{let t=()=>{ko(),Wo(),Fo()};if(typeof window.requestIdleCallback=="function"){let e=window.requestIdleCallback(t,{timeout:2e3});return()=>window.cancelIdleCallback?.(e)}let n=window.setTimeout(t,1200);return()=>window.clearTimeout(n)},[]),(0,pl.jsxs)(pl.Fragment,{children:[(0,pl.jsx)("div",{ref:a,className:"react-monitor-root",dangerouslySetInnerHTML:{__html:os[l]||os.pynq}}),(0,pl.jsx)(_m,{hostRef:a,mode:l})]})}var Hm=window.__MONITOR_MODE__==="sim"?"sim":"pynq",$o=document.getElementById("root");if(!$o)throw new Error("Missing #root for monitor React mount");(0,wo.createRoot)($o).render((0,pl.jsx)(Nm,{mode:Hm}));
+</div>`};var pl=nn(bs()),ko=()=>import("./chunks/PYNQBoard-GZPSGRXT.js"),Wo=()=>import("./chunks/PlayerStatsTab-QH5OCWSJ.js"),Fo=()=>import("./chunks/MapEditorTab-M2IJ5P5J.js"),Mm=(0,W.lazy)(ko),Dm=(0,W.lazy)(Wo),Om=(0,W.lazy)(Fo),ps=["/monitor-state.js","/monitor-render.js","/monitor-app.js"];function Um(){if(window.__monitorLegacyBootstrapped)return;window.__monitorLegacyBootstrapped=!0;let l=a=>{if(a>=ps.length){window.dispatchEvent(new Event("monitor:legacy-ready"));return}let t=document.createElement("script");t.src=ps[a],t.async=!1,t.onload=()=>l(a+1),t.onerror=()=>{console.error(`[monitor-ui] failed to load legacy script: ${ps[a]}`)},document.body.appendChild(t)};l(0)}function _m({hostRef:l,mode:a}){let[t,n]=(0,W.useState)(null),[e,i]=(0,W.useState)(null),[u,c]=(0,W.useState)(null),[s,v]=(0,W.useState)(!1),[h,b]=(0,W.useState)(!1),[p,m]=(0,W.useState)(!1);return(0,W.useLayoutEffect)(()=>{let r=l.current;if(!r)return()=>{};let A=0,q=()=>{let d=r.querySelector("#page-about"),o=r.querySelector("#page-players"),y=r.querySelector("#page-editor"),z=!!(d&&!d.hidden),H=!!(o&&!o.hidden),S=!!(y&&!y.hidden);n(r.querySelector(".about-react-board-slot")||null),i(r.querySelector("#player-stats-react-slot")||null),c(r.querySelector("#map-editor-react-slot")||null),z&&v(!0),H&&b(!0),S&&m(!0)};q(),A=requestAnimationFrame(q);let f=new MutationObserver(q);return f.observe(r,{childList:!0,subtree:!0}),()=>{cancelAnimationFrame(A),f.disconnect()}},[l,a]),!t&&!e&&!u?null:(0,pl.jsxs)(pl.Fragment,{children:[(0,pl.jsx)(W.Suspense,{fallback:null,children:t&&s?(0,pl.jsx)(Mm,{portalTarget:t}):null}),e&&h?(0,ms.createPortal)((0,pl.jsx)(W.Suspense,{fallback:null,children:(0,pl.jsx)(Dm,{})}),e):null,u&&p?(0,ms.createPortal)((0,pl.jsx)(W.Suspense,{fallback:null,children:(0,pl.jsx)(Om,{})}),u):null]})}function Nm({mode:l}){let a=(0,W.useRef)(null);return(0,W.useEffect)(()=>{Um()},[]),(0,W.useEffect)(()=>{let t=()=>{ko(),Wo(),Fo()};if(typeof window.requestIdleCallback=="function"){let e=window.requestIdleCallback(t,{timeout:2e3});return()=>window.cancelIdleCallback?.(e)}let n=window.setTimeout(t,1200);return()=>window.clearTimeout(n)},[]),(0,pl.jsxs)(pl.Fragment,{children:[(0,pl.jsx)("div",{ref:a,className:"react-monitor-root",dangerouslySetInnerHTML:{__html:os[l]||os.pynq}}),(0,pl.jsx)(_m,{hostRef:a,mode:l})]})}var Hm=window.__MONITOR_MODE__==="sim"?"sim":"pynq",$o=document.getElementById("root");if(!$o)throw new Error("Missing #root for monitor React mount");(0,wo.createRoot)($o).render((0,pl.jsx)(Nm,{mode:Hm}));
 /*! Bundled license information:
 
 scheduler/cjs/scheduler.production.js:

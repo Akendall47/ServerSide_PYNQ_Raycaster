@@ -410,27 +410,29 @@
       <div class="section-label">Controls &amp; Config</div>
 
       <div class="controls-grid">
-        <div class="panel-raised controls-actions">
+        <div class="panel-raised controls-actions scroll-panel">
           <div class="panel-head">
             <h2>EC2 Service Controls</h2>
             <span class="micro-chip">services</span>
           </div>
-          <div class="control-stack">
-            <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
-            <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
-            <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
-            <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+          <div class="scroll-panel-body">
+            <div class="control-stack">
+              <button class="control-btn start" type="button" onclick="sendControl('start_server', 'start server')">Start Server</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_server', 'stop server')">Stop Server</button>
+              <button class="control-btn start" type="button" onclick="sendControl('start_sidecar', 'start sidecar')">Start Sidecar</button>
+              <button class="control-btn stop" type="button" onclick="sendControl('stop_sidecar', 'stop sidecar')">Stop Sidecar</button>
+              <button class="control-btn restart" type="button" onclick="sendControl('restart_stack', 'restart stack')">Restart Stack</button>
+            </div>
+            <div class="metric-note" id="svc-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
           </div>
-          <div class="metric-note" id="svc-note">controls run on EC2 only; FPGA boards stay connected over UDP</div>
         </div>
 
-        <div class="panel-raised controls-sim">
+        <div class="panel-raised controls-sim scroll-panel">
           <div class="panel-head">
             <h2>Match Config</h2>
             <span class="micro-chip">fpga live</span>
           </div>
-          <div>
+          <div class="scroll-panel-body">
             <div class="metric-note">Server ghost controls add pressure on the EC2 side without changing the board firmware.</div>
             <div class="metric-note" style="margin-top:12px;">Ghost Taggers</div>
             <div class="control-stack">
@@ -447,15 +449,17 @@
           </div>
         </div>
 
-        <div class="panel-raised controls-notes">
+        <div class="panel-raised controls-notes scroll-panel">
           <div class="panel-head">
             <h2>Operator Notes</h2>
             <span class="micro-chip">quick guide</span>
           </div>
-          <div class="note-list">
-            <div class="metric-note">Game View keeps the FPGA arena, player state, replay drawer, and browser-side timing together in one place.</div>
-            <div class="metric-note">Server Monitoring is the EC2 ops deck: service health, SEDA flow, Redis, warm/cold storage, and the stacked frame profiler.</div>
-            <div class="metric-note">Controls &amp; Config only changes server-side match state. Board-side firmware and transport behavior still live in the PYNQ clients.</div>
+          <div class="scroll-panel-body">
+            <div class="note-list">
+              <div class="metric-note">Game View keeps the FPGA arena, player state, replay drawer, and browser-side timing together in one place.</div>
+              <div class="metric-note">Server Monitoring is the EC2 ops deck: service health, SEDA flow, Redis, warm/cold storage, and the stacked frame profiler.</div>
+              <div class="metric-note">Controls &amp; Config only changes server-side match state. Board-side firmware and transport behavior still live in the PYNQ clients.</div>
+            </div>
           </div>
         </div>
       </div>

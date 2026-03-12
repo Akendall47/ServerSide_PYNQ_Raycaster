@@ -979,6 +979,27 @@
     padding-right: 4px;
   }
 
+  .controls-grid {
+    align-items: start;
+  }
+
+  .scroll-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .scroll-panel-body {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+
   .server-health {
     grid-column: span 4;
   }
@@ -1531,14 +1552,23 @@
 
   .controls-actions {
     grid-column: span 4;
+    max-height: min(68vh, 760px);
   }
 
   .controls-sim {
     grid-column: span 5;
+    max-height: min(68vh, 760px);
   }
 
   .controls-notes {
     grid-column: span 3;
+    max-height: min(68vh, 760px);
+  }
+
+  .controls-actions .scroll-panel-body,
+  .controls-sim .scroll-panel-body,
+  .controls-notes .scroll-panel-body {
+    flex: 1;
   }
 
   .about-page {
@@ -2283,13 +2313,17 @@
     grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
     gap: 14px;
     align-items: start;
+    min-height: 0;
   }
 
   .map-editor-sidebar {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: minmax(0, auto) minmax(280px, 1fr);
     gap: 14px;
     min-width: 0;
+    min-height: 0;
+    max-height: min(72vh, 920px);
+    overflow: hidden;
   }
 
   .map-editor-canvas-shell {
@@ -2340,6 +2374,19 @@
     flex-direction: column;
     gap: 14px;
     padding: 16px;
+  }
+
+  .map-editor-toolbar {
+    max-height: min(44vh, 560px);
+  }
+
+  .map-library-panel {
+    min-height: 280px;
+  }
+
+  .map-editor-toolbar .scroll-panel-body,
+  .map-library-panel .scroll-panel-body {
+    flex: 1;
   }
 
   .map-editor-field,
@@ -2593,6 +2640,25 @@
 
     .map-editor-layout {
       grid-template-columns: 1fr;
+    }
+
+    .controls-actions,
+    .controls-sim,
+    .controls-notes,
+    .map-editor-sidebar,
+    .map-editor-toolbar,
+    .map-library-panel {
+      max-height: none;
+    }
+
+    .map-editor-sidebar {
+      grid-template-rows: auto;
+      overflow: visible;
+    }
+
+    .scroll-panel-body {
+      overflow: visible;
+      padding-right: 0;
     }
   }
 

@@ -59,24 +59,28 @@ export default function MapLibrary({
 }) {
   if (loading) {
     return (
-      <div className="panel-raised map-library-panel">
+      <div className="panel-raised map-library-panel scroll-panel">
         <div className="panel-head">
           <h2>Saved Maps</h2>
           <span className="micro-chip">loading</span>
         </div>
-        <div className="metric-note">scanning runtime map catalog...</div>
+        <div className="scroll-panel-body">
+          <div className="metric-note">scanning runtime map catalog...</div>
+        </div>
       </div>
     );
   }
 
   if (!entries.length) {
     return (
-      <div className="panel-raised map-library-panel">
+      <div className="panel-raised map-library-panel scroll-panel">
         <div className="panel-head">
           <h2>Saved Maps</h2>
           <span className="micro-chip">empty</span>
         </div>
-        <div className="metric-note">no runtime-safe maps have been saved yet.</div>
+        <div className="scroll-panel-body">
+          <div className="metric-note">no runtime-safe maps have been saved yet.</div>
+        </div>
       </div>
     );
   }
@@ -89,37 +93,39 @@ export default function MapLibrary({
   ].filter((section) => section.rows.length);
 
   return (
-    <div className="panel-raised map-library-panel">
+    <div className="panel-raised map-library-panel scroll-panel">
       <div className="panel-head">
         <h2>Saved Maps</h2>
         <span className="micro-chip">{entries.length} total</span>
       </div>
-      <div className="metric-note">
-        Editor drafts are deletable sidecar-backed maps. System maps stay protected so the monitor cannot delete the shipped runtime set.
-      </div>
-      <div className="map-library-section-stack">
-        {sections.map((section) => (
-          <section key={section.title} className="map-library-section">
-            <div className="panel-head">
-              <h3>{section.title}</h3>
-              <span className="micro-chip">{section.chip}</span>
-            </div>
-            <div className="map-library-grid">
-              {section.rows.map((entry) => (
-                <MapCard
-                  key={entry.map_id}
-                  entry={entry}
-                  activeMapId={activeMapId}
-                  selectedMapId={selectedMapId}
-                  deletingId={deletingId}
-                  onLoadToEditor={onLoadToEditor}
-                  onApplyMap={onApplyMap}
-                  onDeleteMap={onDeleteMap}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
+      <div className="scroll-panel-body">
+        <div className="metric-note">
+          Editor drafts are deletable sidecar-backed maps. System maps stay protected so the monitor cannot delete the shipped runtime set.
+        </div>
+        <div className="map-library-section-stack">
+          {sections.map((section) => (
+            <section key={section.title} className="map-library-section">
+              <div className="panel-head">
+                <h3>{section.title}</h3>
+                <span className="micro-chip">{section.chip}</span>
+              </div>
+              <div className="map-library-grid">
+                {section.rows.map((entry) => (
+                  <MapCard
+                    key={entry.map_id}
+                    entry={entry}
+                    activeMapId={activeMapId}
+                    selectedMapId={selectedMapId}
+                    deletingId={deletingId}
+                    onLoadToEditor={onLoadToEditor}
+                    onApplyMap={onApplyMap}
+                    onDeleteMap={onDeleteMap}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );
