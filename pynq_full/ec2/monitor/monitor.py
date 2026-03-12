@@ -95,6 +95,15 @@ _redis_stats_last_fetch = 0.0
 _state_cache = {}
 _state_cache_json = "{}"
 
+def _prime_map_state_cache(map_name: str):
+    global _state_cache, _state_cache_json
+    next_map = str(map_name or "").strip() or LOBBY_MAP_NAME
+    merged = dict(_state_cache or {})
+    merged["active_map"] = next_map
+    merged["selected_map"] = next_map
+    _state_cache = merged
+    _state_cache_json = json.dumps(merged)
+
 def _as_int(value, default=0):
     try:
         return int(value)
@@ -358,6 +367,7 @@ def handle_control_command(cmd: str):
             payload = json.dumps({"cmd": "set_map", "map": map_name})
             r.publish("game:control", payload)
             _active_map = map_name
+            _prime_map_state_cache(map_name)
             _service_message = f"map set to {map_name} — active players are returned to the lobby on the new map"
     elif cmd.startswith("set_ghosts_"):
         count = int(cmd.split("_")[-1])

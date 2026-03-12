@@ -330,6 +330,17 @@ function updateEvents(events) {
 // ── WebSocket ──────────────────────────────────────────────────────────────
 const statusEl = document.getElementById('status');
 let ws = null;
+
+function scheduleMapRefresh(cmd) {
+  if (!String(cmd || '').startsWith('set_map:')) return;
+  const mapName = String(cmd).split(':', 2)[1] || '';
+  if (mapName) {
+    updateMapSelector(mapName, mapName);
+  }
+  window.setTimeout(() => { loadMapList(); }, 150);
+  window.setTimeout(() => { loadMapList(); }, 500);
+}
+
 async function sendControl(cmd, label) {
   if (cmd === 'start_match' && !(latestState?.selected_map || _selectedMapName)) {
     setServiceNote('select a map before starting the match');
@@ -338,6 +349,7 @@ async function sendControl(cmd, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
     setServiceNote(`${label} requested...`);
+    scheduleMapRefresh(cmd);
     return;
   }
   setServiceNote(`${label} requested via HTTP...`);
@@ -351,6 +363,7 @@ async function sendControl(cmd, label) {
       const text = await resp.text();
       throw new Error(text || `HTTP ${resp.status}`);
     }
+    scheduleMapRefresh(cmd);
   } catch (error) {
     setServiceNote(`control failed: ${error.message || 'request error'}`);
   }
