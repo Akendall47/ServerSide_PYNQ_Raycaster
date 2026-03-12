@@ -45,11 +45,15 @@ function MonitorRoot({ mode }) {
 
   useLayoutEffect(() => {
     const root = rootRef.current;
+    console.log('[monitor-ui] rootRef:', root);
     if (!root) return;
 
-    // The slots are static — baked into the template HTML. Query once.
-    setAboutSlot(root.querySelector('.about-react-board-slot') || null);
-    setPlayerSlot(root.querySelector('#player-stats-react-slot') || null);
+    const about = root.querySelector('.about-react-board-slot');
+    const player = root.querySelector('#player-stats-react-slot');
+    console.log('[monitor-ui] aboutSlot:', about);
+    console.log('[monitor-ui] playerSlot:', player);
+    setAboutSlot(about || null);
+    setPlayerSlot(player || null);
   }, [mode]);
 
   return (
