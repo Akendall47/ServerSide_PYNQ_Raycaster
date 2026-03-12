@@ -272,7 +272,7 @@ create_tunnels() {
 prepare_node_sim_panes() {
   # Node sims are pre-filled but not auto-started.
   tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (${SIM1_USERNAME})  <- press Enter to start"
-  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n' 'Username: ${SIM1_USERNAME}'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 0 --redis-port 6380 --username '${SIM1_USERNAME}'"
+  tmux send-keys -t "$SESSION:0.3" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 1'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n' 'Username: ${SIM1_USERNAME}'; printf '\033[36m● %s\033[0m\n' 'Startup mode: manual'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 0 --redis-port 6380 --mode manual --username '${SIM1_USERNAME}'"
 
   tmux select-pane -t "$SESSION:0.4" -T "node sim 2 (${SIM2_USERNAME})  <- press Enter to start"
   tmux send-keys -t "$SESSION:0.4" "clear; printf '\033[1;38;5;117m%s\033[0m\n' 'NODE SIM 2'; printf '\033[2m%s\033[0m\n' 'sim_full/interfacing_+_sim/node_simulator.py'; printf '\033[36m● %s\033[0m\n' 'Username: ${SIM2_USERNAME}'; printf '\033[36m● %s\033[0m\n\n' 'Press Enter to launch this simulator.'; cd $REPO && python3 sim_full/interfacing_+_sim/node_simulator.py $EC2_IP 9000 --nodes 1 --node-index 1 --redis-port 6380 --username '${SIM2_USERNAME}'"
