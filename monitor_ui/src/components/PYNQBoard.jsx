@@ -29,8 +29,20 @@ function BoardStage({ hostSlot }) {
   const stageRef = useRef(null);
   const mountRef = useRef(null);
   const shadowRef = useRef(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const section = document.getElementById('page-about');
+    if (!section) return;
+    const check = () => setVisible(!section.hidden);
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(section, { attributes: true, attributeFilter: ['hidden'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return () => {};
     const stage = stageRef.current;
     const mount = mountRef.current;
     const shadow = shadowRef.current;
@@ -326,7 +338,7 @@ function BoardStage({ hostSlot }) {
         mount.removeChild(renderer.domElement);
       }
     };
-  }, [hostSlot]);
+  }, [hostSlot, visible]);
 
   return (
     <div ref={stageRef} style={{ width: '100%', height: 420, position: 'relative', overflow: 'visible' }}>
@@ -360,10 +372,5 @@ function BoardStage({ hostSlot }) {
 export default function PYNQBoard({ portalTarget }) {
   if (!portalTarget) return null;
 
-  return createPortal(
-    <div style={{ padding: '1rem', color: 'lime', fontFamily: 'monospace', fontSize: '1.2rem' }}>
-      ✅ PYNQBoard portal working
-    </div>,
-    portalTarget,
-  );
+  return createPortal(<BoardStage hostSlot={portalTarget} />, portalTarget);
 }
