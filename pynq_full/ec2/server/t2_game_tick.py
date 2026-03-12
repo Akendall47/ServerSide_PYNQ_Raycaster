@@ -45,8 +45,8 @@ class GameTick:
         self.tick_count      = 0
         self.control_queue   = queue.SimpleQueue()
 
-        self.map_state = self._build_lobby_map()      # mutable dict; starts in bordered lobby staging
-        self._selected_map = {"name": "", "spawn_positions": []}
+        self.map_state = self._build_lobby_map()      # mutable dict; starts on the shared lobby map
+        self._selected_map = copy.deepcopy(self.map_state)
         self.state     = MatchState()                 # all mutable match fields
         self.state.selected_map_name = self._selected_map.get("name", "")
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
@@ -119,9 +119,6 @@ class GameTick:
         if cmd == "force_end":
             self.logic._force_end_flag = True
         elif cmd == "start_match":
-            if not self._selected_map.get("name"):
-                print("[T2] start_match blocked: select a map before starting")
-                return
             started, message = self.packets.start_match_from_lobby()
             print(f"[T2] start_match: {message}")
         elif cmd == "restart":

@@ -20,7 +20,7 @@ const LOBBY_MAP_NAME = 'lobby';
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
 let _activeMapName = LOBBY_MAP_NAME;
-let _selectedMapName = '';
+let _selectedMapName = LOBBY_MAP_NAME;
 let _mapFilterText = '';
 let _showMap = true;  // map play is the default; orbit view is a sim-only test tool
 let _viewMode = 'map';
@@ -37,11 +37,11 @@ let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
 
 function hasSelectedMap(name) {
-  return Boolean(String(name || '').trim()) && name !== LOBBY_MAP_NAME;
+  return Boolean(String(name || '').trim());
 }
 
 async function loadMap(name = _activeMapName) {
-  if (!hasSelectedMap(name)) {
+  if (!name) {
     mapData = null;
     updateCanvasLabel();
     return;
@@ -184,15 +184,11 @@ function updateOrbitModeControls() {
 
 function updateCanvasLabel() {
   const el = document.getElementById('canvas-label');
-  if (_showMap && mapData && hasSelectedMap(_activeMapName)) {
+  if (_showMap && mapData) {
     const totalBits = latestState?.bits?.length || 0;
     const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
     const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
     el.textContent = `map play · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles · manual only${bitText}`;
-  } else if (_showMap && _activeMapName === LOBBY_MAP_NAME && mapData) {
-    el.textContent = `lobby staging · bordered room · choose a map, then press Start`;
-  } else if (_showMap && !hasSelectedMap(_activeMapName)) {
-    el.textContent = 'lobby staging · no map selected · choose a map, then press Start';
   } else if (_showMap) {
     el.textContent = `map play · ${_activeMapName} · loading map…`;
   }
@@ -383,22 +379,20 @@ function estimateStateAgeText() {
 function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
-  const parkedMap = state?.selected_map || _selectedMapName || 'none';
   const liveMap = state?.active_map || _activeMapName || 'lobby';
-  const liveMapLabel = liveMap === LOBBY_MAP_NAME ? 'lobby' : liveMap;
 
   setTextIfPresent('hud-view-mode', 'Map Play');
-  setTextIfPresent('hud-map-name', liveMapLabel);
+  setTextIfPresent('hud-map-name', liveMap);
   setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
   setTextIfPresent('hud-player-count', `${playerCount} entities online`);
   setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
   setTextIfPresent('hud-latency', estimateStateAgeText());
-  setTextIfPresent('server-view-card', `map play · ${liveMapLabel}`);
+  setTextIfPresent('server-view-card', `map play · ${liveMap}`);
 }
 
 function updateMapSelector(activeMap, selectedMap = activeMap) {
   const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
-  const nextSelectedMap = hasSelectedMap(selectedMap) ? selectedMap : '';
+  const nextSelectedMap = String(selectedMap || '').trim() || nextActiveMap;
   const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;

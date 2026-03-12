@@ -19,7 +19,7 @@ const LOBBY_MAP_NAME = 'lobby';
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
 let _activeMapName = LOBBY_MAP_NAME;
-let _selectedMapName = '';
+let _selectedMapName = LOBBY_MAP_NAME;
 let _mapFilterText = '';
 let _activePage = 'game';
 let _archiveDrawerOpen = false;
@@ -32,7 +32,7 @@ let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
 
 function isValidMapName(name) {
-  return Boolean(name) && name !== 'none' && name !== LOBBY_MAP_NAME;
+  return Boolean(name) && name !== 'none';
 }
 
 async function loadMap(name = _activeMapName) {
@@ -97,17 +97,13 @@ function setMapFilterText(value) {
 
 function updateCanvasLabel() {
   const el = document.getElementById('canvas-label');
-  if (_activeMapName === LOBBY_MAP_NAME && mapData) {
-    el.textContent = 'fpga lobby · bordered room · choose a map, then press Start';
-  } else if (mapData) {
+  if (mapData) {
     const totalBits = latestState?.bits?.length || 0;
     const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
     const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
     el.textContent = `fpga live · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles${bitText}`;
   } else {
-    el.textContent = _activeMapName === LOBBY_MAP_NAME
-      ? 'fpga lobby · loading staging room…'
-      : `fpga live · ${_activeMapName} · loading map…`;
+    el.textContent = `fpga live · ${_activeMapName} · loading map…`;
   }
 }
 
@@ -297,20 +293,19 @@ function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
   const liveMap = state?.active_map || _activeMapName;
-  const liveMapLabel = liveMap === LOBBY_MAP_NAME ? 'lobby' : liveMap;
 
   setTextIfPresent('hud-view-mode', gameModeLabel(state?.game_mode ?? 0));
-  setTextIfPresent('hud-map-name', liveMapLabel);
+  setTextIfPresent('hud-map-name', liveMap);
   setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
   setTextIfPresent('hud-player-count', `${playerCount} entities online`);
   setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
   setTextIfPresent('hud-latency', estimateStateAgeText());
-  setTextIfPresent('server-view-card', `fpga live · ${liveMapLabel}`);
+  setTextIfPresent('server-view-card', `fpga live · ${liveMap}`);
 }
 
 function updateMapSelector(activeMap, selectedMap = activeMap) {
   const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
-  const nextSelectedMap = isValidMapName(selectedMap) ? selectedMap : '';
+  const nextSelectedMap = String(selectedMap || '').trim() || nextActiveMap;
   const activeChanged = nextActiveMap !== _activeMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;
@@ -323,7 +318,9 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
 function selectMap(name) {
   sendControl(`set_map:${name}`, `map → ${name}`);
   _selectedMapName = name;
+  _activeMapName = name;
   renderMapButtons();
+  loadMap(name);
 }
 
 // ── State ──────────────────────────────────────────────────────────────────

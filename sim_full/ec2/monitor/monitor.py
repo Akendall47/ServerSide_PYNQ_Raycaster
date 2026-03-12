@@ -540,7 +540,7 @@ def collect_state():
     game_mode = int(game_raw.get("game_mode", 0)) if game_raw else 0
     bits_mask = int(game_raw.get("bits_mask", 0xFFFF)) if game_raw else 0xFFFF
     sim_view_mode = (game_raw.get("sim_view_mode") or "map") if game_raw else "map"
-    selected_map = game_raw.get("selected_map", "") if game_raw else ""
+    selected_map = game_raw.get("selected_map", _active_map) if game_raw else _active_map
     match_started = bool(_as_int(game_raw.get("match_started", 0), 0)) if game_raw else False
     match_ended = bool(_as_int(game_raw.get("match_ended", 0), 0)) if game_raw else False
     match_paused = bool(_as_int(game_raw.get("match_paused", 0), 0)) if game_raw else False
@@ -900,7 +900,7 @@ async def maps_list_handler(request):
         "maps": [entry["map_id"] for entry in entries],
         "entries": entries,
         "active_map": (_state_cache["active_map"] if "active_map" in _state_cache else _active_map),
-        "selected_map": (_state_cache["selected_map"] if "selected_map" in _state_cache else ""),
+        "selected_map": (_state_cache["selected_map"] if "selected_map" in _state_cache else _active_map),
     })
 
 
