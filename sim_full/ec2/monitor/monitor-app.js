@@ -347,7 +347,8 @@ async function sendControl(cmd, label) {
     setServiceNote('select a map before starting the match');
     return;
   }
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  const forceHttp = String(cmd || '').startsWith('set_map:');
+  if (!forceHttp && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
     setServiceNote(`${label} requested...`);
     scheduleMapRefresh(cmd);
