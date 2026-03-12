@@ -129,6 +129,10 @@ class GameTick:
         elif cmd == "start_match":
             started, message = self.packets.start_match_from_lobby()
             print(f"[T2] start_match: {message}")
+        elif cmd == "disconnect":
+            slot_index = int(data.get("node_index", -1))
+            disconnected, message = self.packets.disconnect_human_slot(slot_index)
+            print(f"[T2] disconnect: {message}")
         elif cmd == "restart":
             self._reset_session("restart", arm_lockout=False)
         elif cmd == "set_sim_view":

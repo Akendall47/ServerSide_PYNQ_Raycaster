@@ -625,25 +625,25 @@ export default function PlayerStatsTab() {
         ...profile,
         live,
         currentRole: currentRoleForPlayer(live),
-        isConnected: Boolean(live),
-        isOnline: Boolean(live && !live.queued),
+        isOnline: Boolean(live),
+        isInMatch: Boolean(live && !live.queued),
         isQueued: Boolean(live?.queued),
       };
     })
     .sort((left, right) => (
-      Number(right.isConnected) - Number(left.isConnected)
-      || Number(right.isOnline) - Number(left.isOnline)
+      Number(right.isOnline) - Number(left.isOnline)
+      || Number(right.isInMatch) - Number(left.isInMatch)
       || String(right.last_seen_at).localeCompare(String(left.last_seen_at))
     ));
 
   const totals = enrichedProfiles.reduce((acc, profile) => {
     acc.totalWins += profile.total_wins;
     acc.totalBits += profile.total_bits_collected;
-    acc.connectedPlayers += profile.isConnected ? 1 : 0;
     acc.onlinePlayers += profile.isOnline ? 1 : 0;
+    acc.livePlayers += profile.isInMatch ? 1 : 0;
     acc.queuedPlayers += profile.isQueued ? 1 : 0;
     return acc;
-  }, { totalWins: 0, totalBits: 0, connectedPlayers: 0, onlinePlayers: 0, queuedPlayers: 0 });
+  }, { totalWins: 0, totalBits: 0, onlinePlayers: 0, livePlayers: 0, queuedPlayers: 0 });
 
   return (
     <div className="player-stats-shell">
@@ -654,9 +654,9 @@ export default function PlayerStatsTab() {
           <div className="hud-sub">career profiles in DynamoDB</div>
         </div>
         <div className="panel-raised player-overview-card">
-          <div className="hud-label">Connected Humans</div>
-          <div className="player-overview-value">{totals.connectedPlayers}</div>
-          <div className="hud-sub">{`${totals.onlinePlayers} live · ${totals.queuedPlayers} lobby`}</div>
+          <div className="hud-label">Online Humans</div>
+          <div className="player-overview-value">{totals.onlinePlayers}</div>
+          <div className="hud-sub">{`${totals.livePlayers} in match · ${totals.queuedPlayers} lobby`}</div>
         </div>
         <div className="panel-raised player-overview-card">
           <div className="hud-label">Career Wins</div>
@@ -733,7 +733,7 @@ export default function PlayerStatsTab() {
           {enrichedProfiles.map((player) => {
             const totalMatches = player.match_count;
             const selected = selectedKey === player.player_key;
-            const liveStatus = player.isOnline ? 'online' : player.isQueued ? 'queued' : 'offline';
+            const liveStatus = player.isQueued ? 'queued' : player.isOnline ? 'online' : 'offline';
             const detailMatches = selected ? matchHistory : [];
             const displayProfile = selected && detailProfile?.player_key === player.player_key ? detailProfile : player;
 
@@ -745,12 +745,12 @@ export default function PlayerStatsTab() {
                     <div className="player-card-subtitle">{player.player_key}</div>
                   </div>
                   <span className={`player-live-pill ${liveStatus}`}>
-                    {player.isOnline ? `${roleLabel(player.currentRole)} live` : player.isQueued ? 'lobby' : 'offline'}
+                    {player.isQueued ? 'lobby' : player.isInMatch ? `${roleLabel(player.currentRole)} live` : player.isOnline ? 'online' : 'offline'}
                   </span>
                 </button>
 
                 <div className="player-card-summary">
-                  <PlayerTrophy player={player} pageVisible={pageVisible} animated={player.isConnected || selected} />
+                  <PlayerTrophy player={player} pageVisible={pageVisible} animated={player.isOnline || selected} />
 
                   <div className="player-card-metrics">
                     <div className="metric-row"><span>career win rate</span><span>{formatPercent(player.total_wins, totalMatches)}</span></div>
@@ -762,10 +762,12 @@ export default function PlayerStatsTab() {
                     <div className="metric-row"><span>first seen</span><span>{formatTimestamp(displayProfile.first_seen_at)}</span></div>
                     <div className="metric-row"><span>last seen</span><span>{formatTimestamp(displayProfile.last_seen_at)}</span></div>
                     <div className="metric-note">
-                      {player.isOnline && player.live
+                      {player.isInMatch && player.live
                         ? `Live @ (${formatCoordinate(asNumber(player.live.x))}, ${formatCoordinate(asNumber(player.live.y))}) · ${formatAngle(asNumber(player.live.angle))}`
                         : player.isQueued
                           ? 'Connected in lobby · waiting for match start.'
+                        : player.isOnline
+                          ? 'Connected via websocket feed.'
                         : 'No live websocket position for this player right now.'}
                     </div>
                   </div>

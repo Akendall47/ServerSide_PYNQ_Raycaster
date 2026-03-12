@@ -214,6 +214,22 @@ class PacketHandler:
     def _ghost_count(self):
         return sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
 
+    def _queued_human_addrs(self):
+        return [
+            addr for addr, _ in sorted(
+                (
+                    (addr, player) for addr, player in self.state.players.items()
+                    if not str(addr).startswith("ghost:") and player.get("player_id", 0) == 0
+                ),
+                key=lambda item: (
+                    item[1].get("controller_key", ""),
+                    item[1].get("display_name", ""),
+                    item[1].get("x", 0.0),
+                    item[1].get("y", 0.0),
+                ),
+            )
+        ]
+
     def _spawn_pose_for_slot(self, slot_index: int):
         positions = self.state.spawn_positions
         x, y = positions[slot_index] if slot_index < len(positions) else (0.0, 0.0)
@@ -330,6 +346,40 @@ class PacketHandler:
         self.state.reset_positions()
         self._on_match_start()
         return True, "match started"
+
+    def disconnect_human_slot(self, slot_index: int):
+        if slot_index < 0:
+            return False, "invalid node slot"
+
+        if not self.state.match_started or self.state.match_ended:
+            queued_addrs = self._queued_human_addrs()
+            if slot_index >= len(queued_addrs):
+                return False, f"node slot {slot_index + 1} not present in lobby"
+            addr = queued_addrs[slot_index]
+            player = self.state.players.pop(addr, None)
+            if not player:
+                return False, f"node slot {slot_index + 1} missing"
+            self.state.pending_roles.pop(addr, None)
+            self.write_queue.put({"op": "del", "key": f"player:{player['player_id']}"})
+            print(f"[T2] removed queued lobby player from slot {slot_index + 1}: {addr}")
+            return True, f"removed node slot {slot_index + 1} from lobby"
+
+        active_humans = sorted(
+            (
+                (addr, player) for addr, player in self.state.players.items()
+                if not str(addr).startswith("ghost:") and player.get("player_id", 0) > 0
+            ),
+            key=lambda item: item[1]["player_id"],
+        )
+        if slot_index >= len(active_humans):
+            return False, f"node slot {slot_index + 1} not active"
+        addr, player = active_humans[slot_index]
+        player["timed_out"] = True
+        player["last_seq"] = None
+        player["last_seen"] = 0.0
+        print(f"[T2] marked active player as disconnected from slot {slot_index + 1}: {addr}")
+        self._pause_for_timeouts()
+        return True, f"disconnected active node slot {slot_index + 1}"
 
     def _send_ack(self, addr, player_id: int):
         if self.udp_transport is None:

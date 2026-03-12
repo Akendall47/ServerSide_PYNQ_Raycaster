@@ -539,15 +539,15 @@ def collect_state():
             queued_players = []
     for index, raw in enumerate(queued_players, start=1):
         queue_slot = _as_int(raw.get("queue_slot", index), index)
-        entity_key = (
-            raw.get("controller_key")
-            or raw.get("profile_key")
+        entity_key_seed = (
+            raw.get("profile_key")
             or raw.get("display_name")
-            or f"queued:{queue_slot}"
+            or raw.get("controller_key")
+            or "unknown"
         )
         players.append({
             "id":              0,
-            "entity_key":      f"queued:{entity_key}",
+            "entity_key":      f"queued:{queue_slot}:{entity_key_seed}",
             "x":               _as_float(raw.get("x"), 0.0),
             "y":               _as_float(raw.get("y"), 0.0),
             "angle":           _as_float(raw.get("angle"), 0.0),
