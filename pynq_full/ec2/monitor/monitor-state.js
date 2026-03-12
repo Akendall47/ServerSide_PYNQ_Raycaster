@@ -312,7 +312,8 @@ function updateGameHud(state) {
 
 function updateMapSelector(activeMap, selectedMap = activeMap) {
   const incomingActiveMap = String(activeMap || '').trim();
-  const incomingSelectedMap = String(selectedMap || '').trim();
+  const _rawSelectedMap = String(selectedMap || '').trim();
+  const incomingSelectedMap = isValidMapName(_rawSelectedMap) ? _rawSelectedMap : '';
   const pendingAlive = Boolean(
     _pendingMapName && (performance.now() - _pendingMapRequestedAt) < MAP_SELECT_GRACE_MS,
   );
