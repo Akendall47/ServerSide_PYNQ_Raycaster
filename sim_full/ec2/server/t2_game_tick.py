@@ -25,7 +25,7 @@ import threading
 import redis as redislib
 
 from t2_constants import CONTROL_CHANNEL, MAP_TILE_SCALE, ORBIT_RADIUS, SPAWN_ANGLES, SPAWN_POSITIONS
-from t2_map_loader import load_map, DEFAULT_MAP_PATH
+from t2_map_loader import load_map
 from game_logic.match_state import MatchState
 from t2_packet_handler import PacketHandler
 from game_logic.core_logic import CoreLogic
@@ -178,24 +178,7 @@ class GameTick:
         }
 
     def _build_lobby_map(self) -> dict:
-        width = 32
-        height = 32
-        tiles = bytearray(width * height)
-        for idx in range(width):
-            tiles[idx] = 1
-            tiles[(height - 1) * width + idx] = 1
-        for row in range(height):
-            tiles[row * width] = 1
-            tiles[row * width + (width - 1)] = 1
-        return {
-            "name": _LOBBY_MAP_NAME,
-            "width": width,
-            "height": height,
-            "tile_scale": MAP_TILE_SCALE,
-            "tiles": tiles,
-            "bits": [],
-            "spawn_positions": list(SPAWN_POSITIONS),
-        }
+        return load_map(os.path.join(_MAPS_DIR, f"{_LOBBY_MAP_NAME}.txt"))
 
     def _set_sim_view(self, view: str):
         target = "map"

@@ -116,31 +116,6 @@ def _as_optional_int(value):
         return None
 
 
-def _build_lobby_map_payload():
-    width = 32
-    height = 32
-    rows = []
-    for row in range(height):
-        rows.append([
-            1 if row in (0, height - 1) or col in (0, width - 1) else 0
-            for col in range(width)
-        ])
-    return {
-        "map_id": LOBBY_MAP_NAME,
-        "map_name": "Lobby",
-        "width": width,
-        "height": height,
-        "tile_scale": 8,
-        "tiles": rows,
-        "spawns": [{"x": 4, "y": 4}, {"x": 27, "y": 27}],
-        "markers": [],
-        "created_at": "",
-        "updated_at": "",
-        "protected": True,
-        "system_map": True,
-    }
-
-
 def _plain_number(value: Decimal):
     if value == value.to_integral_value():
         return int(value)
@@ -935,8 +910,6 @@ async def map_handler(request):
     Returns {width, height, tile_scale, tiles: [[0|1,...],...]}
     """
     name = request.match_info["name"]
-    if name == LOBBY_MAP_NAME:
-        return web.json_response(_build_lobby_map_payload())
     try:
         payload = await asyncio.to_thread(load_map_entry, MAPS_DIR, name, True)
     except MapStorageError as exc:

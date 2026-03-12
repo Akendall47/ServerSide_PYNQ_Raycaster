@@ -261,6 +261,21 @@ create_redis_tunnel() {
   ssh $SSH_OPTS -f -N -o ExitOnForwardFailure=yes -i "$KEY" -L 127.0.0.1:6380:localhost:6379 "$EC2"
 }
 
+wait_for_sim_backend_ready() {
+  local attempts=0
+  local max_attempts=80
+
+  while [ "$attempts" -lt "$max_attempts" ]; do
+    if ssh $SSH_OPTS -i "$KEY" "$EC2" "redis-cli --raw HGET game:state map 2>/dev/null" | grep -q .; then
+      return 0
+    fi
+    sleep 0.25
+    attempts=$((attempts + 1))
+  done
+
+  return 1
+}
+
 prepare_node_sim_panes() {
   # Node sims launch automatically with the dev session.
   tmux select-pane -t "$SESSION:0.3" -T "node sim 1 (${SIM1_USERNAME})"
@@ -322,6 +337,9 @@ run_step "Building 6-pane layout" build_layout || die "Failed building tmux layo
 section "Service Wiring"
 run_step "Starting server/sidecar/monitor panes" wire_service_panes || die "Failed wiring service panes"
 run_step "Opening Redis tunnel (localhost:6380 -> EC2:6379)" create_redis_tunnel || die "Failed opening Redis tunnel"
+if ! run_step "Waiting for sim backend to publish game state" wait_for_sim_backend_ready; then
+  log_warn "Sim backend did not publish game:state before node launch; startup may be delayed."
+fi
 run_step "Preparing node simulator panes" prepare_node_sim_panes || die "Failed preparing simulator panes"
 if ! run_step "Waiting for local monitor HTTP endpoint" wait_for_local_monitor; then
   log_warn "Local monitor endpoint did not report ready before browser launch."
@@ -332,6 +350,5 @@ fi
 
 section "Ready"
 log_ok "Session '$SESSION' is live."
-log_info "Press Enter in both node sim panes when the server is ready."
 tmux select-pane -t "$SESSION:0.0"
 tmux attach-session -t "$SESSION"
