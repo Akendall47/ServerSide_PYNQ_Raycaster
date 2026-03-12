@@ -146,6 +146,11 @@ class PacketHandler:
 
         last = p["last_seq"]
         if last is not None and not validate_seq(last, seq):
+            last_log = float(p.get("_last_invalid_seq_log_at", 0.0) or 0.0)
+            now = time.monotonic()
+            if (now - last_log) >= 0.5:
+                p["_last_invalid_seq_log_at"] = now
+                print(f"[T2] dropped seq for {addr}: prev={last} next={seq}")
             return
 
         min_x, min_y, max_x, max_y = self._world_bounds()
@@ -164,6 +169,15 @@ class PacketHandler:
                 DEFAULT_MAX_SPEED_PER_TICK,
             )
         ):
+            last_log = float(p.get("_last_invalid_pos_log_at", 0.0) or 0.0)
+            now = time.monotonic()
+            if (now - last_log) >= 0.5:
+                p["_last_invalid_pos_log_at"] = now
+                print(
+                    f"[T2] dropped movement for {addr}: "
+                    f"prev=({p['x']:.2f},{p['y']:.2f}) next=({next_x:.2f},{next_y:.2f}) "
+                    f"seq={seq} mode={decode_movement_mode(movement_mode)} map={self.map_state.get('name')}"
+                )
             return
 
         p["last_seq"] = seq

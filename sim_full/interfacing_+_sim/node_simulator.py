@@ -463,7 +463,16 @@ def run_node(server_ip, server_port, player_id, node_index,
     def load_runtime_map():
         nonlocal current_map_name, map_state, x, y, angle, orbit_phase
         current_map_name = ORBIT_TEST_MAP_NAME if sim_view_mode == "orbit" else selected_map_name
-        map_state = load_local_map(current_map_name)
+        loaded_map = load_local_map(current_map_name)
+        if loaded_map.get("width", 0) > 0 and loaded_map.get("tiles"):
+            map_state = loaded_map
+            x, y, angle = spawn_pose(map_state, node_index, radius)
+            orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
+            return
+        if map_state.get("width", 0) > 0 and map_state.get("tiles"):
+            print(f"{tag} keeping current runtime map until server PKT_MAP arrives for '{current_map_name}'")
+            return
+        map_state = loaded_map
         x, y, angle = spawn_pose(map_state, node_index, radius)
         orbit_phase = math.atan2(y, x) if abs(x) > 0.01 or abs(y) > 0.01 else angle
 
@@ -615,11 +624,11 @@ def run_node(server_ip, server_port, player_id, node_index,
                     switch_mode(next_mode)
                     if next_map:
                         load_selected_map(next_map)
-                        schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, f"map selected as {selected_map_name}")
-                        break
+                        print(f"{tag} map selected as {selected_map_name} — staying connected, waiting for server map")
+                        continue
                     if next_view and switch_sim_view(next_view):
-                        schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, f"sim view changed to {sim_view_mode}")
-                        break
+                        print(f"{tag} sim view changed to {sim_view_mode} — staying connected")
+                        continue
                     if lifecycle_cmd == "restart":
                         schedule_rejoin(RESTART_DELAY_S, "restart received")
                         break
@@ -631,7 +640,7 @@ def run_node(server_ip, server_port, player_id, node_index,
                         break
 
             if playing and sync_runtime_from_redis():
-                schedule_rejoin(MAP_CHANGE_REJOIN_DELAY_S, "runtime state changed via Redis snapshot")
+                print(f"{tag} runtime state changed via Redis snapshot — staying connected")
 
             # receive all queued broadcasts
             while playing:
