@@ -8,6 +8,7 @@
 
 import asyncio
 import math
+import re
 import struct
 import time
 
@@ -121,6 +122,7 @@ class PacketHandler:
         if pkt_type == PKT_REGISTER:
             if pkt.get("username", ""):
                 p.update(build_player_identity(pkt["username"], addr))
+                p["sim_slot"] = self._sim_slot_for_player(p)
             p["preferred_role"] = pkt.get("preferred_role", ROLE_ANY)
             self.state.pending_roles[addr] = p["preferred_role"]
             if not self.state.match_started or p["player_id"] == 0:
@@ -201,6 +203,7 @@ class PacketHandler:
             "protocol_version": 0,
             "timed_out":        False,
             "preferred_role":   preferred_role,
+            "sim_slot":         self._sim_slot_for_player(identity),
             **identity,
         }
 
@@ -213,6 +216,37 @@ class PacketHandler:
 
     def _ghost_count(self):
         return sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
+
+    def _sim_slot_for_player(self, player: dict):
+        for raw in (
+            player.get("profile_key", ""),
+            player.get("username", ""),
+            player.get("display_name", ""),
+        ):
+            text = str(raw or "").strip().lower()
+            if not text:
+                continue
+            match = re.search(r"(?:^|[^a-z0-9])sim[-_ ]*([1-9][0-9]*)$", text)
+            if match:
+                return int(match.group(1)) - 1
+        return None
+
+    def _find_human_addr_for_slot(self, slot_index: int):
+        explicit_matches = []
+        inferred_matches = []
+        for addr, player in self.state.players.items():
+            if str(addr).startswith("ghost:"):
+                continue
+            if player.get("sim_slot") == slot_index:
+                explicit_matches.append(addr)
+                continue
+            if self._sim_slot_for_player(player) == slot_index:
+                inferred_matches.append(addr)
+        if len(explicit_matches) == 1:
+            return explicit_matches[0]
+        if len(inferred_matches) == 1:
+            return inferred_matches[0]
+        return None
 
     def _queued_human_addrs(self):
         return [
@@ -351,11 +385,16 @@ class PacketHandler:
         if slot_index < 0:
             return False, "invalid node slot"
 
+        target_addr = self._find_human_addr_for_slot(slot_index)
+
         if not self.state.match_started or self.state.match_ended:
             queued_addrs = self._queued_human_addrs()
-            if slot_index >= len(queued_addrs):
-                return False, f"node slot {slot_index + 1} not present in lobby"
-            addr = queued_addrs[slot_index]
+            if target_addr and target_addr in self.state.players and self.state.players[target_addr].get("player_id", 0) == 0:
+                addr = target_addr
+            else:
+                if slot_index >= len(queued_addrs):
+                    return False, f"node slot {slot_index + 1} not present in lobby"
+                addr = queued_addrs[slot_index]
             player = self.state.players.pop(addr, None)
             if not player:
                 return False, f"node slot {slot_index + 1} missing"
@@ -371,9 +410,14 @@ class PacketHandler:
             ),
             key=lambda item: item[1]["player_id"],
         )
-        if slot_index >= len(active_humans):
-            return False, f"node slot {slot_index + 1} not active"
-        addr, player = active_humans[slot_index]
+        active_by_addr = {addr: player for addr, player in active_humans}
+        if target_addr and target_addr in active_by_addr:
+            addr = target_addr
+            player = active_by_addr[target_addr]
+        else:
+            if slot_index >= len(active_humans):
+                return False, f"node slot {slot_index + 1} not active"
+            addr, player = active_humans[slot_index]
         player["timed_out"] = True
         player["last_seq"] = None
         player["last_seen"] = 0.0
