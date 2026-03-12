@@ -686,7 +686,7 @@ def run_node(server_ip, server_port, player_id, node_index,
                 have_authoritative_state = False
 
             # send position update
-            if not have_authoritative_state and assigned_player_id != 0:
+            if not have_authoritative_state and assigned_player_id != 0 and normalized_mode != "manual":
                 input_flags = 0
             elif normalized_mode == "manual":
                 actions = manual_controller.read_actions() if manual_controller else []

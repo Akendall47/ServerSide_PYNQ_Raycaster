@@ -357,6 +357,86 @@ def test_sim_final_tag_ends_match_without_teleporting_back_to_spawn():
         assert events[0]["final_tag"] is True
 
 
+def test_sim_return_players_to_lobby_clears_match_end_flags_and_requeues_humans():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+
+        state = match_state_mod.MatchState()
+        state.match_started = True
+        state.match_ended = True
+        state.players = {
+            ("runner", 1): {
+                "player_id": 1,
+                "x": 0.0,
+                "y": 0.0,
+                "angle": 0.0,
+                "flags": protocol.FLAG_TAGGED | protocol.FLAG_MATCH_END,
+                "last_seen": 0.0,
+                "last_seq": 4,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_ANY,
+                "username": "sim-1",
+                "display_name": "sim-1",
+                "profile_key": "sim-1",
+                "controller_key": "controller-1",
+                "identity_source": "username",
+                "sim_slot": 0,
+            },
+            ("tagger", 2): {
+                "player_id": 2,
+                "x": 8.0,
+                "y": 0.0,
+                "angle": 0.0,
+                "flags": protocol.FLAG_MATCH_END,
+                "last_seen": 0.0,
+                "last_seq": 5,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_ANY,
+                "username": "sim-2",
+                "display_name": "sim-2",
+                "profile_key": "sim-2",
+                "controller_key": "controller-2",
+                "identity_source": "username",
+                "sim_slot": 1,
+            },
+        }
+        handler = packet_handler_mod.PacketHandler(
+            state,
+            asyncio.Queue(),
+            queue.SimpleQueue(),
+            {
+                "width": 0,
+                "height": 0,
+                "tile_scale": 8,
+                "tiles": bytearray(),
+                "bits": [],
+                "spawn_positions": [(-24.0, -24.0), (24.0, 24.0)],
+            },
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_match_pause=lambda event=None: None,
+            on_match_resume=lambda event=None: None,
+            on_event=lambda event: None,
+        )
+
+        handler.return_players_to_lobby()
+
+        assert state.match_started is False
+        assert state.match_ended is False
+        assert state.players[("runner", 1)]["player_id"] == 0
+        assert state.players[("tagger", 2)]["player_id"] == 0
+        assert state.players[("runner", 1)]["flags"] == 0
+        assert state.players[("tagger", 2)]["flags"] == 0
+        assert state.players[("runner", 1)]["last_seq"] is None
+        assert state.players[("tagger", 2)]["last_seq"] is None
+
+
 def test_sim_packet_handler_requires_register_for_unknown_addr():
     with sim_import_context():
         protocol = importlib.import_module("protocol")

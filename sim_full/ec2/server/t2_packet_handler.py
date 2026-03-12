@@ -300,6 +300,15 @@ class PacketHandler:
         self.state.reset_match_runtime(arm_lockout=False)
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
 
+        for addr in human_addrs:
+            player = self.state.players.get(addr)
+            if not player:
+                continue
+            player["player_id"] = 0
+            player["flags"] = 0
+            player["last_seq"] = None
+            player["timed_out"] = False
+
         self._refresh_lobby_queue_positions()
 
         for addr, player in self.state.players.items():
