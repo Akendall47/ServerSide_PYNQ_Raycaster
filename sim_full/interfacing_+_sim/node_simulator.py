@@ -57,6 +57,7 @@ PLAYER_COLLISION_RADIUS = 2.5
 SPAWN_CLEARANCE_RADIUS = 3.25
 DEFAULT_MAP_NAME = ""
 ORBIT_TEST_MAP_NAME = "orbit_test"
+LOBBY_MAP_NAME = "__lobby__"
 MAPS_DIR = Path(__file__).resolve().parents[2] / "pynq_full" / "ec2" / "maps"
 SPAWN_ANGLES = [0.0, math.pi, math.pi / 2, 3 * math.pi / 2, math.pi / 4]
 AUTHORITATIVE_STATE_TIMEOUT_S = 0.4
@@ -64,14 +65,24 @@ SPAWN_MARKERS = {str(index): index - 1 for index in range(1, 6)}
 
 
 def load_local_map(name: str):
-    if not name:
+    if not name or name == LOBBY_MAP_NAME:
         return {
-            "name": "",
-            "width": 0,
-            "height": 0,
+            "name": LOBBY_MAP_NAME,
+            "width": 32,
+            "height": 32,
             "tile_scale": MAP_TILE_SCALE,
-            "tiles": bytearray(),
-            "spawn_positions": [],
+            "tiles": bytearray(
+                1 if row in (0, 31) or col in (0, 31) else 0
+                for row in range(32)
+                for col in range(32)
+            ),
+            "spawn_positions": [
+                (-56.0, -56.0),
+                (56.0, 56.0),
+                (-56.0, 56.0),
+                (56.0, -56.0),
+                (0.0, 0.0),
+            ],
         }
     if name == ORBIT_TEST_MAP_NAME:
         return build_orbit_test_map()

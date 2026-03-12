@@ -13,11 +13,13 @@ const FLAG_MATCH_END = 0x04;
 const MAP_VIEW_PAD  = 24;
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
 const FLAG_GHOST     = 0x08;
+const LOBBY_MAP_NAME = '__lobby__';
 
 // ── Map state ──────────────────────────────────────────────────────────────
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
-let _activeMapName = 'chase';
+let _activeMapName = LOBBY_MAP_NAME;
+let _selectedMapName = '';
 let _mapFilterText = '';
 let _activePage = 'game';
 let _archiveDrawerOpen = false;
@@ -30,11 +32,11 @@ let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
 
 function isValidMapName(name) {
-  return Boolean(name) && name !== 'none';
+  return Boolean(name) && name !== 'none' && name !== LOBBY_MAP_NAME;
 }
 
-async function loadMap(name = 'chase') {
-  if (!isValidMapName(name)) return;
+async function loadMap(name = _activeMapName) {
+  if (!name || name === 'none') return;
   try {
     const resp = await fetch(`/api/map/${encodeURIComponent(name)}`);
     if (!resp.ok) return;
@@ -77,7 +79,7 @@ function renderMapButtons() {
 
   el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
-      class="control-btn${name === _activeMapName ? ' start' : ''}"
+      class="control-btn${name === _selectedMapName ? ' start' : ''}"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
 }
@@ -89,13 +91,17 @@ function setMapFilterText(value) {
 
 function updateCanvasLabel() {
   const el = document.getElementById('canvas-label');
-  if (mapData) {
+  if (_activeMapName === LOBBY_MAP_NAME && mapData) {
+    el.textContent = 'fpga lobby · bordered room · choose a map, then press Start';
+  } else if (mapData) {
     const totalBits = latestState?.bits?.length || 0;
     const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
     const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
     el.textContent = `fpga live · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles${bitText}`;
   } else {
-    el.textContent = `fpga live · ${_activeMapName} · loading map…`;
+    el.textContent = _activeMapName === LOBBY_MAP_NAME
+      ? 'fpga lobby · loading staging room…'
+      : `fpga live · ${_activeMapName} · loading map…`;
   }
 }
 
@@ -285,25 +291,34 @@ function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
   const liveMap = state?.active_map || _activeMapName;
+  const liveMapLabel = liveMap === LOBBY_MAP_NAME ? 'lobby' : liveMap;
 
   setTextIfPresent('hud-view-mode', gameModeLabel(state?.game_mode ?? 0));
-  setTextIfPresent('hud-map-name', liveMap);
+  setTextIfPresent('hud-map-name', liveMapLabel);
   setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
   setTextIfPresent('hud-player-count', `${playerCount} entities online`);
   setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
   setTextIfPresent('hud-latency', estimateStateAgeText());
-  setTextIfPresent('server-view-card', `fpga live · ${liveMap}`);
+  setTextIfPresent('server-view-card', `fpga live · ${liveMapLabel}`);
 }
 
-function updateMapSelector(activeMap) {
-  if (!isValidMapName(activeMap) || activeMap === _activeMapName) return;
-  _activeMapName = activeMap;
-  renderMapButtons();
-  loadMap(activeMap);
+function updateMapSelector(activeMap, selectedMap = activeMap) {
+  const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
+  const nextSelectedMap = isValidMapName(selectedMap) ? selectedMap : '';
+  const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
+  _activeMapName = nextActiveMap;
+  _selectedMapName = nextSelectedMap;
+  if (changed) {
+    renderMapButtons();
+  }
+  if (!mapData || mapData.name !== _activeMapName || changed) {
+    loadMap(_activeMapName);
+  }
 }
 
 function selectMap(name) {
   sendControl(`set_map:${name}`, `map → ${name}`);
+  _selectedMapName = name;
   _activeMapName = name;
   renderMapButtons();
   loadMap(name);

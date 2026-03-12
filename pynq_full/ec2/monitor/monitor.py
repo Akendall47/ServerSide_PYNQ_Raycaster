@@ -37,6 +37,7 @@ PUSH_RATE_HZ = 20   # push to browser at 20 Hz (match game tick rate)
 DDB_POLL_INTERVAL_S = 2.0
 SERVICE_POLL_INTERVAL_S = 1.0
 REDIS_STATS_POLL_INTERVAL_S = 1.0
+LOBBY_MAP_NAME = "__lobby__"
 
 DYNAMO_TABLE = "pynq-raycaster-seda-matches"
 PLAYER_TABLE = "pynq-raycaster-players"
@@ -88,7 +89,7 @@ _service_cache  = {}
 _service_last_fetch = 0.0
 _service_message = "controls run on EC2 only; FPGA boards stay connected over UDP"
 _replay_cache = {}
-_active_map = "chase"    # tracks which map the server is using
+_active_map = LOBBY_MAP_NAME    # startup lobby uses a built-in bordered staging room
 _redis_stats_cache = {}
 _redis_stats_last_fetch = 0.0
 _state_cache = {}
@@ -115,7 +116,32 @@ def _as_optional_int(value):
         return None
 
 def _valid_map_name(value):
-    return isinstance(value, str) and bool(value) and value != "none"
+    return isinstance(value, str) and bool(value) and value not in {"none", LOBBY_MAP_NAME}
+
+
+def _build_lobby_map_payload():
+    width = 32
+    height = 32
+    rows = []
+    for row in range(height):
+        rows.append([
+            1 if row in (0, height - 1) or col in (0, width - 1) else 0
+            for col in range(width)
+        ])
+    return {
+        "map_id": LOBBY_MAP_NAME,
+        "map_name": "Lobby",
+        "width": width,
+        "height": height,
+        "tile_scale": 8,
+        "tiles": rows,
+        "spawns": [{"x": 4, "y": 4}, {"x": 27, "y": 27}],
+        "markers": [],
+        "created_at": "",
+        "updated_at": "",
+        "protected": True,
+        "system_map": True,
+    }
 
 
 def _plain_number(value: Decimal):
@@ -515,6 +541,7 @@ def collect_state():
     game_raw  = redis_rows[9]
     game_mode = int(game_raw.get("game_mode", 0)) if game_raw else 0
     bits_mask = int(game_raw.get("bits_mask", 0xFFFF)) if game_raw else 0xFFFF
+    selected_map = game_raw.get("selected_map", "") if game_raw else ""
     match_started = bool(_as_int(game_raw.get("match_started", 0), 0)) if game_raw else False
     match_ended = bool(_as_int(game_raw.get("match_ended", 0), 0)) if game_raw else False
     match_paused = bool(_as_int(game_raw.get("match_paused", 0), 0)) if game_raw else False
@@ -626,6 +653,7 @@ def collect_state():
         "bits":       bits_positions,      # [[world_x, world_y], ...] from match_start
         "bits_mask":  bits_mask,           # bitmask of active bits this tick
         "active_map": active_map,
+        "selected_map": selected_map,
         "match": {
             "started": match_started,
             "ended": match_ended,
@@ -871,7 +899,8 @@ async def maps_list_handler(request):
     return web.json_response({
         "maps": [entry["map_id"] for entry in entries],
         "entries": entries,
-        "active_map": (_state_cache.get("active_map") or _active_map),
+        "active_map": (_state_cache["active_map"] if "active_map" in _state_cache else _active_map),
+        "selected_map": (_state_cache["selected_map"] if "selected_map" in _state_cache else ""),
     })
 
 
@@ -880,6 +909,8 @@ async def map_handler(request):
     GET /api/map/level1  → loads maps/level1.txt
     """
     name = request.match_info["name"]
+    if name == LOBBY_MAP_NAME:
+        return web.json_response(_build_lobby_map_payload())
     try:
         payload = await asyncio.to_thread(load_map_entry, MAPS_DIR, name, True)
     except MapStorageError as exc:

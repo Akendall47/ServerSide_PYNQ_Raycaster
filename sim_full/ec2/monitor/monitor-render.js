@@ -18,8 +18,7 @@ function computeFallbackWorldLimit(players = [], bits = []) {
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 function worldToCanvas(wx, wy, renderLimit = null) {
-  const pad = (_showMap && mapData && mapData.width > 0) ? MAP_VIEW_PAD : ORBIT_VIEW_PAD;
-  // In map mode use the actual map extent; fall back to orbit view extent
+  const pad = MAP_VIEW_PAD;
   const limit = renderLimit ?? ((_showMap && mapData && mapData.width > 0)
     ? (mapData.width / 2) * (mapData.tile_scale || TILE_SCALE)
     : WORLD_LIMIT);
@@ -36,16 +35,6 @@ function drawArena(players, bits, bitsMask) {
   const renderLimit = (_showMap && mapData && mapData.width > 0)
     ? null
     : computeFallbackWorldLimit(players, bits);
-
-  if (!_showMap) {
-    // Grid only helps in orbit view; it makes map mode feel busier than it is.
-    ctx.strokeStyle = '#141414'; ctx.lineWidth = 1;
-    for (let i = 0; i <= 8; i++) {
-      const x = W/8*i, y = H/8*i;
-      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
-    }
-  }
 
   // Origin axes
   const [ox, oy] = worldToCanvas(0, 0, renderLimit);
@@ -77,12 +66,6 @@ function drawArena(players, bits, bitsMask) {
         ctx.strokeRect(px, py, ts, ts);
       });
     });
-  } else {
-    // Legacy orbit guide when no map / in orbit view
-    ctx.beginPath(); ctx.arc(ox, oy, ORBIT_RADIUS * sc, 0, Math.PI*2);
-    ctx.strokeStyle = 'rgba(0,212,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 
   // Bit collectibles — yellow dot if active, grey if collected

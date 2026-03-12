@@ -331,7 +331,7 @@ function updateEvents(events) {
 const statusEl = document.getElementById('status');
 let ws = null;
 async function sendControl(cmd, label) {
-  if (cmd === 'start_match' && !(latestState?.selected_map || _activeMapName)) {
+  if (cmd === 'start_match' && !(latestState?.selected_map || _selectedMapName)) {
     setServiceNote('select a map before starting the match');
     return;
   }
@@ -395,6 +395,7 @@ function connect() {
     updateMatchState(state.match);
     updateEvents(state.events);
     updateMapSelector(
+      state.active_map,
       Object.prototype.hasOwnProperty.call(state, 'selected_map')
         ? state.selected_map
         : state.active_map,

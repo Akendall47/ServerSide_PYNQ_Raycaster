@@ -12,14 +12,15 @@ const PLAYER_COLLISION_RADIUS = 2.5;
 const FLAG_TAGGED    = 0x02;
 const FLAG_MATCH_END = 0x04;
 const MAP_VIEW_PAD  = 24;
-const ORBIT_VIEW_PAD = 36;
 const PLAYER_COLOURS = ['#00ff88', '#00d4ff', '#ffaa00', '#ff6688'];
 const FLAG_GHOST     = 0x08;
+const LOBBY_MAP_NAME = '__lobby__';
 
 // ── Map state ──────────────────────────────────────────────────────────────
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
-let _activeMapName = '';
+let _activeMapName = LOBBY_MAP_NAME;
+let _selectedMapName = '';
 let _mapFilterText = '';
 let _showMap = true;  // map play is the default; orbit view is a sim-only test tool
 let _viewMode = 'map';
@@ -36,7 +37,7 @@ let stackedFrameId = 0;
 let lastRenderSampleAt = performance.now();
 
 function hasSelectedMap(name) {
-  return Boolean(String(name || '').trim());
+  return Boolean(String(name || '').trim()) && name !== LOBBY_MAP_NAME;
 }
 
 async function loadMap(name = _activeMapName) {
@@ -87,7 +88,7 @@ function renderMapButtons() {
 
   el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
-      class="control-btn${name === _activeMapName ? ' start' : ''}"
+      class="control-btn${name === _selectedMapName ? ' start' : ''}"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
 }
@@ -101,38 +102,29 @@ function renderViewModeButtons() {
   const el = document.getElementById('view-mode-btns');
   if (!el.dataset.initialized) {
     el.innerHTML = `
-      <button id="viewmode-map" class="control-btn" type="button" onclick="setViewMode('map')">Map Play</button>
-      <button id="viewmode-orbit" class="control-btn" type="button" onclick="setViewMode('orbit')">Orbit Test</button>
+      <button id="viewmode-map" class="control-btn active-view" type="button" onclick="setViewMode('map')">Map Play</button>
     `;
     el.dataset.initialized = '1';
   }
   const mapBtn = document.getElementById('viewmode-map');
-  const orbitBtn = document.getElementById('viewmode-orbit');
   if (mapBtn) {
-    mapBtn.classList.toggle('active-view', _viewMode === 'map');
-  }
-  if (orbitBtn) {
-    orbitBtn.classList.toggle('active-view', _viewMode === 'orbit');
+    mapBtn.classList.add('active-view');
   }
 }
 
 function syncViewMode(mode) {
-  const nextMode = (mode === 'orbit') ? 'orbit' : 'map';
-  const changed = nextMode !== _viewMode;
-  _viewMode = nextMode;
-  _showMap = _viewMode === 'map';
-  if (_showMap && changed) {
+  const changed = _viewMode !== 'map' || !_showMap;
+  _viewMode = 'map';
+  _showMap = true;
+  if (changed) {
     _mapManualSyncPending = true;
-  }
-  if (!_showMap) {
-    mapData = null;
   }
   renderViewModeButtons();
   updateOrbitModeControls();
-  if (_showMap && hasSelectedMap(_activeMapName) && (changed || !mapData || mapData.name !== _activeMapName)) {
+  if (_activeMapName && (changed || !mapData || mapData.name !== _activeMapName)) {
     loadMap(_activeMapName);
   } else {
-    if (_showMap && !hasSelectedMap(_activeMapName)) {
+    if (!_activeMapName) {
       mapData = null;
     }
     updateCanvasLabel();
@@ -141,14 +133,9 @@ function syncViewMode(mode) {
 }
 
 function setViewMode(mode) {
-  const target = (mode === 'orbit') ? 'orbit' : 'map';
-  if (target === _viewMode) return;
-  syncViewMode(target);
-  sendControl(`set_sim_view:${target}`, `sim view ${target}`);
-  if (target === 'map') {
-    _mapManualSyncPending = true;
-    enforceMapManualModes();
-  }
+  syncViewMode('map');
+  _mapManualSyncPending = true;
+  enforceMapManualModes();
 }
 
 function requestNodeMode(nodeId, mode, force = false) {
@@ -182,11 +169,11 @@ function updateOrbitModeControls() {
   const orbitControls = document.getElementById('orbit-mode-controls');
   const mapPlayControls = document.getElementById('map-play-controls');
   const note = document.getElementById('view-mode-note');
-  orbitControls.hidden = _viewMode !== 'orbit';
-  mapPlayControls.hidden = _viewMode === 'orbit';
-  note.textContent = _viewMode === 'orbit'
-    ? 'Orbit test is a two-player interaction smoke test. Map and ghost controls stay hidden here.'
-    : 'Map play is the default and forces both simulator nodes back to manual control.';
+  if (orbitControls) orbitControls.hidden = true;
+  if (mapPlayControls) mapPlayControls.hidden = false;
+  if (note) {
+    note.textContent = 'Map play is the default and forces both simulator nodes back to manual control.';
+  }
 }
 
 function updateCanvasLabel() {
@@ -196,13 +183,12 @@ function updateCanvasLabel() {
     const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
     const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
     el.textContent = `map play · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles · manual only${bitText}`;
+  } else if (_showMap && _activeMapName === LOBBY_MAP_NAME && mapData) {
+    el.textContent = `lobby staging · bordered room · choose a map, then press Start`;
   } else if (_showMap && !hasSelectedMap(_activeMapName)) {
     el.textContent = 'lobby staging · no map selected · choose a map, then press Start';
   } else if (_showMap) {
     el.textContent = `map play · ${_activeMapName} · loading map…`;
-  } else {
-    const selectedMap = latestState?.selected_map || _activeMapName || 'none';
-    el.textContent = `orbit test · selected map ${selectedMap} parked · auto/manual optional · 50u radius`;
   }
 }
 
@@ -391,38 +377,32 @@ function estimateStateAgeText() {
 function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
-  const parkedMap = state?.selected_map || _activeMapName || 'none';
+  const parkedMap = state?.selected_map || _selectedMapName || 'none';
   const liveMap = state?.active_map || _activeMapName || 'lobby';
-  const mapLabel = _viewMode === 'orbit' ? `${parkedMap} parked` : liveMap;
+  const liveMapLabel = liveMap === LOBBY_MAP_NAME ? 'lobby' : liveMap;
 
-  setTextIfPresent('hud-view-mode', _viewMode === 'orbit' ? 'Orbit Test' : 'Map Play');
-  setTextIfPresent('hud-map-name', mapLabel);
+  setTextIfPresent('hud-view-mode', 'Map Play');
+  setTextIfPresent('hud-map-name', liveMapLabel);
   setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
   setTextIfPresent('hud-player-count', `${playerCount} entities online`);
   setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
   setTextIfPresent('hud-latency', estimateStateAgeText());
-  setTextIfPresent(
-    'server-view-card',
-    _viewMode === 'orbit'
-      ? `orbit test · ${playerCount} entities`
-      : `map play · ${liveMap}`,
-  );
+  setTextIfPresent('server-view-card', `map play · ${liveMapLabel}`);
 }
 
-function updateMapSelector(activeMap) {
-  if (activeMap === 'orbit_test') return;
-  if (!hasSelectedMap(activeMap)) {
-    _activeMapName = '';
-    mapData = null;
+function updateMapSelector(activeMap, selectedMap = activeMap) {
+  const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
+  const nextSelectedMap = hasSelectedMap(selectedMap) ? selectedMap : '';
+  const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
+  _activeMapName = nextActiveMap;
+  _selectedMapName = nextSelectedMap;
+  if (changed) {
     renderMapButtons();
-    updateCanvasLabel();
-    return;
   }
-  if (activeMap === _activeMapName) return;
-  _activeMapName = activeMap;
-  renderMapButtons();
-  if (_showMap) {
-    loadMap(activeMap);
+  if (_showMap && (!mapData || mapData.name !== _activeMapName || changed)) {
+    loadMap(_activeMapName);
+  } else {
+    updateCanvasLabel();
   }
 }
 
@@ -431,6 +411,7 @@ function selectMap(name) {
     setViewMode('map');
   }
   sendControl(`set_map:${name}`, `map → ${name}`);
+  _selectedMapName = name;
   _activeMapName = name;
   renderMapButtons();
   loadMap(name);
