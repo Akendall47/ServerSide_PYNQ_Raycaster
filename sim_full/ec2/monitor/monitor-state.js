@@ -94,7 +94,7 @@ function renderMapButtons() {
 
   el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
-      class="control-btn${name === _selectedMapName ? ' start' : name === _activeMapName ? ' active-view' : ''}"
+      class="control-btn${name === _activeMapName ? ' start' : ''}"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
 }
