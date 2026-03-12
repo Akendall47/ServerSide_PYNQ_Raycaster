@@ -311,11 +311,11 @@ function updateGameHud(state) {
 function updateMapSelector(activeMap, selectedMap = activeMap) {
   const nextActiveMap = String(activeMap || '').trim() || LOBBY_MAP_NAME;
   const nextSelectedMap = isValidMapName(selectedMap) ? selectedMap : '';
-  const changed = nextActiveMap !== _activeMapName || nextSelectedMap !== _selectedMapName;
+  const activeChanged = nextActiveMap !== _activeMapName;
   _activeMapName = nextActiveMap;
   _selectedMapName = nextSelectedMap;
   renderMapButtons();
-  if (!mapData || mapData.name !== _activeMapName || changed) {
+  if (!mapData || mapData.name !== _activeMapName || activeChanged) {
     loadMap(_activeMapName);
   }
 }
@@ -323,9 +323,7 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
 function selectMap(name) {
   sendControl(`set_map:${name}`, `map → ${name}`);
   _selectedMapName = name;
-  _activeMapName = name;
   renderMapButtons();
-  loadMap(name);
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
