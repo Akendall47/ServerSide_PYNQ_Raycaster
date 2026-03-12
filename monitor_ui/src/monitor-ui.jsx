@@ -7,8 +7,10 @@ import { createPortal } from 'react-dom';
 
 import { monitorMarkup } from './templates.generated.js';
 
-const PYNQBoard = lazy(() => import('./components/PYNQBoard.jsx'));
-const PlayerStatsTab = lazy(() => import('./components/PlayerStatsTab.jsx'));
+const loadPYNQBoard = () => import('./components/PYNQBoard.jsx');
+const loadPlayerStatsTab = () => import('./components/PlayerStatsTab.jsx');
+const PYNQBoard = lazy(loadPYNQBoard);
+const PlayerStatsTab = lazy(loadPlayerStatsTab);
 
 const LEGACY_SCRIPTS = ['/monitor-state.js', '/monitor-render.js', '/monitor-app.js'];
 
@@ -92,6 +94,21 @@ function MonitorRoot({ mode }) {
 
   useEffect(() => {
     loadLegacyScripts();
+  }, []);
+
+  useEffect(() => {
+    const preload3D = () => {
+      loadPYNQBoard();
+      loadPlayerStatsTab();
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(preload3D, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(preload3D, 1200);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   return (

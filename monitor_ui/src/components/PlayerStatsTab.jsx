@@ -746,7 +746,7 @@ export default function PlayerStatsTab() {
                 </button>
 
                 <div className="player-card-summary">
-                  <PlayerTrophy player={player} pageVisible={pageVisible} animated={selected} />
+                  <PlayerTrophy player={player} pageVisible={pageVisible} animated={player.isOnline || selected} />
 
                   <div className="player-card-metrics">
                     <div className="metric-row"><span>career win rate</span><span>{formatPercent(player.total_wins, totalMatches)}</span></div>
