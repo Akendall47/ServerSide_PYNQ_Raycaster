@@ -357,14 +357,7 @@ function BoardStage({ hostSlot }) {
   );
 }
 
-export default function PYNQBoard({ hostRef }) {
-  const [portalTarget, setPortalTarget] = useState(null);
-
-  useEffect(() => {
-    const target = hostRef?.current?.querySelector('.about-react-board-slot');
-    setPortalTarget(target || null);
-  }, [hostRef]);
-
+export default function PYNQBoard({ portalTarget }) {
   if (!portalTarget) return null;
 
   return createPortal(<BoardStage hostSlot={portalTarget} />, portalTarget);

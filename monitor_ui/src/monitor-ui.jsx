@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import PYNQBoard from './components/PYNQBoard.jsx';
@@ -36,15 +36,34 @@ function loadLegacyScripts() {
 
 function MonitorRoot({ mode }) {
   const rootRef = useRef(null);
+  const [aboutSlot, setAboutSlot] = useState(null);
   const [playerSlot, setPlayerSlot] = useState(null);
 
   useEffect(() => {
     loadLegacyScripts();
   }, []);
 
-  useEffect(() => {
-    setPlayerSlot(rootRef.current?.querySelector('#player-stats-react-slot') || null);
-  }, []);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return () => {};
+
+    let rafId = 0;
+    const syncSlots = () => {
+      setAboutSlot(root.querySelector('.about-react-board-slot') || null);
+      setPlayerSlot(root.querySelector('#player-stats-react-slot') || null);
+    };
+
+    syncSlots();
+    rafId = requestAnimationFrame(syncSlots);
+
+    const observer = new MutationObserver(syncSlots);
+    observer.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [mode]);
 
   return (
     <>
@@ -53,7 +72,7 @@ function MonitorRoot({ mode }) {
         className="react-monitor-root"
         dangerouslySetInnerHTML={{ __html: monitorMarkup[mode] || monitorMarkup.pynq }}
       />
-      <PYNQBoard hostRef={rootRef} />
+      <PYNQBoard portalTarget={aboutSlot} />
       {playerSlot ? createPortal(<PlayerStatsTab />, playerSlot) : null}
     </>
   );
