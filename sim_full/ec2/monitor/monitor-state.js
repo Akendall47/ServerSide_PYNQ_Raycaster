@@ -235,25 +235,31 @@ function renderViewModeButtons() {
   if (!el.dataset.initialized) {
     el.innerHTML = `
       <button id="viewmode-map" class="control-btn active-view" type="button" onclick="setViewMode('map')">Map Play</button>
+      <button id="viewmode-auto" class="control-btn" type="button" onclick="setViewMode('auto')">Auto Test</button>
     `;
     el.dataset.initialized = '1';
   }
   const mapBtn = document.getElementById('viewmode-map');
+  const autoBtn = document.getElementById('viewmode-auto');
   if (mapBtn) {
-    mapBtn.classList.add('active-view');
+    mapBtn.classList.toggle('active-view', _viewMode === 'map');
+  }
+  if (autoBtn) {
+    autoBtn.classList.toggle('active-view', _viewMode === 'auto');
   }
 }
 
 function syncViewMode(mode) {
-  const changed = _viewMode !== 'map' || !_showMap;
-  _viewMode = 'map';
+  const target = mode === 'auto' ? 'auto' : 'map';
+  const changed = _viewMode !== target || !_showMap;
+  _viewMode = target;
   _showMap = true;
-  if (changed) {
+  if (_viewMode === 'map' && changed) {
     _mapManualSyncPending = true;
   }
   renderViewModeButtons();
   updateOrbitModeControls();
-  if (_activeMapName && (changed || !mapData || mapData.name !== _activeMapName)) {
+  if (_activeMapName && (!mapData || mapData.name !== _activeMapName)) {
     loadMap(_activeMapName);
   } else {
     if (!_activeMapName) {
@@ -265,7 +271,13 @@ function syncViewMode(mode) {
 }
 
 function setViewMode(mode) {
-  syncViewMode('map');
+  const target = mode === 'auto' ? 'auto' : 'map';
+  syncViewMode(target);
+  if (target === 'auto') {
+    requestNodeMode(1, 'auto', true);
+    requestNodeMode(2, 'auto', true);
+    return;
+  }
   _mapManualSyncPending = true;
   enforceMapManualModes();
 }
@@ -301,22 +313,27 @@ function updateOrbitModeControls() {
   const orbitControls = document.getElementById('orbit-mode-controls');
   const mapPlayControls = document.getElementById('map-play-controls');
   const note = document.getElementById('view-mode-note');
-  if (orbitControls) orbitControls.hidden = true;
-  if (mapPlayControls) mapPlayControls.hidden = false;
+  const autoMode = _viewMode === 'auto';
+  if (orbitControls) orbitControls.hidden = !autoMode;
+  if (mapPlayControls) mapPlayControls.hidden = autoMode;
   if (note) {
-    note.textContent = 'Map play is the default and forces both simulator nodes back to manual control.';
+    note.textContent = autoMode
+      ? 'Auto Test keeps the current map visible and lets both simulator nodes run in auto mode for smoke tests.'
+      : 'Map Play is the default and forces both simulator nodes back to manual control.';
   }
 }
 
 function updateCanvasLabel() {
   const el = document.getElementById('canvas-label');
+  const modeLabel = _viewMode === 'auto' ? 'auto test' : 'map play';
+  const controlLabel = _viewMode === 'auto' ? 'auto nodes' : 'manual only';
   if (_showMap && mapData) {
     const totalBits = latestState?.bits?.length || 0;
     const remainingBits = countActiveBits(latestState?.bits_mask ?? 0, totalBits);
     const bitText = totalBits ? ` · bits ${remainingBits}/${totalBits}` : '';
-    el.textContent = `map play · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles · manual only${bitText}`;
+    el.textContent = `${modeLabel} · ${_activeMapName} · ${mapData.width}×${mapData.height} tiles · ${controlLabel}${bitText}`;
   } else if (_showMap) {
-    el.textContent = `map play · ${_activeMapName} · loading map…`;
+    el.textContent = `${modeLabel} · ${_activeMapName} · loading map…`;
   }
 }
 
@@ -506,20 +523,21 @@ function updateGameHud(state) {
   const players = state?.players || [];
   const playerCount = players.length;
   const liveMap = state?.active_map || _activeMapName || 'lobby';
+  const modeLabel = _viewMode === 'auto' ? 'Auto Test' : 'Map Play';
 
-  setTextIfPresent('hud-view-mode', 'Map Play');
+  setTextIfPresent('hud-view-mode', modeLabel);
   setTextIfPresent('hud-map-name', liveMap);
   setTextIfPresent('hud-match-state', deriveMatchStateLabel(state));
   setTextIfPresent('hud-player-count', `${playerCount} entities online`);
   setTextIfPresent('hud-ws-rate', `${wsHz} / s`);
   setTextIfPresent('hud-latency', estimateStateAgeText());
-  setTextIfPresent('server-view-card', `map play · ${liveMap}`);
+  setTextIfPresent('server-view-card', `${modeLabel.toLowerCase()} · ${liveMap}`);
 }
 
 function updateMapSelector(activeMap, selectedMap = activeMap) {
   const incomingActiveMap = String(activeMap || '').trim();
   const _rawSelectedMap = String(selectedMap || '').trim();
-  const incomingSelectedMap = (_rawSelectedMap && _rawSelectedMap !== LOBBY_MAP_NAME) ? _rawSelectedMap : '';
+  const incomingSelectedMap = _rawSelectedMap || incomingActiveMap;
   const pendingAlive = Boolean(
     _pendingMapName && (performance.now() - _pendingMapRequestedAt) < MAP_SELECT_GRACE_MS,
   );
@@ -555,9 +573,6 @@ function updateMapSelector(activeMap, selectedMap = activeMap) {
 }
 
 function selectMap(name) {
-  if (_viewMode !== 'map') {
-    setViewMode('map');
-  }
   _pendingMapName = name;
   _pendingMapRequestedAt = performance.now();
   sendControl(`set_map:${name}`, `map → ${name}`);
@@ -650,3 +665,6 @@ window.deleteMapFromControls = deleteMapFromControls;
 window.loadMapList = loadMapList;
 window.requestMapListRefresh = requestMapListRefresh;
 window.invalidateMonitorMapCache = invalidateMapCache;
+window.setViewMode = setViewMode;
+window.requestNodeMode = requestNodeMode;
+window.requestNodeConnection = requestNodeConnection;

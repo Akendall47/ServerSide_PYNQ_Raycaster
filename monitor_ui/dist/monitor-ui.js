@@ -940,8 +940,8 @@ Error generating stack: `+n.message+`
             <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
 
             <div id="orbit-mode-controls" hidden>
-              <div class="metric-note" style="margin-top:12px;">Orbit Test Controls</div>
-              <div class="metric-note">Orbit view is only for smoke-testing server movement. Auto/manual switching stays here.</div>
+              <div class="metric-note" style="margin-top:12px;">Auto Test Controls</div>
+              <div class="metric-note">Auto Test keeps the selected map loaded and lets the simulator nodes run hands-free.</div>
               <div class="metric-note" style="margin-top:12px;">Node 1</div>
               <div class="control-pair">
                 <button class="control-btn" type="button" onclick="requestNodeConnection(1, 'reconnect')">P1 Connect</button>

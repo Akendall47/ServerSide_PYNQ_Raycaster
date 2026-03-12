@@ -406,7 +406,7 @@ function connect() {
     latestState = state;
     window.latestState = state;
     window.dispatchEvent(new CustomEvent(MONITOR_STATE_EVENT, { detail: state }));
-    syncViewMode(state.sim_view_mode || 'map');
+    syncViewMode(_viewMode);
     updateGameHud(state);
     maybeEnforceMapManual(state.players || []);
     if (!replayState.active) updatePlayers(state.players);
