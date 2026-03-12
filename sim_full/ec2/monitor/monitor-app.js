@@ -349,7 +349,8 @@ async function sendControl(cmd, label) {
   }
 }
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProto}://${location.host}/ws`);
   ws.onopen = () => {
     statusEl.textContent = '● LIVE';
     statusEl.className   = 'connected';
