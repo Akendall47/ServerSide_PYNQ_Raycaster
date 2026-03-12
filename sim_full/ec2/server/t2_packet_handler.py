@@ -154,6 +154,7 @@ class PacketHandler:
             )
         if (
             movement_mode != MOVEMENT_MODE_INTENT_ONLY
+            and last is not None
             and not validate_position(
                 last, p["x"], p["y"], p["angle"],
                 next_x, next_y, angle, seq,
