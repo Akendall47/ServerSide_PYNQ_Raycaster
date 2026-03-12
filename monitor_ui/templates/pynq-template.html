@@ -427,12 +427,12 @@
           </div>
         </div>
 
-        <div class="panel-raised controls-sim scroll-panel">
+        <div class="panel-raised controls-sim">
           <div class="panel-head">
             <h2>Match Config</h2>
             <span class="micro-chip">fpga live</span>
           </div>
-          <div class="scroll-panel-body">
+          <div class="panel-body-stack">
             <div class="metric-note">Server ghost controls add pressure on the EC2 side without changing the board firmware.</div>
             <div class="metric-note" style="margin-top:12px;">Ghost Taggers</div>
             <div class="control-stack">
@@ -441,8 +441,26 @@
               <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
               <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
             </div>
-            <div class="metric-note" style="margin-top:12px;">Map Selection</div>
-            <div class="control-stack" id="map-btn-list">
+            <div class="metric-note">Match controls stay fixed here so the admin deck does not jump around while you search long map catalogs.</div>
+          </div>
+        </div>
+
+        <div class="panel-raised controls-maps scroll-panel">
+          <div class="panel-head">
+            <h2>Hot Swap Maps</h2>
+            <span class="micro-chip">search + load</span>
+          </div>
+          <div class="scroll-panel-body">
+            <input
+              id="map-filter-input"
+              class="control-search-input"
+              type="text"
+              spellcheck="false"
+              placeholder="filter maps by name"
+              oninput="setMapFilterText(this.value)"
+            >
+            <div class="metric-note">Search runtime-safe maps, then hot-swap the selected arena onto the live server.</div>
+            <div class="control-stack controls-map-list" id="map-btn-list">
               <span style="color:#90a3c4">loading maps...</span>
             </div>
             <div class="metric-note">Map changes publish to the live server and take effect on the next match reset.</div>

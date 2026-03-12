@@ -27,12 +27,12 @@ export default function MapToolbar({
   onPushLive,
 }) {
   return (
-    <div className="map-editor-toolbar panel-raised scroll-panel">
+    <div className="map-editor-toolbar panel-raised">
       <div className="panel-head">
         <h2>Arena Draft</h2>
         <span className="micro-chip">{draftDirty ? 'unsaved edits' : 'clean'}</span>
       </div>
-      <div className="scroll-panel-body">
+      <div className="map-editor-toolbar-body">
         <label className="map-editor-field">
           <span className="map-editor-label">Map Name</span>
           <input

@@ -1000,6 +1000,13 @@
     overscroll-behavior: contain;
   }
 
+  .panel-body-stack {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
   .server-health {
     grid-column: span 4;
   }
@@ -1551,24 +1558,50 @@
   }
 
   .controls-actions {
-    grid-column: span 4;
+    grid-column: span 3;
     max-height: min(68vh, 760px);
   }
 
   .controls-sim {
     grid-column: span 5;
     max-height: min(68vh, 760px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
-  .controls-notes {
-    grid-column: span 3;
+  .controls-maps {
+    grid-column: span 4;
     max-height: min(68vh, 760px);
   }
 
+  .controls-notes {
+    grid-column: 1 / -1;
+    max-height: min(30vh, 320px);
+  }
+
   .controls-actions .scroll-panel-body,
-  .controls-sim .scroll-panel-body,
+  .controls-sim .panel-body-stack,
+  .controls-maps .scroll-panel-body,
   .controls-notes .scroll-panel-body {
     flex: 1;
+  }
+
+  .controls-sim .panel-body-stack {
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+  }
+
+  .controls-maps .control-search-input {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .controls-map-list {
+    min-height: 0;
   }
 
   .about-page {
@@ -2318,7 +2351,7 @@
 
   .map-editor-sidebar {
     display: grid;
-    grid-template-rows: minmax(0, auto) minmax(280px, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
     min-width: 0;
     min-height: 0;
@@ -2377,14 +2410,21 @@
   }
 
   .map-editor-toolbar {
-    max-height: min(44vh, 560px);
+    min-height: 0;
   }
 
   .map-library-panel {
-    min-height: 280px;
+    min-height: 0;
   }
 
-  .map-editor-toolbar .scroll-panel-body,
+  .map-editor-toolbar-body,
+  .map-library-panel .scroll-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+  }
+
   .map-library-panel .scroll-panel-body {
     flex: 1;
   }
@@ -2414,7 +2454,8 @@
     color: var(--cyan);
   }
 
-  .map-editor-input {
+  .map-editor-input,
+  .control-search-input {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid rgba(0, 212, 255, 0.14);
@@ -2423,7 +2464,8 @@
     font: inherit;
   }
 
-  .map-editor-input:focus {
+  .map-editor-input:focus,
+  .control-search-input:focus {
     outline: 2px solid rgba(0, 212, 255, 0.24);
     outline-offset: 0;
   }
@@ -2477,6 +2519,17 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+
+  .map-library-search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 8px;
+    background: linear-gradient(180deg, rgba(13, 22, 40, 0.98) 0%, rgba(13, 22, 40, 0.92) 80%, rgba(13, 22, 40, 0) 100%);
   }
 
   .map-library-section {
@@ -2545,6 +2598,7 @@
   [data-theme="light"] .map-editor-notice,
   [data-theme="light"] .map-editor-validation,
   [data-theme="light"] .map-editor-input,
+  [data-theme="light"] .control-search-input,
   [data-theme="light"] .map-editor-canvas-stage {
     background: rgba(255, 255, 255, 0.62);
   }
@@ -2552,6 +2606,10 @@
   [data-theme="light"] .map-editor-canvas-meta,
   [data-theme="light"] .map-library-subtitle {
     color: #4d5f76;
+  }
+
+  [data-theme="light"] .map-library-search {
+    background: linear-gradient(180deg, rgba(244, 240, 232, 0.98) 0%, rgba(244, 240, 232, 0.92) 80%, rgba(244, 240, 232, 0) 100%);
   }
 
   @keyframes player-spin {
@@ -2610,6 +2668,7 @@
     .profiler-panel,
     .controls-actions,
     .controls-sim,
+    .controls-maps,
     .controls-notes {
       grid-column: span 12;
     }
@@ -2644,6 +2703,7 @@
 
     .controls-actions,
     .controls-sim,
+    .controls-maps,
     .controls-notes,
     .map-editor-sidebar,
     .map-editor-toolbar,
@@ -2656,6 +2716,7 @@
       overflow: visible;
     }
 
+    .controls-sim .panel-body-stack,
     .scroll-panel-body {
       overflow: visible;
       padding-right: 0;

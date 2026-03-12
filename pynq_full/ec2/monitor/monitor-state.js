@@ -18,6 +18,7 @@ const FLAG_GHOST     = 0x08;
 let mapData = null;   // { width, height, tile_scale, tiles: [[0|1, ...], ...] }
 let _availableMaps = [];
 let _activeMapName = 'chase';
+let _mapFilterText = '';
 let _activePage = 'game';
 let _archiveDrawerOpen = false;
 const frameTimeHistory = [];
@@ -59,12 +60,31 @@ async function loadMapList() {
 
 function renderMapButtons() {
   const el = document.getElementById('map-btn-list');
-  if (!_availableMaps.length) { el.innerHTML = '<span style="color:#333">no maps found</span>'; return; }
-  el.innerHTML = _availableMaps.map(name => `
+  if (!el) return;
+  if (!_availableMaps.length) {
+    el.innerHTML = '<span style="color:#333">no maps found</span>';
+    return;
+  }
+
+  const filteredMaps = _availableMaps.filter((name) => (
+    !_mapFilterText || String(name).toLowerCase().includes(_mapFilterText)
+  ));
+
+  if (!filteredMaps.length) {
+    el.innerHTML = '<span style="color:#90a3c4">no maps match that filter</span>';
+    return;
+  }
+
+  el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
       class="control-btn${name === _activeMapName ? ' start' : ''}"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
+}
+
+function setMapFilterText(value) {
+  _mapFilterText = String(value || '').trim().toLowerCase();
+  renderMapButtons();
 }
 
 function updateCanvasLabel() {
@@ -340,4 +360,5 @@ function countActiveBits(bitsMask, totalBits) {
 
 // Expose tab/UI functions needed by inline onclick handlers in the template HTML.
 window.setActiveTab = setActiveTab;
+window.setMapFilterText = setMapFilterText;
 window.toggleArchiveDrawer = toggleArchiveDrawer;

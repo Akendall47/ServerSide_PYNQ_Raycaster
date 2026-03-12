@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useDeferredValue, useState } from 'react';
 import { formatMapTimestamp } from './utils.js';
 
 function MapCard({ entry, activeMapId, selectedMapId, deletingId, onLoadToEditor, onApplyMap, onDeleteMap }) {
@@ -57,75 +57,88 @@ export default function MapLibrary({
   onApplyMap,
   onDeleteMap,
 }) {
-  if (loading) {
-    return (
-      <div className="panel-raised map-library-panel scroll-panel">
-        <div className="panel-head">
-          <h2>Saved Maps</h2>
-          <span className="micro-chip">loading</span>
-        </div>
-        <div className="scroll-panel-body">
-          <div className="metric-note">scanning runtime map catalog...</div>
-        </div>
-      </div>
-    );
-  }
+  const [filterText, setFilterText] = useState('');
+  const deferredFilterText = useDeferredValue(filterText.trim().toLowerCase());
 
-  if (!entries.length) {
-    return (
-      <div className="panel-raised map-library-panel scroll-panel">
-        <div className="panel-head">
-          <h2>Saved Maps</h2>
-          <span className="micro-chip">empty</span>
-        </div>
-        <div className="scroll-panel-body">
-          <div className="metric-note">no runtime-safe maps have been saved yet.</div>
-        </div>
-      </div>
-    );
-  }
+  const filteredEntries = deferredFilterText
+    ? entries.filter((entry) => (
+      String(entry.map_name || '').toLowerCase().includes(deferredFilterText)
+      || String(entry.map_id || '').toLowerCase().includes(deferredFilterText)
+    ))
+    : entries;
 
-  const editorMaps = entries.filter((entry) => entry.source === 'editor');
-  const systemMaps = entries.filter((entry) => entry.source !== 'editor');
+  const editorMaps = filteredEntries.filter((entry) => entry.source === 'editor');
+  const systemMaps = filteredEntries.filter((entry) => entry.source !== 'editor');
   const sections = [
     { title: 'Editor Drafts', rows: editorMaps, chip: `${editorMaps.length}` },
     { title: 'System Maps', rows: systemMaps, chip: `${systemMaps.length}` },
   ].filter((section) => section.rows.length);
 
+  const chipLabel = loading
+    ? 'loading'
+    : !entries.length
+      ? 'empty'
+      : deferredFilterText
+        ? `${filteredEntries.length}/${entries.length}`
+        : `${entries.length} total`;
+
   return (
     <div className="panel-raised map-library-panel scroll-panel">
       <div className="panel-head">
         <h2>Saved Maps</h2>
-        <span className="micro-chip">{entries.length} total</span>
+        <span className="micro-chip">{chipLabel}</span>
       </div>
       <div className="scroll-panel-body">
-        <div className="metric-note">
-          Editor drafts are deletable sidecar-backed maps. System maps stay protected so the monitor cannot delete the shipped runtime set.
+        <div className="map-library-search">
+          <input
+            className="map-editor-input control-search-input"
+            type="text"
+            value={filterText}
+            onChange={(event) => setFilterText(event.target.value)}
+            spellCheck="false"
+            placeholder="search saved maps by name or id"
+          />
+          <div className="metric-note">
+            Editor drafts are deletable sidecar-backed maps. System maps stay protected so the monitor cannot delete the shipped runtime set.
+          </div>
         </div>
-        <div className="map-library-section-stack">
-          {sections.map((section) => (
-            <section key={section.title} className="map-library-section">
-              <div className="panel-head">
-                <h3>{section.title}</h3>
-                <span className="micro-chip">{section.chip}</span>
-              </div>
-              <div className="map-library-grid">
-                {section.rows.map((entry) => (
-                  <MapCard
-                    key={entry.map_id}
-                    entry={entry}
-                    activeMapId={activeMapId}
-                    selectedMapId={selectedMapId}
-                    deletingId={deletingId}
-                    onLoadToEditor={onLoadToEditor}
-                    onApplyMap={onApplyMap}
-                    onDeleteMap={onDeleteMap}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+
+        {loading ? <div className="metric-note">scanning runtime map catalog...</div> : null}
+
+        {!loading && !entries.length ? (
+          <div className="metric-note">no runtime-safe maps have been saved yet.</div>
+        ) : null}
+
+        {!loading && entries.length && !filteredEntries.length ? (
+          <div className="metric-note">no saved maps match that search.</div>
+        ) : null}
+
+        {!loading && sections.length ? (
+          <div className="map-library-section-stack">
+            {sections.map((section) => (
+              <section key={section.title} className="map-library-section">
+                <div className="panel-head">
+                  <h3>{section.title}</h3>
+                  <span className="micro-chip">{section.chip}</span>
+                </div>
+                <div className="map-library-grid">
+                  {section.rows.map((entry) => (
+                    <MapCard
+                      key={entry.map_id}
+                      entry={entry}
+                      activeMapId={activeMapId}
+                      selectedMapId={selectedMapId}
+                      deletingId={deletingId}
+                      onLoadToEditor={onLoadToEditor}
+                      onApplyMap={onApplyMap}
+                      onDeleteMap={onDeleteMap}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

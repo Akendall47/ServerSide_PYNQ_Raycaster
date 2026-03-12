@@ -426,12 +426,12 @@
           </div>
         </div>
 
-        <div class="panel-raised controls-sim scroll-panel">
+        <div class="panel-raised controls-sim">
           <div class="panel-head">
             <h2>Simulation Mode</h2>
             <span class="micro-chip">manual / auto</span>
           </div>
-          <div class="scroll-panel-body">
+          <div class="panel-body-stack">
             <div class="metric-note">View Mode</div>
             <div class="control-pair" id="view-mode-btns"></div>
             <div class="metric-note" id="view-mode-note">map play is the default and forces both simulator nodes back to manual control.</div>
@@ -477,12 +477,30 @@
                 <button class="control-btn" type="button" onclick="sendControl('set_ghosts_2', 'ghost count → 2')">2 Ghosts</button>
                 <button class="control-btn" type="button" onclick="sendControl('set_ghosts_3', 'ghost count → 3')">3 Ghosts</button>
               </div>
-              <div class="metric-note" style="margin-top:12px;">Map (hot-swap mid-session)</div>
-              <div class="control-stack" id="map-btn-list">
-                <span style="color:#90a3c4">loading maps...</span>
-              </div>
-              <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
+              <div class="metric-note">Map play controls stay fixed here so you can keep orbit/manual/lobby actions visible while browsing maps.</div>
             </div>
+          </div>
+        </div>
+
+        <div class="panel-raised controls-maps scroll-panel">
+          <div class="panel-head">
+            <h2>Hot Swap Maps</h2>
+            <span class="micro-chip">search + load</span>
+          </div>
+          <div class="scroll-panel-body">
+            <input
+              id="map-filter-input"
+              class="control-search-input"
+              type="text"
+              spellcheck="false"
+              placeholder="filter maps by name"
+              oninput="setMapFilterText(this.value)"
+            >
+            <div class="metric-note">Search runtime-safe maps and hot-swap the current sim arena without losing the fixed view/control pane.</div>
+            <div class="control-stack controls-map-list" id="map-btn-list">
+              <span style="color:#90a3c4">loading maps...</span>
+            </div>
+            <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
           </div>
         </div>
 
