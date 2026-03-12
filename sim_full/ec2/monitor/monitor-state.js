@@ -34,6 +34,7 @@ let _showMap = true;  // map play is the default; orbit view is a sim-only test 
 let _viewMode = 'map';
 const requestedNodeModes = { 1: 'manual', 2: 'manual' };
 let _mapManualSyncPending = true;
+let _autoPlayArmed = false;
 let _activePage = 'game';
 let _archiveDrawerOpen = false;
 const frameTimeHistory = [];
@@ -235,7 +236,7 @@ function renderViewModeButtons() {
   if (!el.dataset.initialized) {
     el.innerHTML = `
       <button id="viewmode-map" class="control-btn active-view" type="button" onclick="setViewMode('map')">Map Play</button>
-      <button id="viewmode-auto" class="control-btn" type="button" onclick="setViewMode('auto')">Auto Test</button>
+      <button id="viewmode-auto" class="control-btn" type="button" onclick="setViewMode('auto')">Auto Play</button>
     `;
     el.dataset.initialized = '1';
   }
@@ -274,10 +275,12 @@ function setViewMode(mode) {
   const target = mode === 'auto' ? 'auto' : 'map';
   syncViewMode(target);
   if (target === 'auto') {
+    _autoPlayArmed = true;
     requestNodeMode(1, 'auto', true);
     requestNodeMode(2, 'auto', true);
     return;
   }
+  _autoPlayArmed = false;
   _mapManualSyncPending = true;
   enforceMapManualModes();
 }
@@ -318,7 +321,7 @@ function updateOrbitModeControls() {
   if (mapPlayControls) mapPlayControls.hidden = autoMode;
   if (note) {
     note.textContent = autoMode
-      ? 'Auto Test keeps the current map visible and lets both simulator nodes run in auto mode for smoke tests.'
+      ? 'Auto Play keeps the current map visible, switches both simulator nodes to auto, and starts once both are ready.'
       : 'Map Play is the default and forces both simulator nodes back to manual control.';
   }
 }
@@ -577,6 +580,9 @@ function selectMap(name) {
   _pendingMapRequestedAt = performance.now();
   sendControl(`set_map:${name}`, `map → ${name}`);
   _selectedMapName = name;
+  if (_viewMode === 'auto') {
+    _autoPlayArmed = true;
+  }
   renderMapButtons();
 }
 
@@ -668,3 +674,7 @@ window.invalidateMonitorMapCache = invalidateMapCache;
 window.setViewMode = setViewMode;
 window.requestNodeMode = requestNodeMode;
 window.requestNodeConnection = requestNodeConnection;
+window.isAutoPlayArmed = () => _autoPlayArmed;
+window.clearAutoPlayArmed = () => {
+  _autoPlayArmed = false;
+};

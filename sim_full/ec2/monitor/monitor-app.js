@@ -424,6 +424,7 @@ function connect() {
         ? state.selected_map
         : state.active_map,
     );
+    maybeStartAutoPlay(state);
     wsUpdateCount++;
     const now = performance.now();
     if (now - wsLastTime >= 1000) {
@@ -437,6 +438,25 @@ function connect() {
     setTimeout(connect, 2000);
   };
   ws.onerror = () => ws.close();
+}
+
+function maybeStartAutoPlay(state) {
+  if (_viewMode !== 'auto') return;
+  if (typeof window.isAutoPlayArmed === 'function' && !window.isAutoPlayArmed()) return;
+  if (!state?.match || state.match.started || state.match.ended || state.match.paused) return;
+
+  const liveMap = String(state.active_map || '').trim().toLowerCase();
+  if (!liveMap || liveMap === 'lobby') return;
+
+  const players = normalisePlayers(state.players);
+  const readyHumans = players.filter((player) => !player.queued && !(player.flags & FLAG_GHOST)).length;
+  const queuedHumans = players.filter((player) => player.queued && !(player.flags & FLAG_GHOST)).length;
+  if ((readyHumans + queuedHumans) < 2) return;
+
+  if (typeof window.clearAutoPlayArmed === 'function') {
+    window.clearAutoPlayArmed();
+  }
+  sendControl('start_match', 'auto play start');
 }
 
 function initThemeToggle() {
