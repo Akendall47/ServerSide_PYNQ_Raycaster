@@ -356,6 +356,7 @@ function connect() {
       for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
     }
     latestState = state;
+    window.latestState = state;
     updateGameHud(state);
     if (!replayState.active) updatePlayers(state.players);
     updateNodeLinks(state.players);

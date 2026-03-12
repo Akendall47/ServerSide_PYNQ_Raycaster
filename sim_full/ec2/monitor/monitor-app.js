@@ -358,6 +358,7 @@ function connect() {
       for (const k of Object.keys(lastLivePos)) delete lastLivePos[k];
     }
     latestState = state;
+    window.latestState = state;
     syncViewMode(state.sim_view_mode || 'map');
     updateGameHud(state);
     maybeEnforceMapManual(state.players || []);

@@ -21,6 +21,7 @@
       <button id="tab-server" class="nav-tab" type="button" onclick="setActiveTab('server')">Server Monitoring</button>
       <button id="tab-controls" class="nav-tab" type="button" onclick="setActiveTab('controls')">Controls &amp; Config</button>
       <button id="tab-about" class="nav-tab" type="button" onclick="setActiveTab('about')">About</button>
+      <button id="tab-players" class="nav-tab" type="button" onclick="setActiveTab('players')">Player Stats</button>
     </nav>
     <div class="top-status">
       <span id="status" class="disconnected">● DISCONNECTED</span>
@@ -499,6 +500,11 @@
           </div>
         </div>
       </section>
+    </section>
+
+    <section id="page-players" class="page player-stats-page" hidden>
+      <div class="section-label">Player Stats</div>
+      <div id="player-stats-react-slot"></div>
     </section>
   </main>
 </div>

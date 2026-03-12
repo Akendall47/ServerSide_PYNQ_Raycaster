@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import PYNQBoard from './components/PYNQBoard.jsx';
+import PlayerStatsTab from './components/PlayerStatsTab.jsx';
 
 // Swap this import back in if we want the legacy coin centerpiece again.
 // import PYNQCASTCoin from './components/PYNQCASTCoin.jsx';
@@ -34,9 +36,14 @@ function loadLegacyScripts() {
 
 function MonitorRoot({ mode }) {
   const rootRef = useRef(null);
+  const [playerSlot, setPlayerSlot] = useState(null);
 
   useEffect(() => {
     loadLegacyScripts();
+  }, []);
+
+  useEffect(() => {
+    setPlayerSlot(rootRef.current?.querySelector('#player-stats-react-slot') || null);
   }, []);
 
   return (
@@ -47,6 +54,7 @@ function MonitorRoot({ mode }) {
         dangerouslySetInnerHTML={{ __html: monitorMarkup[mode] || monitorMarkup.pynq }}
       />
       <PYNQBoard hostRef={rootRef} />
+      {playerSlot ? createPortal(<PlayerStatsTab />, playerSlot) : null}
     </>
   );
 }

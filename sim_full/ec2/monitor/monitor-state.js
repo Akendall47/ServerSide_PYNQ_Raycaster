@@ -168,9 +168,9 @@ function updateCanvasLabel() {
 }
 
 function setActiveTab(tab) {
-  const target = (tab === 'server' || tab === 'controls' || tab === 'about') ? tab : 'game';
+  const target = (tab === 'server' || tab === 'controls' || tab === 'about' || tab === 'players') ? tab : 'game';
   _activePage = target;
-  ['game', 'server', 'controls', 'about'].forEach((page) => {
+  ['game', 'server', 'controls', 'about', 'players'].forEach((page) => {
     const panel = document.getElementById(`page-${page}`);
     const tabBtn = document.getElementById(`tab-${page}`);
     if (panel) panel.hidden = page !== target;
@@ -391,6 +391,7 @@ function selectMap(name) {
 
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
+window.latestState = latestState;
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
 let renderCount = 0, renderLastTime = performance.now();
 

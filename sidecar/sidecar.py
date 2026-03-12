@@ -646,7 +646,43 @@ def persist_player_history(match_id: str, match_players: list, status: str, ende
         role = game_role_for_player(player_id, int(merged.get("flags", 0)))
         winner = str(final_meta.get("winner", "") or "")
         won = int(bool(winner) and winner == role)
+        tag_count = int(final_meta.get("tag_count", 0) or 0)
+        bits_collected = int(final_meta.get("bits_collected", 0) or 0)
         duration_ms = final_meta.get("duration_ms")
+
+        add_names = {"#match_count": "match_count"}
+        add_values = {":match_inc": 1}
+        add_parts = ["#match_count :match_inc"]
+
+        if role == "runner":
+            add_names["#matches_as_runner"] = "matches_as_runner"
+            add_parts.append("#matches_as_runner :match_inc")
+            if won:
+                add_names["#wins_as_runner"] = "wins_as_runner"
+                add_names["#total_wins"] = "total_wins"
+                add_parts.append("#wins_as_runner :match_inc")
+                add_parts.append("#total_wins :match_inc")
+            if tag_count:
+                add_names["#times_tagged"] = "times_tagged"
+                add_values[":tag_inc"] = tag_count
+                add_parts.append("#times_tagged :tag_inc")
+        elif role == "tagger":
+            add_names["#matches_as_tagger"] = "matches_as_tagger"
+            add_parts.append("#matches_as_tagger :match_inc")
+            if won:
+                add_names["#wins_as_tagger"] = "wins_as_tagger"
+                add_names["#total_wins"] = "total_wins"
+                add_parts.append("#wins_as_tagger :match_inc")
+                add_parts.append("#total_wins :match_inc")
+            if tag_count:
+                add_names["#total_tags_landed"] = "total_tags_landed"
+                add_values[":tag_inc"] = tag_count
+                add_parts.append("#total_tags_landed :tag_inc")
+
+        if bits_collected:
+            add_names["#total_bits_collected"] = "total_bits_collected"
+            add_values[":bits_inc"] = bits_collected
+            add_parts.append("#total_bits_collected :bits_inc")
 
         try:
             player_table.update_item(
@@ -656,7 +692,7 @@ def persist_player_history(match_id: str, match_players: list, status: str, ende
                     "#controller_key = :controller_key, #identity_source = :identity_source, "
                     "#last_seen_at = :last_seen_at, #last_match_id = :last_match_id, "
                     "#first_seen_at = if_not_exists(#first_seen_at, :first_seen_at) "
-                    "ADD #match_count :match_inc"
+                    "ADD " + ", ".join(add_parts)
                 ),
                 ExpressionAttributeNames={
                     "#display_name": "display_name",
@@ -666,7 +702,7 @@ def persist_player_history(match_id: str, match_players: list, status: str, ende
                     "#last_seen_at": "last_seen_at",
                     "#last_match_id": "last_match_id",
                     "#first_seen_at": "first_seen_at",
-                    "#match_count": "match_count",
+                    **add_names,
                 },
                 ExpressionAttributeValues={
                     ":display_name": str(merged.get("display_name", "") or player_key),
@@ -676,7 +712,7 @@ def persist_player_history(match_id: str, match_players: list, status: str, ende
                     ":last_seen_at": ended_at,
                     ":last_match_id": match_id,
                     ":first_seen_at": ended_at,
-                    ":match_inc": 1,
+                    **add_values,
                 },
             )
 
@@ -695,9 +731,9 @@ def persist_player_history(match_id: str, match_players: list, status: str, ende
                 "identity_source": str(merged.get("identity_source", "") or ""),
                 "game_mode": int(final_meta.get("game_mode", GAME_MODE_CHASE) or GAME_MODE_CHASE),
                 "map_name": str(final_meta.get("map_name", "") or ""),
-                "tag_count": int(final_meta.get("tag_count", 0) or 0),
+                "tag_count": tag_count,
                 "bits_total": int(final_meta.get("bits_total", 0) or 0),
-                "bits_collected": int(final_meta.get("bits_collected", 0) or 0),
+                "bits_collected": bits_collected,
                 "end_reason": str(final_meta.get("end_reason", "") or ""),
                 "winner": winner,
                 "x": Decimal(str(float(merged.get("x", 0.0)))),
