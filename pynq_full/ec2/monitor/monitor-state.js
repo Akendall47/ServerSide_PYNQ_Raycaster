@@ -54,7 +54,12 @@ async function loadMapList() {
     if (!resp.ok) return;
     const data = await resp.json();
     _availableMaps = data.maps || [];
-    renderMapButtons();
+    updateMapSelector(
+      data.active_map,
+      Object.prototype.hasOwnProperty.call(data, 'selected_map')
+        ? data.selected_map
+        : data.active_map,
+    );
   } catch (e) {
     console.warn('[monitor] map list load failed:', e);
   }
@@ -79,7 +84,7 @@ function renderMapButtons() {
 
   el.innerHTML = filteredMaps.map(name => `
     <button id="mapbtn-${name}"
-      class="control-btn${name === _selectedMapName ? ' start' : ''}"
+      class="control-btn${name === _selectedMapName ? ' start' : name === _activeMapName ? ' active-view' : ''}"
       onclick="selectMap('${name}')">${name}</button>
   `).join('');
 }
