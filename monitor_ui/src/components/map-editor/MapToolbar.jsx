@@ -95,7 +95,7 @@ export default function MapToolbar({
             </button>
           </div>
           <div className="metric-note">
-            Brush uses left-drag for walls and right-drag for erase. Spawns place P1 then P2 on empty tiles only. Bits toggle collectible anchors on empty tiles.
+            Brush uses left-drag for walls and right-drag for erase. Spawns place P1 through P5 on empty tiles only. Bits toggle collectible anchors on empty tiles.
           </div>
         </div>
 
