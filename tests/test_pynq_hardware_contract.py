@@ -258,6 +258,34 @@ def test_test_package_runtime_mode_packet_switches_live_mode():
         assert state["mode"] == "auto"
 
 
+def test_test_package_manual_input_uses_runtime_speed_override():
+    with pynq_import_context():
+        test_package = importlib.import_module("test_package_v2")
+
+        class Buttons:
+            def read(self):
+                return test_package.BUTTON_FORWARD_MASK
+
+        state = {
+            "x": 0.0,
+            "y": 0.0,
+            "angle": 0.0,
+            "angle_raw": 0,
+            "input_flags": 0,
+            "map_w": 32,
+            "map_h": 32,
+            "tile_scale": 8,
+            "tiles": bytearray(32 * 32),
+            "move_speed": 0.75,
+            "turn_step": 64,
+        }
+
+        test_package._apply_manual_input(state, Buttons())
+
+        assert state["x"] == 0.75
+        assert state["y"] == 0.0
+
+
 def test_pynq_client_drop_to_registration_clears_live_state():
     with pynq_import_context():
         pynq_client = importlib.import_module("pynq_client")

@@ -21,7 +21,7 @@ import protocol
 # Keep protocol.py beside this file on the board.
 #
 # Copy to board:
-#   scp ref_files/test_package_v2.py pynq_full/interfacing/protocol.py \
+#   scp jupyter_side/test_package_v2.py pynq_full/interfacing/protocol.py \
 #       xilinx@<PYNQ_IP>:/home/xilinx/jupyter_notebooks/
 #
 # Run on board:
@@ -476,11 +476,11 @@ def _apply_auto_input(state: dict) -> None:
     target = objective["target"]
 
     if mode == "chase":
-        move_speed = AUTO_TAGGER_SPEED
+        move_speed = float(state.get("auto_tagger_speed", AUTO_TAGGER_SPEED))
     elif mode in {"evade", "collect", "kite"}:
-        move_speed = AUTO_RUNNER_SPEED
+        move_speed = float(state.get("auto_runner_speed", AUTO_RUNNER_SPEED))
     else:
-        move_speed = AUTO_FALLBACK_SPEED
+        move_speed = float(state.get("auto_fallback_speed", AUTO_FALLBACK_SPEED))
 
     if target is None:
         roam_target = (
@@ -503,8 +503,10 @@ def _apply_auto_input(state: dict) -> None:
 
     if mode == "chase":
         distance = math.hypot(target[0] - state["x"], target[1] - state["y"])
-        aligned = abs(_wrap_angle(desired_angle - next_angle)) <= AUTO_TAGGER_SHOOT_ARC
-        if aligned and distance <= AUTO_TAGGER_SHOOT_RANGE and (state["tick"] % AUTO_TAGGER_SHOOT_PERIOD_TICKS == 0):
+        aligned = abs(_wrap_angle(desired_angle - next_angle)) <= float(state.get("auto_tagger_shoot_arc", AUTO_TAGGER_SHOOT_ARC))
+        shoot_range = float(state.get("auto_tagger_shoot_range", AUTO_TAGGER_SHOOT_RANGE))
+        shoot_period = int(state.get("auto_tagger_shoot_period_ticks", AUTO_TAGGER_SHOOT_PERIOD_TICKS))
+        if aligned and distance <= shoot_range and (state["tick"] % max(1, shoot_period) == 0):
             state["input_flags"] = protocol.FLAG_SHOOTING
 
 
@@ -512,18 +514,20 @@ def _apply_auto_input(state: dict) -> None:
 def _apply_manual_input(state: dict, buttons) -> None:
     raw = buttons.read() & 0xF
     state["input_flags"] = 0
+    turn_step = int(state.get("turn_step", TURN_STEP))
     if raw & BUTTON_TURN_LEFT_MASK:
-        state["angle_raw"] = (state["angle_raw"] + TURN_STEP) % HW_ANGLE_STEPS
+        state["angle_raw"] = (state["angle_raw"] + turn_step) % HW_ANGLE_STEPS
     if raw & BUTTON_TURN_RIGHT_MASK:
-        state["angle_raw"] = (state["angle_raw"] - TURN_STEP) % HW_ANGLE_STEPS
+        state["angle_raw"] = (state["angle_raw"] - turn_step) % HW_ANGLE_STEPS
 
     state["angle"] = (state["angle_raw"] * (2.0 * math.pi / HW_ANGLE_STEPS)) % (2.0 * math.pi)
 
     move_step = 0.0
+    move_speed = float(state.get("move_speed", MOVE_SPEED))
     if raw & BUTTON_FORWARD_MASK:
-        move_step += MOVE_SPEED
+        move_step += move_speed
     if raw & BUTTON_BACKWARD_MASK:
-        move_step -= MOVE_SPEED
+        move_step -= move_speed
     if move_step == 0.0:
         return
 
@@ -678,12 +682,28 @@ def main():
     parser.add_argument("--username", default=os.environ.get("PYNQ_USERNAME", USERNAME))
     parser.add_argument("--mode", choices=["manual", "auto"],
                         default=os.environ.get("PYNQ_MODE", MODE))
+    parser.add_argument("--move-speed", type=float,
+                        default=float(os.environ.get("PYNQ_MOVE_SPEED", MOVE_SPEED)))
+    parser.add_argument("--turn-step", type=int,
+                        default=int(os.environ.get("PYNQ_TURN_STEP", TURN_STEP)))
+    parser.add_argument("--auto-runner-speed", type=float,
+                        default=float(os.environ.get("PYNQ_AUTO_RUNNER_SPEED", AUTO_RUNNER_SPEED)))
+    parser.add_argument("--auto-tagger-speed", type=float,
+                        default=float(os.environ.get("PYNQ_AUTO_TAGGER_SPEED", AUTO_TAGGER_SPEED)))
+    parser.add_argument("--auto-fallback-speed", type=float,
+                        default=float(os.environ.get("PYNQ_AUTO_FALLBACK_SPEED", AUTO_FALLBACK_SPEED)))
     args = parser.parse_args()
 
     print(f"[NET] EC2 target {args.server}:{args.port}")
     print(
         f"[CFG] username={args.username or '<none>'} role={PREFERRED_ROLE} "
         f"tick_rate={TICK_RATE} overlay={args.overlay} mode={args.mode}"
+    )
+    print(
+        f"[CFG] move_speed={args.move_speed:.3f} turn_step={args.turn_step} "
+        f"auto_runner_speed={args.auto_runner_speed:.3f} "
+        f"auto_tagger_speed={args.auto_tagger_speed:.3f} "
+        f"auto_fallback_speed={args.auto_fallback_speed:.3f}"
     )
 
     USERNAME = args.username
@@ -718,6 +738,14 @@ def main():
         "bits_mask": 0xFFFF,
         "bits": [],
         "players": [],
+        "move_speed": float(args.move_speed),
+        "turn_step": int(args.turn_step),
+        "auto_runner_speed": float(args.auto_runner_speed),
+        "auto_tagger_speed": float(args.auto_tagger_speed),
+        "auto_fallback_speed": float(args.auto_fallback_speed),
+        "auto_tagger_shoot_range": AUTO_TAGGER_SHOOT_RANGE,
+        "auto_tagger_shoot_arc": AUTO_TAGGER_SHOOT_ARC,
+        "auto_tagger_shoot_period_ticks": AUTO_TAGGER_SHOOT_PERIOD_TICKS,
     }
 
     print("[NET] starting lobby/register loop")

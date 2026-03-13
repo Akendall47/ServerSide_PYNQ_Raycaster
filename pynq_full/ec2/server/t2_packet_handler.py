@@ -4,7 +4,7 @@
 #
 # pynq_full extras vs sim_full:
 #   - _register_player calls _send_ack (assigns player_id) and _send_map (loads tiles)
-#   - Position validation goes through game_logic.Anticheat (authoritative server-side check)
+#   - Board slots and live node-mode control are handled here for the real hardware path
 #
 # Why a separate module: packet processing is the noisiest part of the codebase
 # (validation, flag merging, sequence checks). Keeping it here lets GameTick stay
@@ -24,7 +24,6 @@ from protocol import (
     decode_movement_mode, unpack_node_packet, unpack_register_packet,
     pack_map_packet, pack_bits_init_packet, pack_node_mode_packet,
 )
-from game_logic.anticheat import Anticheat, DEFAULT_MAX_SPEED_PER_TICK
 from t2_constants import (
     MATCH_PLAYERS,
     NODE_TIMEOUT_S,
@@ -56,7 +55,6 @@ class PacketHandler:
         self._on_match_pause = on_match_pause
         self._on_match_resume = on_match_resume
         self._on_event       = on_event
-        self.anticheat       = Anticheat()
 
     # Return the first unused stable board slot for a newly connected human node.
     def _allocate_board_slot(self) -> int | None:
@@ -94,15 +92,6 @@ class PacketHandler:
             print(f"[T2] sent PKT_NODE_MODE ({control_mode}) to {addr}")
         except Exception as e:
             print(f"[T2] failed to send PKT_NODE_MODE to {addr}: {e}")
-
-    # Derive world-space AABB from current map dimensions for position validation
-    def _world_bounds(self):
-        w  = self.map_state["width"]
-        h  = self.map_state["height"]
-        ts = self.map_state["tile_scale"]
-        half_w = (w * ts) / 2.0 if w else 96.0
-        half_h = (h * ts) / 2.0 if h else 96.0
-        return (-half_w, -half_h, half_w, half_h)
 
     # ── Main drain loop ───────────────────────────────────────────────────────
     # Pull every queued packet and process it — called once per game tick
@@ -173,24 +162,11 @@ class PacketHandler:
             self._maybe_resume_match()
             return
 
-        last = p["last_seq"]
-        min_x, min_y, max_x, max_y = self._world_bounds()
         next_x, next_y = x, y
         if movement_mode != MOVEMENT_MODE_INTENT_ONLY:
             next_x, next_y = resolve_walkable_world(
                 self.map_state, p["x"], p["y"], x, y, PLAYER_COLLISION_RADIUS
             )
-        if (
-            movement_mode != MOVEMENT_MODE_INTENT_ONLY
-            and last is not None
-            and not self.anticheat.validate_position(
-                last, p["x"], p["y"], p["angle"],
-                next_x, next_y, angle, seq,
-                min_x, min_y, max_x, max_y,
-                DEFAULT_MAX_SPEED_PER_TICK,
-            )
-        ):
-            return  # reject implausible position jump
 
         p["last_seq"]          = seq
         p["movement_mode"]     = movement_mode
