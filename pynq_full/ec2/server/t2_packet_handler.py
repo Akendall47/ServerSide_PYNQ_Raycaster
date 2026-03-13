@@ -55,8 +55,6 @@ class PacketHandler:
         self._on_match_pause = on_match_pause
         self._on_match_resume = on_match_resume
         self._on_event       = on_event
-        self._debug_non_register_seen = 0
-        self._debug_short_seen = 0
 
     # Return the first unused stable board slot for a newly connected human node.
     def _allocate_board_slot(self) -> int | None:
@@ -114,9 +112,6 @@ class PacketHandler:
         addr = raw["addr"]
 
         if len(data) < NODE_SIZE:
-            if self._debug_short_seen < 12:
-                print(f"[T2] dropped short packet from {addr} len={len(data)} need>={NODE_SIZE}")
-                self._debug_short_seen += 1
             return
 
         pkt = unpack_node_packet(data)
@@ -132,9 +127,6 @@ class PacketHandler:
 
         if addr not in self.state.players:
             if pkt_type != PKT_REGISTER:
-                if self._debug_non_register_seen < 12:
-                    print(f"[T2] ignoring pre-register packet from {addr} type=0x{pkt_type:04x} len={len(data)}")
-                    self._debug_non_register_seen += 1
                 return
             self._register_player(addr, x, y, angle,
                                   preferred_role=preferred_role,
@@ -304,8 +296,6 @@ class PacketHandler:
         participant_count = len(addrs) + ghost_count
         if not addrs:
             return False, "no human players in the lobby"
-        if participant_count < 2:
-            return False, "need 2 participants to start (two humans or one human plus a ghost)"
 
         roles = {
             addr: self.state.pending_roles.get(
@@ -370,6 +360,8 @@ class PacketHandler:
         self.state.match_tick    = 0
         self.state.reset_positions()
         self._on_match_start()
+        if participant_count == 1:
+            return True, "single-player match started"
         return True, "match started"
 
     # Adjust ghost count at runtime (e.g. from Monitor "set_ghost_count" control command)

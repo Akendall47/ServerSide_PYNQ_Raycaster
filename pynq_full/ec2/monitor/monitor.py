@@ -351,7 +351,7 @@ def handle_control_command(cmd: str):
         _service_message = "force_end sent — session will return to the lobby after the end hold"
     elif cmd == "start_match":
         r.publish("game:control", json.dumps({"cmd": "start_match"}))
-        _service_message = "start_match sent — queued lobby players will be promoted if enough participants exist"
+        _service_message = "start_match sent — queued lobby players will be promoted if at least one human is connected"
     elif cmd == "restart":
         payload = json.dumps({"cmd": "restart"})
         r.publish("game:control", payload)
@@ -943,8 +943,8 @@ async def map_save_handler(request):
     apply_map = bool(data.get("apply"))
     try:
         payload = await asyncio.to_thread(save_map_entry, MAPS_DIR, data, map_dyndb)
-        if apply_map and len(payload.get("spawns", [])) < 2:
-            raise MapStorageError("pushing live requires two spawn points")
+        if apply_map and len(payload.get("spawns", [])) < 1:
+            raise MapStorageError("pushing live requires at least one spawn point")
         if apply_map:
             await asyncio.to_thread(handle_control_command, f"set_map:{payload['map_id']}")
     except MapStorageError as exc:

@@ -69,6 +69,8 @@ AUTO_RUNNER_EVADE_DISTANCE = 42.0
 AUTO_TAGGER_SHOOT_RANGE = 26.0
 AUTO_TAGGER_SHOOT_ARC = 0.4
 AUTO_TAGGER_SHOOT_PERIOD_TICKS = 4
+SERVER_POSE_SNAP_DISTANCE = 1.0
+SERVER_POSE_SNAP_ANGLE = 0.35
 BUTTON_TURN_RIGHT_MASK = 1 << 0
 BUTTON_BACKWARD_MASK = 1 << 1
 BUTTON_FORWARD_MASK = 1 << 2
@@ -123,7 +125,8 @@ def _encode_map_rows_for_bram(width: int, height: int, tiles: bytes):
         base = row * width
         for col in range(width):
             if tiles[base + col]:
-                word |= 1 << col
+                # Hardware map rows treat the leftmost tile as the MSB.
+                word |= 1 << (width - 1 - col)
         rows.append(word)
     return rows
 
@@ -516,9 +519,9 @@ def _apply_manual_input(state: dict, buttons) -> None:
     state["input_flags"] = 0
     turn_step = int(state.get("turn_step", TURN_STEP))
     if raw & BUTTON_TURN_LEFT_MASK:
-        state["angle_raw"] = (state["angle_raw"] + turn_step) % HW_ANGLE_STEPS
-    if raw & BUTTON_TURN_RIGHT_MASK:
         state["angle_raw"] = (state["angle_raw"] - turn_step) % HW_ANGLE_STEPS
+    if raw & BUTTON_TURN_RIGHT_MASK:
+        state["angle_raw"] = (state["angle_raw"] + turn_step) % HW_ANGLE_STEPS
 
     state["angle"] = (state["angle_raw"] * (2.0 * math.pi / HW_ANGLE_STEPS)) % (2.0 * math.pi)
 
@@ -580,11 +583,26 @@ def _update_local_pose_from_server(state: dict, players) -> None:
     for player in players:
         if player["player_id"] != player_id:
             continue
-        state["x"] = player["x"]
-        state["y"] = player["y"]
-        state["angle"] = player["angle"]
-        state["angle_raw"] = _radians_to_hw_angle(player["angle"])
-        state["match_ended"] = bool(player["flags"] & protocol.FLAG_MATCH_END)
+        server_x = float(player["x"])
+        server_y = float(player["y"])
+        server_angle = float(player["angle"])
+        server_match_end = bool(player["flags"] & protocol.FLAG_MATCH_END)
+        distance_error = math.hypot(server_x - state["x"], server_y - state["y"])
+        angle_error = abs(_wrap_angle(server_angle - state["angle"]))
+        should_snap = (
+            state.get("force_server_pose_sync", False)
+            or player_id == 0
+            or server_match_end
+            or distance_error >= float(state.get("server_pose_snap_distance", SERVER_POSE_SNAP_DISTANCE))
+            or angle_error >= float(state.get("server_pose_snap_angle", SERVER_POSE_SNAP_ANGLE))
+        )
+        if should_snap:
+            state["x"] = server_x
+            state["y"] = server_y
+            state["angle"] = server_angle
+            state["angle_raw"] = _radians_to_hw_angle(server_angle)
+            state["force_server_pose_sync"] = False
+        state["match_ended"] = server_match_end
         return
 
 
@@ -602,6 +620,7 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["registered"] = True
         state["player_id"] = player_id
         state["match_ended"] = False
+        state["force_server_pose_sync"] = True
         if previous_player_id != player_id:
             print(f"[ACK] player_id={player_id} role={_role_name(player_id)} header_seq={seq} ts={timestamp}")
         return
@@ -612,6 +631,7 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["map_h"] = height
         state["tile_scale"] = tile_scale
         state["tiles"] = tiles
+        state["force_server_pose_sync"] = True
         _write_map_to_bram(bram, width, height, tiles)
         return
 
@@ -705,11 +725,6 @@ def main():
         f"auto_tagger_speed={args.auto_tagger_speed:.3f} "
         f"auto_fallback_speed={args.auto_fallback_speed:.3f}"
     )
-    print(
-        f"[CFG] protocol={getattr(protocol, '__file__', '<unknown>')} "
-        f"node_size={protocol.NODE_SIZE} pkt_register=0x{protocol.PKT_REGISTER:04x} "
-        f"protocol_version={protocol.NODE_PROTOCOL_VERSION}"
-    )
 
     USERNAME = args.username
 
@@ -751,6 +766,9 @@ def main():
         "auto_tagger_shoot_range": AUTO_TAGGER_SHOOT_RANGE,
         "auto_tagger_shoot_arc": AUTO_TAGGER_SHOOT_ARC,
         "auto_tagger_shoot_period_ticks": AUTO_TAGGER_SHOOT_PERIOD_TICKS,
+        "server_pose_snap_distance": SERVER_POSE_SNAP_DISTANCE,
+        "server_pose_snap_angle": SERVER_POSE_SNAP_ANGLE,
+        "force_server_pose_sync": True,
     }
 
     print("[NET] starting lobby/register loop")
