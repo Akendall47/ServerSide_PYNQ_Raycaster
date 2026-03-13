@@ -55,6 +55,8 @@ class PacketHandler:
         self._on_match_pause = on_match_pause
         self._on_match_resume = on_match_resume
         self._on_event       = on_event
+        self._debug_non_register_seen = 0
+        self._debug_short_seen = 0
 
     # Return the first unused stable board slot for a newly connected human node.
     def _allocate_board_slot(self) -> int | None:
@@ -112,6 +114,9 @@ class PacketHandler:
         addr = raw["addr"]
 
         if len(data) < NODE_SIZE:
+            if self._debug_short_seen < 12:
+                print(f"[T2] dropped short packet from {addr} len={len(data)} need>={NODE_SIZE}")
+                self._debug_short_seen += 1
             return
 
         pkt = unpack_node_packet(data)
@@ -127,6 +132,9 @@ class PacketHandler:
 
         if addr not in self.state.players:
             if pkt_type != PKT_REGISTER:
+                if self._debug_non_register_seen < 12:
+                    print(f"[T2] ignoring pre-register packet from {addr} type=0x{pkt_type:04x} len={len(data)}")
+                    self._debug_non_register_seen += 1
                 return
             self._register_player(addr, x, y, angle,
                                   preferred_role=preferred_role,

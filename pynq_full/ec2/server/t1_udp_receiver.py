@@ -23,9 +23,13 @@ class UDPReceiverProtocol(asyncio.DatagramProtocol):
 
     def __init__(self, queue: asyncio.Queue):
         self.queue = queue
+        self._debug_seen = 0
 
     # Enqueue raw bytes + sender address for T2 to process on the next tick
     def datagram_received(self, data: bytes, addr: tuple):
+        if self._debug_seen < 12:
+            print(f"[T1] udp from {addr} len={len(data)}")
+            self._debug_seen += 1
         self.queue.put_nowait({"data": data, "addr": addr})
 
     def error_received(self, exc: Exception):
