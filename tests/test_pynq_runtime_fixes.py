@@ -62,7 +62,7 @@ class FakeWriteQueue:
         self.items.append(item)
 
 
-def test_test_package_v2_encodes_leftmost_wall_to_msb():
+def test_test_package_v2_keeps_original_bram_bit_order():
     with pynq_import_context():
         test_package = importlib.import_module("test_package_v2")
 
@@ -75,8 +75,8 @@ def test_test_package_v2_encodes_leftmost_wall_to_msb():
         rows = test_package._encode_map_rows_for_bram(32, 32, tiles)
 
         assert len(rows) == 32
-        assert rows[0] == ((1 << 31) | (1 << 26) | (1 << 0))
-        assert rows[7] == (1 << 28)
+        assert rows[0] == ((1 << 0) | (1 << 5) | (1 << 31))
+        assert rows[7] == (1 << 3)
         assert rows[8] == 0
 
 

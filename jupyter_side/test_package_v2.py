@@ -125,8 +125,8 @@ def _encode_map_rows_for_bram(width: int, height: int, tiles: bytes):
         base = row * width
         for col in range(width):
             if tiles[base + col]:
-                # Hardware map rows treat the leftmost tile as the MSB.
-                word |= 1 << (width - 1 - col)
+                # Hardware map rows follow the original board layout: leftmost tile = bit 0.
+                word |= 1 << col
         rows.append(word)
     return rows
 
