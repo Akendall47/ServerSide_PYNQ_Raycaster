@@ -76,7 +76,7 @@ function setReplayStatus(text) {
   document.getElementById('replay-status').textContent = text;
 }
 
-const REPLAY_FPS = 60;
+const REPLAY_FPS = 20;
 
 function snapshotSlotModes(state = latestState) {
   const slotModes = state?.slot_modes || { 1: 'manual', 2: 'manual' };

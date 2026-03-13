@@ -33,7 +33,7 @@ from monitor_map_store import (
 REDIS_HOST   = "127.0.0.1"
 REDIS_PORT   = 6379
 HTTP_PORT    = 8080
-PUSH_RATE_HZ = 60   # push to browser at 60 Hz (match game tick rate)
+PUSH_RATE_HZ = 20   # push to browser at 20 Hz for a calmer live UI
 DDB_POLL_INTERVAL_S = 2.0
 SERVICE_POLL_INTERVAL_S = 1.0
 REDIS_STATS_POLL_INTERVAL_S = 1.0

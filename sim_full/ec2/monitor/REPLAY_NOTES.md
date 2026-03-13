@@ -5,8 +5,8 @@
 The first replay implementation worked, but it was unreliable in practice for three specific reasons:
 
 1. The replay buttons were being rebuilt on every WebSocket push.
-   - The monitor updates at 60 Hz.
-   - That meant the replay button DOM was being destroyed and recreated 60 times per second.
+   - The monitor updates at 20 Hz.
+   - That meant the replay button DOM was being destroyed and recreated 20 times per second.
    - Result: clicks could feel hit-or-miss because the element under the cursor could change mid-click.
 
 2. Replay loading was blocking the monitor server event loop.

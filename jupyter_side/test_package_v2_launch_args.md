@@ -11,7 +11,7 @@ This file documents the current runtime launch surface for:
 Important runtime note:
 
 - `test_package_v2.py` keeps the older `20 Hz` board loop baseline
-- `test_package_v3.py` now defaults to a higher `60 Hz` board loop and auto-scales its default per-tick movement values from the old `20 Hz` tuning baseline
+- `test_package_v3.py` supports `--tick-rate`, but now defaults back to the calmer `20 Hz` board loop baseline
 - if you pass explicit movement values, those are treated as raw per-tick values
 
 ## Basic usage
@@ -215,7 +215,7 @@ python3 test_package_v3.py \
   --username board-1
 ```
 
-That keeps the old `0.2 / 64` feel approximately, but at a smoother `60 Hz`, because `v3` rescales its defaults automatically.
+That keeps the old `0.2 / 64` feel approximately, because `v3` rescales its defaults automatically when you do choose a different tick rate.
 
 ### Auto board for one-human demo
 
@@ -254,7 +254,7 @@ python3 test_package_v3.py --mode auto --tick-rate 60 --auto-tagger-speed 0.09
 This is useful if you want to keep the command shorter:
 
 ```bash
-export PYNQ_TICK_RATE=60
+export PYNQ_TICK_RATE=20
 export PYNQ_MODE=manual
 unset PYNQ_MOVE_SPEED
 unset PYNQ_TURN_STEP
@@ -268,7 +268,7 @@ python3 test_package_v3.py
 Auto example:
 
 ```bash
-export PYNQ_TICK_RATE=60
+export PYNQ_TICK_RATE=20
 export PYNQ_MODE=auto
 unset PYNQ_AUTO_RUNNER_SPEED
 unset PYNQ_AUTO_TAGGER_SPEED
