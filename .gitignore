@@ -1,5 +1,6 @@
 # Build
 ec2/build/
+media/
 
 # Python
 __pycache__/
@@ -20,7 +21,8 @@ monitor_ui/src/templates.generated.js
 *.key
 
 # Editors
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.swp
 *~
