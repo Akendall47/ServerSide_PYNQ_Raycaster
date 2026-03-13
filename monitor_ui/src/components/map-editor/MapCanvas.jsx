@@ -12,7 +12,6 @@ import {
 const MIN_CANVAS_SIZE = 384;
 const MAX_CANVAS_SIZE = 768;
 const BIT_MARKER = Object.freeze({ marker: 'B', type: 'bit_spawn' });
-const SPAWN_COLORS = ['#19ff84', '#ff7b3d', '#51b5ff', '#ffd166', '#d38dff'];
 
 function cellFromPointer(event, canvasSize) {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -96,11 +95,11 @@ export default function MapCanvas({
       ctx.fillText(markerLabel, cx, cy + 1);
     });
 
-    (nextSpawns || []).slice(0, 5).forEach((spawn, index) => {
+    (nextSpawns || []).slice(0, 2).forEach((spawn, index) => {
       const cx = (spawn.x + 0.5) * cellSize;
       const cy = (spawn.y + 0.5) * cellSize;
       const radius = Math.max(10, cellSize * 0.32);
-      const fill = SPAWN_COLORS[index] || SPAWN_COLORS[SPAWN_COLORS.length - 1];
+      const fill = index === 0 ? '#19ff84' : '#ff7b3d';
       ctx.fillStyle = fill;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -172,8 +171,8 @@ export default function MapCanvas({
       onDirty();
       return;
     }
-    const nextSpawns = spawns.slice(0, 5);
-    const nextIndex = nextSpawns.length < 5 ? nextSpawns.length : (spawnCursorRef.current % 5);
+    const nextSpawns = spawns.slice(0, 2);
+    const nextIndex = nextSpawns.length < 2 ? nextSpawns.length : (spawnCursorRef.current % 2);
     spawnCursorRef.current = nextIndex + 1;
     nextSpawns[nextIndex] = { x, y };
     const { spawns: safeSpawns, markers: safeMarkers } = sanitiseDraft(gridRef.current, nextSpawns, markers);

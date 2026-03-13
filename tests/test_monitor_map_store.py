@@ -64,18 +64,6 @@ def test_save_and_load_editor_map(tmp_path: Path):
     assert loaded["spawns"][0] == {"x": 2, "y": 2}
 
 
-def test_single_spawn_maps_keep_single_player_budget(tmp_path: Path):
-    maps_dir = tmp_path / "maps"
-    payload = save_map_entry(maps_dir, {
-        "map_name": "Solo Arena",
-        "grid": bordered_grid(),
-        "spawns": [{"x": 2, "y": 2}],
-    })
-
-    assert payload["spawns"] == [{"x": 2, "y": 2}]
-    assert payload["entity_budget"]["human_spawns"] == 1
-
-
 def test_spawn_order_is_loaded_from_runtime_marker_number(tmp_path: Path):
     maps_dir = tmp_path / "maps"
     maps_dir.mkdir(parents=True)

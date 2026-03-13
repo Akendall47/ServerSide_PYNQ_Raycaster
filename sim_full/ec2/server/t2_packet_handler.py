@@ -354,6 +354,8 @@ class PacketHandler:
         participant_count = len(addrs) + ghost_count
         if not addrs:
             return False, "no human players in the lobby"
+        if participant_count < 2:
+            return False, "need 2 participants to start (two humans or one human plus a ghost)"
 
         roles = {
             addr: self.state.pending_roles.get(
@@ -414,8 +416,6 @@ class PacketHandler:
         self.state.match_tick = 0
         self.state.reset_positions()
         self._on_match_start()
-        if participant_count == 1:
-            return True, "single-player match started"
         return True, "match started"
 
     def disconnect_human_slot(self, slot_index: int):

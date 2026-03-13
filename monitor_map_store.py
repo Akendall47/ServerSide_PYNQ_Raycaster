@@ -230,7 +230,7 @@ def _metadata_defaults(map_id: str, map_name: str, created_at: str | None = None
         "tile_scale": TILE_SCALE,
         "supported_modes": list(DEFAULT_SUPPORTED_MODES),
         "entity_budget": {
-            "human_spawns": 1,
+            "human_spawns": 2,
             "ghost_slots": 3,
         },
         "deletable": True,
@@ -239,15 +239,6 @@ def _metadata_defaults(map_id: str, map_name: str, created_at: str | None = None
         "notes": "",
         "tags": ["editor"],
     }
-
-
-def _default_entity_budget(spawns, existing_budget=None):
-    budget = dict(existing_budget or {})
-    human_spawns = int(budget.get("human_spawns", max(1, len(spawns) or 1)))
-    ghost_slots = int(budget.get("ghost_slots", 3))
-    budget["human_spawns"] = max(1, human_spawns)
-    budget["ghost_slots"] = max(0, ghost_slots)
-    return budget
 
 
 def _plain_number(value: Decimal):
@@ -340,7 +331,7 @@ def _metadata_from_table_item(item: dict):
     if not item:
         return None
     grid_size = _normalise_dynamo_value(item.get("grid_size")) or {"width": GRID_WIDTH, "height": GRID_HEIGHT}
-    entity_budget = _normalise_dynamo_value(item.get("entity_budget")) or {"human_spawns": 1, "ghost_slots": 3}
+    entity_budget = _normalise_dynamo_value(item.get("entity_budget")) or {"human_spawns": 2, "ghost_slots": 3}
     return {
         "schema_version": _normalise_dynamo_value(item.get("schema_version", MAP_SCHEMA_VERSION)),
         "map_id": item.get("map_id"),
@@ -371,7 +362,7 @@ def _build_table_item(map_id: str, runtime_text: str, metadata: dict):
         "grid_size": metadata.get("grid_size") or {"width": GRID_WIDTH, "height": GRID_HEIGHT},
         "tile_scale": int(metadata.get("tile_scale", TILE_SCALE)),
         "supported_modes": list(metadata.get("supported_modes") or DEFAULT_SUPPORTED_MODES),
-        "entity_budget": _default_entity_budget([], metadata.get("entity_budget")),
+        "entity_budget": metadata.get("entity_budget") or {"human_spawns": 2, "ghost_slots": 3},
         "deletable": bool(metadata.get("deletable", False)),
         "created_at": metadata.get("created_at"),
         "updated_at": metadata.get("updated_at"),
@@ -426,7 +417,7 @@ def build_map_entry(map_id: str, runtime_payload: dict, metadata: dict | None = 
         "schema_version": int(meta.get("schema_version", MAP_SCHEMA_VERSION)),
         "layout_type": meta.get("layout_type") or "binary-grid",
         "supported_modes": list(meta.get("supported_modes") or DEFAULT_SUPPORTED_MODES),
-        "entity_budget": _default_entity_budget(spawns, meta.get("entity_budget")),
+        "entity_budget": meta.get("entity_budget") or {"human_spawns": 2, "ghost_slots": 3},
         "notes": str(meta.get("notes") or ""),
         "tags": list(meta.get("tags") or ([] if meta else ["system"])),
         "created_at": meta.get("created_at"),
@@ -501,10 +492,7 @@ def save_map_entry(maps_dir: Path, payload: dict, map_table=None):
     metadata["supported_modes"] = list(supported_modes or DEFAULT_SUPPORTED_MODES)
     metadata["notes"] = str(payload.get("notes") or (existing_editor_metadata.get("notes") if existing_editor_metadata else ""))
     metadata["tags"] = list(payload.get("tags") or (existing_editor_metadata.get("tags") if existing_editor_metadata else ["editor"]))
-    metadata["entity_budget"] = _default_entity_budget(
-        spawns,
-        payload.get("entity_budget") or (existing_editor_metadata.get("entity_budget") if existing_editor_metadata else None),
-    )
+    metadata["entity_budget"] = payload.get("entity_budget") or (existing_editor_metadata.get("entity_budget") if existing_editor_metadata else {"human_spawns": 2, "ghost_slots": 3})
     metadata["updated_at"] = _utc_now()
     runtime_text = serialise_runtime_text(grid, spawns, markers)
 

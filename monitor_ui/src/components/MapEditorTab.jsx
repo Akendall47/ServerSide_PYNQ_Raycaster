@@ -33,16 +33,10 @@ function describeValidation(grid, spawns, markers) {
       message: 'Hardware-safe maps need a solid wall border. Use Border or close the outer ring manually.',
     };
   }
-  if (spawns.length < 1) {
-    return {
-      canPush: false,
-      message: 'Push Live is blocked until at least one player spawn point is placed.',
-    };
-  }
   if (spawns.length < 2) {
     return {
-      canPush: true,
-      message: 'Ready for single-player testing. Add a second spawn if you want a fixed runner/tagger layout.',
+      canPush: false,
+      message: 'Push Live is blocked until both player spawn points are placed.',
     };
   }
   if (markers.length) {
@@ -347,8 +341,8 @@ export default function MapEditorTab() {
         </div>
         <div className="panel-raised player-overview-card">
           <div className="hud-label">Spawn Points</div>
-          <div className="player-overview-value">{overview.spawnCount}</div>
-          <div className="hud-sub">1+ enables push live • 2 fixes runner/tagger starts</div>
+          <div className="player-overview-value">{overview.spawnCount}/2</div>
+          <div className="hud-sub">required before push live</div>
         </div>
         <div className="panel-raised player-overview-card">
           <div className="hud-label">Bit Markers</div>
