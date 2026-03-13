@@ -299,6 +299,46 @@ def test_test_package_v3_ignores_stale_game_state_packets():
         assert state["angle"] == 0.25
 
 
+def test_test_package_v3_ignores_soft_server_corrections_while_manual_input_is_recent():
+    with pynq_import_context():
+        test_package = importlib.import_module("test_package_v3")
+
+        state = {
+            "player_id": 1,
+            "mode": "manual",
+            "x": 10.0,
+            "y": 20.0,
+            "angle": 0.5,
+            "angle_raw": test_package._radians_to_hw_angle(0.5),
+            "match_ended": False,
+            "force_server_pose_sync": False,
+            "server_pose_snap_distance": 4.0,
+            "server_pose_snap_angle": 0.75,
+            "server_pose_hard_snap_distance": 12.0,
+            "server_pose_hard_snap_angle": 1.8,
+            "last_manual_input_at": 0.0,
+        }
+
+        original_monotonic = test_package.time.monotonic
+        try:
+            now = original_monotonic()
+            state["last_manual_input_at"] = now
+            test_package.time.monotonic = lambda: now
+            test_package._update_local_pose_from_server(state, [{
+                "player_id": 1,
+                "x": 12.0,
+                "y": 20.5,
+                "angle": 0.9,
+                "flags": 0,
+            }])
+        finally:
+            test_package.time.monotonic = original_monotonic
+
+        assert state["x"] == 10.0
+        assert state["y"] == 20.0
+        assert state["angle"] == 0.5
+
+
 def test_test_package_v3_builds_fallback_lobby_map_with_border_walls():
     with pynq_import_context():
         test_package = importlib.import_module("test_package_v3")

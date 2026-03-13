@@ -70,8 +70,11 @@ AUTO_RUNNER_EVADE_DISTANCE = 42.0
 AUTO_TAGGER_SHOOT_RANGE = 26.0
 AUTO_TAGGER_SHOOT_ARC = 0.4
 AUTO_TAGGER_SHOOT_PERIOD_TICKS = 4
-SERVER_POSE_SNAP_DISTANCE = 1.0
-SERVER_POSE_SNAP_ANGLE = 0.35
+SERVER_POSE_SNAP_DISTANCE = 4.0
+SERVER_POSE_SNAP_ANGLE = 0.75
+SERVER_POSE_HARD_SNAP_DISTANCE = 12.0
+SERVER_POSE_HARD_SNAP_ANGLE = 1.8
+MANUAL_CORRECTION_GRACE_S = 0.25
 BUTTON_TURN_RIGHT_MASK = 1 << 0
 BUTTON_BACKWARD_MASK = 1 << 1
 BUTTON_FORWARD_MASK = 1 << 2
@@ -588,6 +591,8 @@ def _apply_auto_input(state: dict) -> None:
 def _apply_manual_input(state: dict, buttons) -> None:
     raw = buttons.read() & 0xF
     state["input_flags"] = 0
+    if raw:
+        state["last_manual_input_at"] = time.monotonic()
     turn_step = int(state.get("turn_step", TURN_STEP))
     if raw & BUTTON_TURN_LEFT_MASK:
         state["angle_raw"] = (state["angle_raw"] + turn_step) % HW_ANGLE_STEPS
@@ -660,12 +665,28 @@ def _update_local_pose_from_server(state: dict, players) -> None:
         server_match_end = bool(player["flags"] & protocol.FLAG_MATCH_END)
         distance_error = math.hypot(server_x - state["x"], server_y - state["y"])
         angle_error = abs(_wrap_angle(server_angle - state["angle"]))
+        now = time.monotonic()
+        active_manual_control = (
+            state.get("mode", "manual") == "manual"
+            and (now - float(state.get("last_manual_input_at", 0.0) or 0.0)) <= MANUAL_CORRECTION_GRACE_S
+        )
+        soft_snap_distance = float(state.get("server_pose_snap_distance", SERVER_POSE_SNAP_DISTANCE))
+        soft_snap_angle = float(state.get("server_pose_snap_angle", SERVER_POSE_SNAP_ANGLE))
+        hard_snap_distance = float(state.get("server_pose_hard_snap_distance", SERVER_POSE_HARD_SNAP_DISTANCE))
+        hard_snap_angle = float(state.get("server_pose_hard_snap_angle", SERVER_POSE_HARD_SNAP_ANGLE))
         should_snap = (
             state.get("force_server_pose_sync", False)
             or player_id == 0
             or server_match_end
-            or distance_error >= float(state.get("server_pose_snap_distance", SERVER_POSE_SNAP_DISTANCE))
-            or angle_error >= float(state.get("server_pose_snap_angle", SERVER_POSE_SNAP_ANGLE))
+            or distance_error >= hard_snap_distance
+            or angle_error >= hard_snap_angle
+            or (
+                not active_manual_control
+                and (
+                    distance_error >= soft_snap_distance
+                    or angle_error >= soft_snap_angle
+                )
+            )
         )
         if should_snap:
             state["x"] = server_x
@@ -900,7 +921,10 @@ def main():
         "auto_tagger_shoot_period_ticks": effective_auto_shoot_period,
         "server_pose_snap_distance": SERVER_POSE_SNAP_DISTANCE,
         "server_pose_snap_angle": SERVER_POSE_SNAP_ANGLE,
+        "server_pose_hard_snap_distance": SERVER_POSE_HARD_SNAP_DISTANCE,
+        "server_pose_hard_snap_angle": SERVER_POSE_HARD_SNAP_ANGLE,
         "force_server_pose_sync": True,
+        "last_manual_input_at": 0.0,
         "last_ack_timestamp": None,
         "last_map_timestamp": None,
         "last_bits_timestamp": None,
