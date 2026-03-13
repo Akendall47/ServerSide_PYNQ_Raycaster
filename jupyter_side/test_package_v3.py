@@ -631,6 +631,10 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["map_h"] = height
         state["tile_scale"] = tile_scale
         state["tiles"] = tiles
+        state["bits"] = []
+        state["bits_mask"] = 0
+        state["game_mode"] = protocol.GAME_MODE_CHASE
+        state["match_ended"] = False
         state["force_server_pose_sync"] = True
         _write_map_to_bram(bram, width, height, tiles)
         return

@@ -76,6 +76,47 @@ function setReplayStatus(text) {
   document.getElementById('replay-status').textContent = text;
 }
 
+function snapshotSlotModes(state = latestState) {
+  const slotModes = state?.slot_modes || { 1: 'manual', 2: 'manual' };
+  return {
+    1: String(slotModes[1] || 'manual').toLowerCase() === 'auto' ? 'auto' : 'manual',
+    2: String(slotModes[2] || 'manual').toLowerCase() === 'auto' ? 'auto' : 'manual',
+  };
+}
+
+let autoPlaySession = {
+  active: false,
+  matchId: null,
+  restoreModes: null,
+  restoreInFlight: false,
+};
+
+function clearAutoPlaySession() {
+  autoPlaySession.active = false;
+  autoPlaySession.matchId = null;
+  autoPlaySession.restoreModes = null;
+  autoPlaySession.restoreInFlight = false;
+}
+
+async function restoreAutoPlaySessionModes(reason = 'auto play ended — restoring prior board modes') {
+  if (!autoPlaySession.active || autoPlaySession.restoreInFlight || !autoPlaySession.restoreModes) {
+    return;
+  }
+  autoPlaySession.restoreInFlight = true;
+  try {
+    for (const slot of [1, 2]) {
+      const targetMode = autoPlaySession.restoreModes[slot] || 'manual';
+      await sendControl(`node${slot}_${targetMode}`, `board ${slot} ${targetMode}`, {
+        forceHttp: true,
+        preserveAutoPlaySession: true,
+      });
+    }
+    setReplayStatus(reason);
+  } finally {
+    clearAutoPlaySession();
+  }
+}
+
 function stopReplay(statusText = 'replay stopped') {
   if (replayState.timer) {
     clearInterval(replayState.timer);
@@ -174,11 +215,17 @@ async function autoPlayReplay(matchId) {
       throw new Error('replay map metadata is missing');
     }
 
+    autoPlaySession.active = true;
+    autoPlaySession.matchId = matchId;
+    autoPlaySession.restoreModes = snapshotSlotModes(latestState);
+    autoPlaySession.restoreInFlight = false;
+
     updateMapSelector(mapName, mapName);
-    await loadMap(mapName);
     if (!await sendControl(`set_map:${mapName}`, `map → ${mapName}`, { forceHttp: true })) {
       throw new Error(`failed to set map '${mapName}'`);
     }
+    window.invalidateMonitorMapCache?.(mapName);
+    await loadMap(mapName, { force: true });
     if (!await sendControl(`set_ghosts_${ghostCount}`, `ghost count → ${ghostCount}`, { forceHttp: true })) {
       throw new Error(`failed to set ghost count to ${ghostCount}`);
     }
@@ -194,7 +241,7 @@ async function autoPlayReplay(matchId) {
     }
     setReplayStatus(`auto play armed for ${matchId.replace(/^match-/, '')} on ${mapName}`);
   } catch (err) {
-    setReplayStatus(`auto play failed: ${err.message}`);
+    await restoreAutoPlaySessionModes(`auto play failed: ${err.message}`);
   } finally {
     replayLoading = false;
   }
@@ -403,18 +450,32 @@ function scheduleMapRefresh(cmd) {
   if (!String(cmd || '').startsWith('set_map:')) return;
   const mapName = String(cmd).split(':', 2)[1] || '';
   if (mapName) {
+    window.invalidateMonitorMapCache?.(mapName);
     updateMapSelector(mapName, mapName);
   }
   if (typeof window.requestMapListRefresh === 'function') {
-    window.requestMapListRefresh(250);
+    window.requestMapListRefresh(250).then(() => {
+      if (mapName) {
+        loadMap(mapName, { force: true });
+      }
+    });
     return;
   }
-  window.setTimeout(() => { loadMapList(); }, 250);
+  window.setTimeout(() => {
+    loadMapList();
+    if (mapName) {
+      loadMap(mapName, { force: true });
+    }
+  }, 250);
 }
 
 async function sendControl(cmd, label, options = {}) {
+  const preserveAutoPlaySession = Boolean(options.preserveAutoPlaySession);
   if (replayState.active) {
     stopReplay('replay stopped — returning to live control');
+  }
+  if (!preserveAutoPlaySession && autoPlaySession.active && /^node[12]_(auto|manual)$/.test(String(cmd || ''))) {
+    clearAutoPlaySession();
   }
   if (cmd === 'start_match' && !isValidMapName(latestState?.selected_map || _selectedMapName)) {
     setServiceNote('select a map before starting the match');
@@ -466,8 +527,14 @@ function connect() {
     const activeMapChanged = lastActiveMapSeen !== null && state.active_map !== lastActiveMapSeen;
     const returnedToLobby = lastActivePlayerCount > 0 && activePlayerCount === 0;
     const exitedEndHold = lastLiveMatchEnded && !matchEnded;
+    if (activeMapChanged && state.active_map) {
+      window.invalidateMonitorMapCache?.(state.active_map);
+    }
     if (activeMapChanged || returnedToLobby || exitedEndHold) {
       window.resetTransientArenaState?.();
+    }
+    if (autoPlaySession.active && !autoPlaySession.restoreInFlight && (matchEnded || returnedToLobby)) {
+      void restoreAutoPlaySessionModes();
     }
     // New match boundary: drop any previous round's tag/match-end visual state.
     if (state.events && state.events.length > 0 && state.events[0].event === 'match_start') {

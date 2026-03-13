@@ -197,6 +197,46 @@ def test_test_package_v2_snaps_large_server_corrections_and_match_end():
         assert state["match_ended"] is True
 
 
+def test_test_package_v3_map_packet_clears_stale_end_and_bits_state():
+    with pynq_import_context():
+        protocol = importlib.import_module("protocol")
+        test_package = importlib.import_module("test_package_v3")
+
+        class DummyBram:
+            def __init__(self):
+                self.writes = []
+
+            def write(self, offset, value):
+                self.writes.append((offset, value))
+
+        state = {
+            "registered": True,
+            "player_id": 1,
+            "match_ended": True,
+            "force_server_pose_sync": False,
+            "map_w": 32,
+            "map_h": 32,
+            "tile_scale": 8,
+            "tiles": bytearray(32 * 32),
+            "game_mode": protocol.GAME_MODE_CHASE_BITS,
+            "bits_mask": 0xFFFF,
+            "bits": [(1.0, 1.0)],
+        }
+        bram = DummyBram()
+        tiles = bytearray(32 * 32)
+        tiles[0] = 1
+        pkt = protocol.pack_map_packet(0, 32, 32, 8, tiles)
+
+        test_package._handle_packet(pkt, state, bram)
+
+        assert state["match_ended"] is False
+        assert state["game_mode"] == protocol.GAME_MODE_CHASE
+        assert state["bits_mask"] == 0
+        assert state["bits"] == []
+        assert state["tiles"] == tiles
+        assert len(bram.writes) == 32
+
+
 def test_pynq_packet_handler_allows_single_player_match_start():
     with pynq_import_context():
         packet_handler = importlib.import_module("t2_packet_handler")
