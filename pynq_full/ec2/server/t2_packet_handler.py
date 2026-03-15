@@ -267,6 +267,7 @@ class PacketHandler:
                 self.write_queue.put({"op": "del", "key": f"player:{player['player_id']}"})
 
         self.state.reset_match_runtime(arm_lockout=False)
+        self.state.reset_slot_modes()
         self.state.set_spawn_positions(self.map_state.get("spawn_positions", []))
 
         for queue_slot, addr in enumerate(human_addrs):

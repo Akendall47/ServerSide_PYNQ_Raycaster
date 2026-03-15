@@ -25,6 +25,11 @@ class MatchState:
         self.slot_modes = {1: "manual", 2: "manual"}
         self.clear_match(arm_lockout=False)
 
+    def reset_slot_modes(self):
+        """Reset all board slots to manual — call when returning to lobby so a
+        monitor-set auto mode from the previous match doesn't carry over."""
+        self.slot_modes = {1: "manual", 2: "manual"}
+
     # ── Player position helpers ───────────────────────────────────────────────
     # Teleporting to spawn after a tag prevents immediate re-tag after flash clears
 
