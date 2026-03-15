@@ -887,24 +887,26 @@ def _update_local_pose_from_server(state: dict, players) -> None:
         if should_snap_position:
             state["x"] = server_x
             state["y"] = server_y
-        elif distance_error > reconcile_deadband:
-            state["x"] += (server_x - state["x"]) * reconcile_blend
-            state["y"] += (server_y - state["y"]) * reconcile_blend
-        else:
-            state["x"] = server_x
-            state["y"] = server_y
+        elif state.get("mode", "manual") != "manual":
+            # auto mode only: blend toward server position
+            if distance_error > reconcile_deadband:
+                state["x"] += (server_x - state["x"]) * reconcile_blend
+                state["y"] += (server_y - state["y"]) * reconcile_blend
+            else:
+                state["x"] = server_x
+                state["y"] = server_y
+        # manual mode: keep local position — server pose is authoritative only on snaps above
+
         if should_snap_angle:
             state["angle"] = server_angle
             state["angle_raw"] = _radians_to_hw_angle(server_angle)
-        elif (
-            state.get("mode", "manual") == "auto"
-            and angle_error > reconcile_angle_deadband
-        ):
-            state["angle"] = _wrap_angle(state["angle"] + _wrap_angle(server_angle - state["angle"]) * reconcile_blend)
-            state["angle_raw"] = _radians_to_hw_angle(state["angle"])
         elif state.get("mode", "manual") == "auto":
-            state["angle"] = server_angle
-            state["angle_raw"] = _radians_to_hw_angle(server_angle)
+            if angle_error > reconcile_angle_deadband:
+                state["angle"] = _wrap_angle(state["angle"] + _wrap_angle(server_angle - state["angle"]) * reconcile_blend)
+            else:
+                state["angle"] = server_angle
+            state["angle_raw"] = _radians_to_hw_angle(state["angle"])
+        # manual mode: keep local angle entirely
         if should_snap_position or should_snap_angle:
             state["force_server_pose_sync"] = False
         state["match_ended"] = server_match_end
