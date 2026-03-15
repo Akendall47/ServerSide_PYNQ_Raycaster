@@ -1,5 +1,5 @@
 #!/bin/bash
-# pynq_test_pc.sh : launch jupyter_side/test_package_v3.py --no-hw in a tmux session
+# pynq_test_pc.sh : launch jupyter_side/test_package_v4.py --no-hw in a tmux session
 #
 # Layout:
 #   ┌─────────────────────────────────────────────────────┐
@@ -15,7 +15,7 @@
 #   ./pynq_test_pc.sh --username myname        # custom username
 #   ./pynq_test_pc.sh --mode auto --username bot1 --auto-runner-speed 0.05
 #
-# Extra args after the script name are forwarded verbatim to test_package_v3.py.
+# Extra args after the script name are forwarded verbatim to test_package_v4.py.
 # Requires: tmux, python3
 
 BASE_SESSION="pynq_pc"
@@ -26,7 +26,7 @@ while tmux has-session -t "$SESSION" 2>/dev/null; do
   n=$(( n + 1 ))
 done
 REPO="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="$REPO/jupyter_side/test_package_v3.py"
+SCRIPT="$REPO/jupyter_side/test_package_v4.py"
 PROTO_SRC="$REPO/pynq_full/interfacing/protocol.py"
 PROTO_DST="$REPO/jupyter_side/protocol.py"
 
@@ -69,7 +69,7 @@ fi
 
 banner() {
   printf "\n%bPYNQ PC TEST%b\n" "${CLR_BOLD}${CLR_MAGENTA}" "${CLR_RESET}"
-  printf "%btest_package_v3.py --no-hw%b\n" "${CLR_DIM}" "${CLR_RESET}"
+  printf "%btest_package_v4.py --no-hw%b\n" "${CLR_DIM}" "${CLR_RESET}"
 }
 
 section() {
@@ -178,7 +178,7 @@ wire_client_pane() {
 
   tmux select-pane -t "$SESSION:0.0" -T "pc test client"
   tmux send-keys -t "$SESSION:0.0" \
-    "clear; printf '\033[1;38;5;201m%s\033[0m\n' 'PC TEST CLIENT'; printf '\033[2m%s\033[0m\n' 'jupyter_side/test_package_v3.py --no-hw'; printf '\033[36m● %s\033[0m\n\n' 'Starting...'; cd \"$REPO/jupyter_side\" && python3 test_package_v3.py $py_args" \
+    "clear; printf '\033[1;38;5;201m%s\033[0m\n' 'PC TEST CLIENT'; printf '\033[2m%s\033[0m\n' 'jupyter_side/test_package_v4.py --no-hw'; printf '\033[36m● %s\033[0m\n\n' 'Starting...'; cd \"$REPO/jupyter_side\" && python3 test_package_v4.py $py_args" \
     Enter
 }
 

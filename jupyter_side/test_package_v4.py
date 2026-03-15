@@ -14,6 +14,12 @@
 #                   auto mode   = 100% server authority on position/angle.
 #                   Both modes  = local collision + BRAM writes every tick.
 #
+# NOTE — multiple sprite rendering deferred:
+#   The FPGA raycaster currently supports rendering only ONE remote entity
+#   (sprite slot 0). Entity count and slots 1-3 are written to BRAM but the
+#   hardware ignores them until the raycaster is updated to support N sprites.
+#   Re-enable when the HDL sprite pipeline is extended.
+#
 # Copy to board:
 #   scp jupyter_side/test_package_v4.py pynq_full/interfacing/protocol.py \
 #       xilinx@<PYNQ_IP>:/home/xilinx/jupyter_notebooks/Final_project_test/
@@ -260,9 +266,11 @@ def _handle(data, state, bram):
         state["angle"] = 0.0; state["angle_raw"] = 0
         _write_pose(bram, state)
         _write_sprites(bram, state)
+        role = {0:"LOBBY",1:"RUNNER",2:"TAGGER"}.get(pid, f"P{pid}")
         if changed:
-            role = {0:"LOBBY",1:"RUNNER",2:"TAGGER"}.get(pid, f"P{pid}")
-            print(f"[ACK] player_id={pid} role={role} ts={ts}")
+            print(f"[ACK] player_id={pid} role={role} mode={state['mode']} ts={ts}")
+        else:
+            print(f"[ACK] re-ack player_id={pid} role={role} mode={state['mode']}")
 
     elif pkt_type == protocol.PKT_MAP:
         w, h, tile_scale, tiles = protocol.unpack_map_packet(data)
@@ -297,8 +305,10 @@ def _handle(data, state, bram):
         mode_byte = protocol.unpack_node_mode_packet(data)
         new_mode  = "auto" if mode_byte == protocol.NODE_CONTROL_MODE_AUTO else "manual"
         if new_mode != state["mode"]:
-            print(f"[CTRL] mode {state['mode']} -> {new_mode}")
+            print(f"[CTRL] mode {state['mode']} -> {new_mode} (server request)")
             state["mode"] = new_mode
+        else:
+            print(f"[CTRL] mode confirmed: {state['mode']}")
 
     elif pkt_type == protocol.PKT_GAME_STATE:
         _, rx_seq, rx_ts, game_mode, players, bits_mask = protocol.unpack_server_packet(data)
@@ -313,16 +323,19 @@ def _handle(data, state, bram):
                 continue
             was_ended = state["match_ended"]
             state["match_ended"] = bool(p["flags"] & protocol.FLAG_MATCH_END)
+            if state["match_ended"] and not was_ended:
+                print("[MATCH_END] halting movement")
+            elif was_ended and not state["match_ended"]:
+                # Match restarted mid-session (replay) — re-enable movement
+                print("[MATCH_RESET] movement re-enabled for new match")
             if p["flags"] & protocol.FLAG_TAGGED:
-                # Server has authority on tagged position — accept it
+                # Server has authority on tagged position — accept regardless of mode
                 state["x"]         = float(p["x"])
                 state["y"]         = float(p["y"])
                 state["angle"]     = float(p["angle"])
                 state["angle_raw"] = _hw_angle(state["angle"])
                 print(f"[TAGGED] snapped to spawn ({state['x']:.1f},{state['y']:.1f})")
-            if state["match_ended"] and not was_ended:
-                print("[MATCH_END] halting movement")
-            if state["mode"] == "auto" and not (p["flags"] & protocol.FLAG_TAGGED):
+            elif state["mode"] == "auto":
                 # Auto mode: accept server position every tick (server is authoritative)
                 state["x"]         = float(p["x"])
                 state["y"]         = float(p["y"])
@@ -403,7 +416,8 @@ def main():
     parser.add_argument("--overlay",        default=OVERLAY_PATH)
     parser.add_argument("--username",       default=os.environ.get("PYNQ_USERNAME", ""))
     parser.add_argument("--mode",           choices=["manual","auto"],
-                        default=os.environ.get("PYNQ_MODE", "manual"))
+                        default=os.environ.get("PYNQ_MODE", "manual"),
+                        help="Initial mode; server can override via PKT_NODE_MODE")
     parser.add_argument("--role",           choices=["any","runner","tagger"], default="any")
     parser.add_argument("--tick-rate",      type=int, default=TICK_RATE)
     parser.add_argument("--send-rate",      type=int, default=SEND_RATE)
