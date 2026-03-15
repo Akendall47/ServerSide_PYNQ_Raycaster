@@ -31,13 +31,10 @@ PROTO_SRC="$REPO/pynq_full/interfacing/protocol.py"
 PROTO_DST="$REPO/jupyter_side/protocol.py"
 
 # Forward all script args to the Python process (--mode, --username, etc.)
-# Default to --mode manual --lock-mode if no --mode arg is present.
+# Default to --mode manual if no --mode arg is present.
 EXTRA_ARGS=("$@")
 if [[ ! " ${EXTRA_ARGS[*]} " =~ " --mode " ]]; then
   EXTRA_ARGS=("--mode" "manual" "${EXTRA_ARGS[@]}")
-fi
-if [[ ! " ${EXTRA_ARGS[*]} " =~ " --lock-mode " ]]; then
-  EXTRA_ARGS=("--lock-mode" "${EXTRA_ARGS[@]}")
 fi
 
 if [ -t 1 ]; then

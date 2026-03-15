@@ -304,9 +304,7 @@ def _handle(data, state, bram):
     elif pkt_type == protocol.PKT_NODE_MODE:
         mode_byte = protocol.unpack_node_mode_packet(data)
         new_mode  = "auto" if mode_byte == protocol.NODE_CONTROL_MODE_AUTO else "manual"
-        if state.get("mode_locked"):
-            print(f"[CTRL] server wants {new_mode} but mode is locked to {state['mode']} (--lock-mode)")
-        elif new_mode != state["mode"]:
+        if new_mode != state["mode"]:
             print(f"[CTRL] mode {state['mode']} -> {new_mode} (server request)")
             state["mode"] = new_mode
         else:
@@ -426,8 +424,6 @@ def main():
     parser.add_argument("--move-speed",     type=float, default=None)
     parser.add_argument("--turn-step",      type=int,   default=None)
     parser.add_argument("--no-hw",          action="store_true")
-    parser.add_argument("--lock-mode",      action="store_true",
-                        help="Ignore PKT_NODE_MODE — server cannot override the initial mode")
     args = parser.parse_args()
 
     role_map = {"any": protocol.ROLE_ANY, "runner": protocol.ROLE_RUNNER,
@@ -442,8 +438,7 @@ def main():
     turn_step  = args.turn_step  if args.turn_step  is not None else max(1, int(round(TURN_STEP * scale)))
 
     print(f"[NET] target {args.server}:{args.port}")
-    lock_str = " LOCKED" if args.lock_mode else ""
-    print(f"[CFG] username={args.username or '<none>'} mode={args.mode}{lock_str} role={args.role} "
+    print(f"[CFG] username={args.username or '<none>'} mode={args.mode} role={args.role} "
           f"tick={tick_rate}Hz send={args.send_rate}Hz "
           f"move={move_speed:.3f} turn={turn_step}")
 
@@ -459,7 +454,6 @@ def main():
     state = {
         "username":       args.username,
         "mode":           args.mode,
-        "mode_locked":    args.lock_mode,
         "preferred_role": role_map[args.role],
         "registered":     False,
         "player_id":      None,

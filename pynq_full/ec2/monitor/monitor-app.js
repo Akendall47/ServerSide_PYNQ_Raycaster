@@ -90,6 +90,7 @@ let autoPlaySession = {
   active: false,
   matchId: null,
   restoreModes: null,
+  restoreGhostCount: 0,   // ghost count before autoplay, restored on end
   restoreInFlight: false,
 };
 
@@ -97,6 +98,7 @@ function clearAutoPlaySession() {
   autoPlaySession.active = false;
   autoPlaySession.matchId = null;
   autoPlaySession.restoreModes = null;
+  autoPlaySession.restoreGhostCount = 0;
   autoPlaySession.restoreInFlight = false;
 }
 
@@ -106,6 +108,8 @@ async function restoreAutoPlaySessionModes(reason = 'auto play ended — restori
   }
   autoPlaySession.restoreInFlight = true;
   try {
+    // Reset ghost count to 0 (autoplay may have set it; we don't want ghosts lingering)
+    await sendControl('set_ghosts_0', 'ghost count → 0', { forceHttp: true, preserveAutoPlaySession: true });
     for (const slot of [1, 2]) {
       const targetMode = autoPlaySession.restoreModes[slot] || 'manual';
       await sendControl(`node${slot}_${targetMode}`, `board ${slot} ${targetMode}`, {
