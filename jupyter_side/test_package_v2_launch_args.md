@@ -13,6 +13,7 @@ Important runtime note:
 - `test_package_v2.py` keeps the older `20 Hz` board loop baseline
 - `test_package_v3.py` supports `--tick-rate`, and now defaults to `50 Hz`
 - if you pass explicit movement values, those are treated as raw per-tick values
+- both clients now blend small server pose corrections instead of immediately snapping; large corrections such as respawns still snap
 
 ## Basic usage
 

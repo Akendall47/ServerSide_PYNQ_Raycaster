@@ -69,8 +69,11 @@ AUTO_RUNNER_EVADE_DISTANCE = 42.0
 AUTO_TAGGER_SHOOT_RANGE = 26.0
 AUTO_TAGGER_SHOOT_ARC = 0.4
 AUTO_TAGGER_SHOOT_PERIOD_TICKS = 4
-SERVER_POSE_SNAP_DISTANCE = 1.0
-SERVER_POSE_SNAP_ANGLE = 0.35
+SERVER_POSE_SNAP_DISTANCE = 1.5
+SERVER_POSE_SNAP_ANGLE = 0.6
+SERVER_POSE_RECONCILE_BLEND = 0.35
+SERVER_POSE_RECONCILE_DEADBAND = 0.05
+SERVER_POSE_RECONCILE_ANGLE_DEADBAND = math.radians(2.0)
 BUTTON_TURN_RIGHT_MASK = 1 << 0
 BUTTON_BACKWARD_MASK = 1 << 1
 BUTTON_FORWARD_MASK = 1 << 2
@@ -602,6 +605,29 @@ def _update_local_pose_from_server(state: dict, players) -> None:
             state["angle"] = server_angle
             state["angle_raw"] = _radians_to_hw_angle(server_angle)
             state["force_server_pose_sync"] = False
+        else:
+            blend = min(
+                1.0,
+                max(0.0, float(state.get("server_pose_reconcile_blend", SERVER_POSE_RECONCILE_BLEND))),
+            )
+            deadband = max(
+                0.0,
+                float(state.get("server_pose_reconcile_deadband", SERVER_POSE_RECONCILE_DEADBAND)),
+            )
+            angle_deadband = float(
+                state.get("server_pose_reconcile_angle_deadband", SERVER_POSE_RECONCILE_ANGLE_DEADBAND)
+            )
+            if distance_error > deadband:
+                state["x"] += (server_x - state["x"]) * blend
+                state["y"] += (server_y - state["y"]) * blend
+            else:
+                state["x"] = server_x
+                state["y"] = server_y
+            if angle_error > angle_deadband:
+                state["angle"] = _wrap_angle(state["angle"] + _wrap_angle(server_angle - state["angle"]) * blend)
+            else:
+                state["angle"] = server_angle
+            state["angle_raw"] = _radians_to_hw_angle(state["angle"])
         state["match_ended"] = server_match_end
         return
 

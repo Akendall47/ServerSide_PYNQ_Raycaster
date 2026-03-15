@@ -88,6 +88,9 @@ SERVER_POSE_SNAP_DISTANCE = 8.0
 SERVER_POSE_SNAP_ANGLE = math.pi
 SERVER_POSE_HARD_SNAP_DISTANCE = 24.0
 SERVER_POSE_HARD_SNAP_ANGLE = math.pi
+SERVER_POSE_RECONCILE_BLEND = 0.25
+SERVER_POSE_RECONCILE_DEADBAND = 0.05
+SERVER_POSE_RECONCILE_ANGLE_DEADBAND = math.radians(2.0)
 MANUAL_CORRECTION_GRACE_S = 0.25
 MAP_SYNC_INPUT_GRACE_S = 0.35
 BUTTON_TURN_RIGHT_MASK = 1 << 0
@@ -200,6 +203,12 @@ def _apply_fallback_lobby_map(state: dict, bram) -> None:
     state["force_server_pose_sync"] = True
     _write_map_to_bram(bram, fallback["map_w"], fallback["map_h"], fallback["tiles"])
     _write_sprite_state_to_bram(bram, state)
+    state["sprite_bram_dirty"] = False
+    if state["tiles"] and not _is_walkable(state, state["x"], state["y"]):
+        state["x"] = 0.0
+        state["y"] = 0.0
+        state["angle"] = 0.0
+        state["angle_raw"] = 0
     print("[HW] loaded fallback lobby map until PKT_MAP arrives")
 
 
@@ -236,6 +245,16 @@ def _world_to_hw_q6_10(value: float, tile_scale: int, map_dim: int) -> int:
 def _radians_to_hw_angle(angle_radians: float) -> int:
     turn = angle_radians % (2.0 * math.pi)
     return int(round(turn * HW_ANGLE_STEPS / (2.0 * math.pi))) & HW_ANGLE_MASK
+
+
+# Stub hardware objects used when --no-hw is passed (PC testing without a board).
+class _NullBram:
+    def write(self, offset, value):
+        pass
+
+class _NullButtons:
+    def read(self):
+        return 0
 
 
 # Load the bitstream and expose BRAM and button GPIO handles.
@@ -852,10 +871,38 @@ def _update_local_pose_from_server(state: dict, players) -> None:
                 )
             )
         )
+        reconcile_blend = min(
+            1.0,
+            max(0.0, float(state.get("server_pose_reconcile_blend", SERVER_POSE_RECONCILE_BLEND))),
+        )
+        if active_manual_control:
+            reconcile_blend *= 0.5
+        reconcile_deadband = max(
+            0.0,
+            float(state.get("server_pose_reconcile_deadband", SERVER_POSE_RECONCILE_DEADBAND)),
+        )
+        reconcile_angle_deadband = float(
+            state.get("server_pose_reconcile_angle_deadband", SERVER_POSE_RECONCILE_ANGLE_DEADBAND)
+        )
         if should_snap_position:
             state["x"] = server_x
             state["y"] = server_y
+        elif distance_error > reconcile_deadband:
+            state["x"] += (server_x - state["x"]) * reconcile_blend
+            state["y"] += (server_y - state["y"]) * reconcile_blend
+        else:
+            state["x"] = server_x
+            state["y"] = server_y
         if should_snap_angle:
+            state["angle"] = server_angle
+            state["angle_raw"] = _radians_to_hw_angle(server_angle)
+        elif (
+            state.get("mode", "manual") == "auto"
+            and angle_error > reconcile_angle_deadband
+        ):
+            state["angle"] = _wrap_angle(state["angle"] + _wrap_angle(server_angle - state["angle"]) * reconcile_blend)
+            state["angle_raw"] = _radians_to_hw_angle(state["angle"])
+        elif state.get("mode", "manual") == "auto":
             state["angle"] = server_angle
             state["angle_raw"] = _radians_to_hw_angle(server_angle)
         if should_snap_position or should_snap_angle:
@@ -887,7 +934,7 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["bits_mask"] = 0
         state["input_suspended_until"] = time.monotonic() + MAP_SYNC_INPUT_GRACE_S
         state["force_server_pose_sync"] = True
-        _write_sprite_state_to_bram(bram, state)
+        state["sprite_bram_dirty"] = True
         if previous_player_id != player_id:
             print(f"[ACK] player_id={player_id} role={_role_name(player_id)} header_seq={seq} ts={timestamp}")
         return
@@ -911,7 +958,13 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["input_suspended_until"] = time.monotonic() + MAP_SYNC_INPUT_GRACE_S
         state["force_server_pose_sync"] = True
         _write_map_to_bram(bram, width, height, tiles)
-        _write_sprite_state_to_bram(bram, state)
+        state["sprite_bram_dirty"] = True
+        if not _is_walkable(state, state["x"], state["y"]):
+            state["x"] = 0.0
+            state["y"] = 0.0
+            state["angle"] = 0.0
+            state["angle_raw"] = 0
+            print("[HW] player inside wall after map change — snapped to origin")
         return
 
     if pkt_type == protocol.PKT_BITS_INIT:
@@ -928,7 +981,7 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
             state["bits"] = bits
         else:
             state["bits"] = []
-        _write_bits_to_bram(bram, state)
+        state["sprite_bram_dirty"] = True
         print(f"[BITS_INIT] count={len(raw_bits)}")
         return
 
@@ -954,7 +1007,7 @@ def _handle_packet(data: bytes, state: dict, bram) -> None:
         state["bits_mask"] = bits_mask
         state["players"] = players
         _update_local_pose_from_server(state, players)
-        _write_sprite_state_to_bram(bram, state)
+        state["sprite_bram_dirty"] = True
 
         now = time.monotonic()
         if now - state["last_state_log_at"] >= STATE_LOG_PERIOD_S:
@@ -1011,6 +1064,8 @@ def main():
                         default=(float(os.environ["PYNQ_AUTO_FALLBACK_SPEED"]) if "PYNQ_AUTO_FALLBACK_SPEED" in os.environ else None))
     parser.add_argument("--auto-shoot-period", type=int,
                         default=(int(os.environ["PYNQ_AUTO_SHOOT_PERIOD"]) if "PYNQ_AUTO_SHOOT_PERIOD" in os.environ else None))
+    parser.add_argument("--no-hw", action="store_true",
+                        help="Skip overlay load; use null BRAM/buttons stubs (PC testing)")
     args = parser.parse_args()
     tick_rate = max(1, int(args.tick_rate))
     tick_interval = 1.0 / tick_rate
@@ -1062,8 +1117,13 @@ def main():
 
     USERNAME = args.username
 
-    overlay, bram, buttons = _load_overlay(args.overlay)
-    _ = overlay
+    if args.no_hw:
+        print("[HW] --no-hw: using null BRAM/button stubs (PC test mode)")
+        bram = _NullBram()
+        buttons = _NullButtons()
+    else:
+        overlay, bram, buttons = _load_overlay(args.overlay)
+        _ = overlay
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SEND_BUFFER)
@@ -1116,14 +1176,16 @@ def main():
         "last_game_state_seq": None,
         "tx_drop_count": 0,
         "last_tx_error_log_at": 0.0,
+        "sprite_bram_dirty": False,
     }
     _apply_fallback_lobby_map(state, bram)
 
     print("[NET] starting lobby/register loop")
 
+    next_tick = time.monotonic()
     try:
         while True:
-            tick_start = time.monotonic()
+            next_tick += tick_interval
 
             _drain_packets(sock, state, bram)
 
@@ -1146,6 +1208,10 @@ def main():
                 _apply_manual_input(state, buttons)
             _write_pose_to_bram(bram, state)
 
+            if state.get("sprite_bram_dirty"):
+                _write_sprite_state_to_bram(bram, state)
+                state["sprite_bram_dirty"] = False
+
             if not state["registered"]:
                 if now - state["last_register_tx_at"] >= REGISTER_RETRY_S:
                     _send_register(sock, server_address, state)
@@ -1154,10 +1220,13 @@ def main():
                 if now - float(state.get("last_state_tx_at", 0.0) or 0.0) >= state_send_interval:
                     _send_state(sock, server_address, state)
 
-            elapsed = time.monotonic() - tick_start
-            sleep_time = tick_interval - elapsed
+            now = time.monotonic()
+            sleep_time = next_tick - now
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            elif sleep_time < -tick_interval:
+                # fell behind by more than a full tick — reset to avoid burst catch-up
+                next_tick = now
 
     except KeyboardInterrupt:
         print("\n[NET] stopped")
