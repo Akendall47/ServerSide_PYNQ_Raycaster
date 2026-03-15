@@ -92,6 +92,7 @@ let autoPlaySession = {
   restoreModes: null,
   restoreGhostCount: 0,   // ghost count before autoplay, restored on end
   restoreInFlight: false,
+  setupInProgress: false, // true while setup commands are in-flight (before start_match)
 };
 
 function clearAutoPlaySession() {
@@ -100,6 +101,7 @@ function clearAutoPlaySession() {
   autoPlaySession.restoreModes = null;
   autoPlaySession.restoreGhostCount = 0;
   autoPlaySession.restoreInFlight = false;
+  autoPlaySession.setupInProgress = false;
 }
 
 async function restoreAutoPlaySessionModes(reason = 'auto play ended — restoring prior board modes') {
@@ -141,9 +143,12 @@ function stopReplay(statusText = 'replay stopped') {
       updateNodeLinks(latestState);
     }
   }
-  // If an autoplay session is active (boards may be in auto), restore board modes now.
+  // If an autoplay session is active, end the server-side match then restore board modes.
   if (autoPlaySession.active) {
-    void restoreAutoPlaySessionModes('replay stopped — restoring board modes');
+    void (async () => {
+      await sendControl('force_end', 'force end match', { forceHttp: true, preserveAutoPlaySession: true });
+      await restoreAutoPlaySessionModes('replay stopped — restoring board modes');
+    })();
   }
 }
 
@@ -226,6 +231,7 @@ async function autoPlayReplay(matchId) {
     }
 
     autoPlaySession.active = true;
+    autoPlaySession.setupInProgress = true; // guard ws.onmessage restore until match is actually running
     autoPlaySession.matchId = matchId;
     autoPlaySession.restoreModes = snapshotSlotModes(latestState);
     autoPlaySession.restoreInFlight = false;
@@ -239,16 +245,18 @@ async function autoPlayReplay(matchId) {
     if (!await sendControl(`set_ghosts_${ghostCount}`, `ghost count → ${ghostCount}`, { forceHttp: true })) {
       throw new Error(`failed to set ghost count to ${ghostCount}`);
     }
-    if (!await sendControl('node1_auto', 'board 1 auto', { forceHttp: true })) {
+    // preserveAutoPlaySession: true prevents sendControl's guard from clearing the session
+    if (!await sendControl('node1_auto', 'board 1 auto', { forceHttp: true, preserveAutoPlaySession: true })) {
       throw new Error('failed to switch board 1 to auto');
     }
-    if (!await sendControl('node2_auto', 'board 2 auto', { forceHttp: true })) {
+    if (!await sendControl('node2_auto', 'board 2 auto', { forceHttp: true, preserveAutoPlaySession: true })) {
       throw new Error('failed to switch board 2 to auto');
     }
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     if (!await sendControl('start_match', 'start match', { forceHttp: true })) {
       throw new Error('failed to start match');
     }
+    autoPlaySession.setupInProgress = false; // match is now running — allow ws.onmessage to trigger restore
     setReplayStatus(`auto play armed for ${matchId.replace(/^match-/, '')} on ${mapName}`);
   } catch (err) {
     await restoreAutoPlaySessionModes(`auto play failed: ${err.message}`);
@@ -543,7 +551,7 @@ function connect() {
     if (activeMapChanged || returnedToLobby || exitedEndHold) {
       window.resetTransientArenaState?.();
     }
-    if (autoPlaySession.active && !autoPlaySession.restoreInFlight && (matchEnded || returnedToLobby)) {
+    if (autoPlaySession.active && !autoPlaySession.setupInProgress && !autoPlaySession.restoreInFlight && (matchEnded || returnedToLobby)) {
       void restoreAutoPlaySessionModes();
     }
     // New match boundary: drop any previous round's tag/match-end visual state.
