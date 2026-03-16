@@ -143,6 +143,14 @@ class GameTick:
         elif cmd == "set_ghost_count":
             count = int(data.get("count", 0))
             self.packets.set_ghost_count(count)
+        elif cmd == "set_ghost_profile":
+            slot = int(data.get("slot", 0) or 0)
+            updated, message = self.packets.set_ghost_profile(
+                slot,
+                speed=data.get("speed"),
+                tag_radius=data.get("tag_radius"),
+            )
+            print(f"[T2] set_ghost_profile: {message}")
         elif cmd == "set_map":
             name = data.get("map", "chase")
             new_map = load_map(os.path.join(_MAPS_DIR, f"{name}.txt"))

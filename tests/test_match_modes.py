@@ -1188,9 +1188,9 @@ def test_sim_ghosts_steer_without_crossing_walls():
         )
 
         positions = []
-        # Slower ghost tuning still needs to bend around the wall; it just takes
-        # a few more ticks to show the lateral movement clearly.
-        for _ in range(40):
+        # Slower ghost tuning plus the smaller collision radius still bends
+        # around the wall; it just shows the lateral move a little later.
+        for _ in range(60):
             logic._move_ghosts()
             ghost = state.players["ghost:1"]
             positions.append((ghost["x"], ghost["y"]))
@@ -1203,3 +1203,91 @@ def test_sim_ghosts_steer_without_crossing_walls():
 
         assert positions[-1][0] > -12.0
         assert any(abs(y) > 0.5 for _, y in positions)
+
+
+def test_sim_custom_ghost_speed_changes_step_size():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        core_logic_mod = importlib.import_module("game_logic.core_logic")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        state = match_state_mod.MatchState()
+        ghost = {
+            "player_id": 3,
+            "x": 0.0,
+            "y": 0.0,
+            "angle": 0.0,
+            "flags": protocol.FLAG_GHOST,
+            "speed": 0.05,
+        }
+        logic = core_logic_mod.CoreLogic(
+            state,
+            queue.SimpleQueue(),
+            on_event=lambda event: None,
+            on_force_end_consumed=lambda: None,
+            map_state={},
+        )
+
+        next_x, next_y, _ = logic._choose_ghost_step(ghost, 10.0, 0.0)
+
+        assert round(next_x, 4) == 0.05
+        assert round(next_y, 4) == 0.0
+
+
+def test_sim_custom_ghost_tag_radius_overrides_default_threshold():
+    with sim_import_context():
+        protocol = importlib.import_module("protocol")
+        constants = importlib.import_module("t2_constants")
+        core_logic_mod = importlib.import_module("game_logic.core_logic")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        state = match_state_mod.MatchState()
+        state.match_started = True
+        state.match_tick = constants.GRACE_TICKS
+        state.players = {
+            ("runner", 1): {
+                "player_id": 1,
+                "x": 0.0,
+                "y": 0.0,
+                "angle": 0.0,
+                "flags": 0,
+                "last_seen": 0.0,
+                "last_seq": 0,
+                "movement_mode": 0,
+                "protocol_version": 1,
+            },
+            "ghost:1": {
+                "player_id": 3,
+                "x": 12.0,
+                "y": 0.0,
+                "angle": 0.0,
+                "flags": protocol.FLAG_GHOST,
+                "tag_radius": 6.0,
+                "last_seen": 0.0,
+                "last_seq": 0,
+                "movement_mode": 0,
+                "protocol_version": 1,
+            },
+        }
+
+        events = []
+
+        async def on_event(event):
+            events.append(event)
+
+        logic = core_logic_mod.CoreLogic(
+            state,
+            queue.SimpleQueue(),
+            on_event=on_event,
+            on_force_end_consumed=lambda: None,
+            map_state={},
+        )
+
+        asyncio.run(logic._check_proximity())
+        assert state.tag_count == 0
+
+        state.players["ghost:1"]["tag_radius"] = 14.0
+        asyncio.run(logic._check_proximity())
+
+        assert state.tag_count == 1
+        assert events[0]["event"] == "player_tagged"

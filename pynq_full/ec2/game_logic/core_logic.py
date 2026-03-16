@@ -10,7 +10,7 @@ import asyncio
 import math
 import time
 
-from protocol import FLAG_TAGGED, FLAG_MATCH_END, GAME_MODE_CHASE_BITS
+from protocol import FLAG_TAGGED, FLAG_MATCH_END, GAME_MODE_CHASE_BITS, FLAG_GHOST
 from game_logic.anticheat import Anticheat
 from game_logic.match_state import MatchState
 from t2_map_loader import resolve_walkable_world
@@ -79,7 +79,7 @@ class CoreLogic:
 
         base_angle = math.atan2(dy, dx)
         current_angle = ghost.get("angle", base_angle)
-        step = min(GHOST_SPEED, dist)
+        step = min(self._ghost_speed(ghost), dist)
         steer_dir = int(ghost.get("steer_dir", 0) or 0)
         if steer_dir > 0:
             offsets = (
@@ -146,6 +146,26 @@ class CoreLogic:
             return current_x, current_y, ghost.get("angle", base_angle)
         ghost["steer_dir"] = 0 if abs(best[4]) < 0.05 else (1 if best[4] > 0.0 else -1)
         return best[1], best[2], best[3]
+
+    def _ghost_speed(self, ghost: dict) -> float:
+        try:
+            speed = float(ghost.get("speed", GHOST_SPEED))
+        except (TypeError, ValueError):
+            speed = GHOST_SPEED
+        return max(0.02, speed)
+
+    def _pair_tag_radius(self, p1: dict, p2: dict) -> float:
+        overrides = []
+        for player in (p1, p2):
+            if not (int(player.get("flags", 0)) & FLAG_GHOST):
+                continue
+            try:
+                overrides.append(float(player.get("tag_radius", TAG_RADIUS)))
+            except (TypeError, ValueError):
+                continue
+        if overrides:
+            return max(2.0, max(overrides))
+        return TAG_RADIUS
 
     # ── Bit collection ────────────────────────────────────────────────────────
     # Runner collects bits in CHASE_BITS mode; all-collected → match end
@@ -219,8 +239,8 @@ class CoreLogic:
                 dist = self._anticheat.distance_between(
                     p1["x"], p1["y"], p2["x"], p2["y"]
                 )
-
-                if dist >= TAG_RADIUS:
+                tag_radius = self._pair_tag_radius(p1, p2)
+                if dist >= tag_radius:
                     continue
                 # Lower player_id (runner = 1) is always the one tagged
                 tagged = p1 if p1["player_id"] < p2["player_id"] else p2

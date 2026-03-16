@@ -234,6 +234,32 @@ class PacketHandler:
     def _ghost_count(self):
         return sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
 
+    def _ghost_slot_for_player(self, player: dict) -> int:
+        slot = int(player.get("ghost_slot") or 0)
+        if slot > 0:
+            return slot
+        player_id = int(player.get("player_id") or 0)
+        return max(1, player_id - 2)
+
+    def _apply_ghost_profile(self, slot: int, player: dict):
+        profile = self.state.ghost_profile(slot)
+        player["ghost_slot"] = int(slot)
+        player["speed"] = float(profile["speed"])
+        player["tag_radius"] = float(profile["tag_radius"])
+
+    def set_ghost_profile(self, slot: int, speed=None, tag_radius=None):
+        profile = self.state.set_ghost_profile(slot, speed=speed, tag_radius=tag_radius)
+        if profile is None:
+            return False, f"invalid ghost slot {slot}"
+
+        live_ghost = self.state.players.get(f"ghost:{int(slot)}")
+        if live_ghost is not None:
+            self._apply_ghost_profile(int(slot), live_ghost)
+        return True, (
+            f"ghost {int(slot)} traits -> speed {profile['speed']:.2f}, "
+            f"tag radius {profile['tag_radius']:.1f}"
+        )
+
     def _sim_slot_for_player(self, player: dict):
         for raw in (
             player.get("profile_key", ""),
@@ -339,6 +365,7 @@ class PacketHandler:
             player["flags"] = FLAG_GHOST
             player["last_seq"] = None
             player["timed_out"] = False
+            self._apply_ghost_profile(self._ghost_slot_for_player(player), player)
 
         self.state.next_id = max(
             (player["player_id"] for player in self.state.players.values()),
@@ -505,7 +532,8 @@ class PacketHandler:
         ghost_count = sum(1 for a in self.state.players if str(a).startswith("ghost:"))
         if ghost_count >= MAX_GHOSTS:
             return
-        ghost_addr = f"ghost:{ghost_count + 1}"
+        ghost_slot = ghost_count + 1
+        ghost_addr = f"ghost:{ghost_slot}"
         used_ids = {player["player_id"] for player in self.state.players.values()}
         ghost_id = 3
         while ghost_id in used_ids:
@@ -513,7 +541,7 @@ class PacketHandler:
         angle = math.pi / 2
         spawn_positions = self.state.spawn_positions
         x, y = spawn_positions[ghost_id - 1] if ghost_id - 1 < len(spawn_positions) else (0.0, 0.0)
-        self.state.players[ghost_addr] = {
+        ghost = {
             "player_id":        ghost_id,
             "x":                x, "y": y, "angle": angle,
             "flags":            FLAG_GHOST,
@@ -528,6 +556,8 @@ class PacketHandler:
             "controller_key":   "",
             "identity_source":  "ghost",
         }
+        self._apply_ghost_profile(ghost_slot, ghost)
+        self.state.players[ghost_addr] = ghost
         print(f"[T2] spawned ghost tagger (player_id={ghost_id}) at {ghost_addr}")
 
     def set_ghost_count(self, target: int):

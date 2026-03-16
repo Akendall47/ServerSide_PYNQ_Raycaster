@@ -2176,6 +2176,63 @@
     gap: 8px;
   }
 
+  .entity-trait-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0, 212, 255, 0.12);
+  }
+
+  .entity-trait-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .entity-trait-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ab4d8;
+    font-size: 18px;
+  }
+
+  .entity-trait-field span {
+    font-family: 'Silkscreen', cursive;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .entity-trait-field input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    background: rgba(9, 17, 31, 0.88);
+    color: var(--white);
+  }
+
+  .entity-trait-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .entity-trait-status {
+    font-size: 18px;
+    color: #9ab4d8;
+  }
+
+  .entity-trait-status.success {
+    color: var(--green);
+  }
+
+  .entity-trait-status.error {
+    color: var(--coral-light);
+  }
+
   .player-card-footer {
     display: flex;
     flex-wrap: wrap;
@@ -2326,6 +2383,11 @@
   [data-theme="light"] .player-trophy-role,
   [data-theme="light"] .player-trophy-overlay {
     background: rgba(255, 255, 255, 0.6);
+  }
+
+  [data-theme="light"] .entity-trait-field input {
+    background: rgba(255, 255, 255, 0.74);
+    color: var(--white);
   }
 
   [data-theme="light"] .player-card-subtitle,
@@ -2731,6 +2793,10 @@
     }
 
     .entity-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .entity-trait-grid {
       grid-template-columns: 1fr;
     }
 

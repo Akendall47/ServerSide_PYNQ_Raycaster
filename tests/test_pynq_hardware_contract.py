@@ -780,6 +780,47 @@ def test_pynq_packet_handler_monitor_ghost_requests_do_not_start_match():
         assert write_queue.items == []
 
 
+def test_pynq_packet_handler_applies_saved_ghost_profile_to_spawned_slot():
+    with pynq_import_context():
+        import asyncio
+
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        state = match_state_mod.MatchState()
+        handler = packet_handler_mod.PacketHandler(
+            state=state,
+            packet_queue=asyncio.Queue(),
+            write_queue=[],
+            udp_transport=None,
+            map_state={
+                "width": 32,
+                "height": 32,
+                "tile_scale": 8,
+                "tiles": bytearray(32 * 32),
+                "bits": [],
+                "spawn_positions": [(0.0, 0.0), (8.0, 0.0), (16.0, 0.0), (24.0, 0.0)],
+            },
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_match_pause=lambda event=None: None,
+            on_match_resume=lambda event=None: None,
+            on_event=lambda event=None: None,
+        )
+
+        updated, message = handler.set_ghost_profile(2, speed=0.09, tag_radius=10.5)
+        handler.set_ghost_count(2)
+
+        assert updated is True
+        assert "ghost 2 traits" in message
+        assert state.players["ghost:1"]["ghost_slot"] == 1
+        assert state.players["ghost:2"]["ghost_slot"] == 2
+        assert state.players["ghost:2"]["speed"] == 0.09
+        assert state.players["ghost:2"]["tag_radius"] == 10.5
+        assert state.ghost_profile(2)["speed"] == 0.09
+        assert state.ghost_profile(2)["tag_radius"] == 10.5
+
+
 def test_pynq_packet_handler_return_to_lobby_preserves_humans_and_ghosts():
     with pynq_import_context():
         import asyncio
@@ -1188,6 +1229,48 @@ def test_pynq_redis_broadcast_hides_ghosts_while_waiting_in_lobby():
         assert payload["targets"] == [("board1", 1)]
         assert [player["player_id"] for player in players] == [0]
         assert not any(player["flags"] & protocol.FLAG_GHOST for player in players)
+
+
+def test_pynq_redis_writes_include_ghost_profiles():
+    with pynq_import_context():
+        import json
+        import queue
+
+        protocol = importlib.import_module("protocol")
+        redis_io_mod = importlib.import_module("t2_redis_io")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        state = match_state_mod.MatchState()
+        state.game_mode = protocol.GAME_MODE_CHASE
+        state.set_ghost_profile(1, speed=0.11, tag_radius=9.0)
+        state.set_ghost_profile(3, speed=0.07, tag_radius=6.5)
+
+        write_queue = queue.SimpleQueue()
+        redis_io = redis_io_mod.RedisIO(
+            state=state,
+            map_state={"name": "lobby", "bits": []},
+            broadcast_queue=None,
+            write_queue=write_queue,
+        )
+
+        redis_io.push_redis_writes(7, 3)
+
+        writes = []
+        while True:
+            try:
+                writes.append(write_queue.get_nowait())
+            except Exception:
+                break
+
+        game_state_write = next(msg for msg in writes if msg.get("key") == "game:state")
+        ghost_profiles = json.loads(game_state_write["mapping"]["ghost_profiles"])
+
+        assert ghost_profiles[0]["slot"] == 1
+        assert ghost_profiles[0]["speed"] == 0.11
+        assert ghost_profiles[0]["tag_radius"] == 9.0
+        assert ghost_profiles[2]["slot"] == 3
+        assert ghost_profiles[2]["speed"] == 0.07
+        assert ghost_profiles[2]["tag_radius"] == 6.5
 
 
 def test_pynq_packet_handler_kicked_board_is_temporarily_blocked_from_rejoining():

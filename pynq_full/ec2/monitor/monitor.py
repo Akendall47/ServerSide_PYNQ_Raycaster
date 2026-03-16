@@ -338,8 +338,15 @@ def _stop_service(name: str):
             pass
     return f"{name} killed"
 
-def handle_control_command(cmd: str):
+def handle_control_command(payload_or_cmd):
     global _service_message
+
+    if isinstance(payload_or_cmd, dict):
+        payload = payload_or_cmd
+        cmd = str(payload.get("cmd", "") or "").strip()
+    else:
+        cmd = str(payload_or_cmd or "").strip()
+        payload = {"cmd": cmd}
 
     def publish_node_mode(board_slot: int, mode: str):
         payload = json.dumps({"cmd": "set_node_mode", "mode": mode, "board_slot": board_slot})
@@ -388,6 +395,21 @@ def handle_control_command(cmd: str):
         count = int(cmd.split("_")[-1])
         r.publish("game:control", json.dumps({"cmd": "set_ghost_count", "count": count}))
         _service_message = f"ghost count → {count} sent"
+    elif cmd == "set_ghost_profile":
+        try:
+            slot = int(payload.get("slot", 0) or 0)
+        except (TypeError, ValueError):
+            slot = 0
+        if slot not in (1, 2, 3):
+            _service_message = f"invalid ghost slot: {slot}"
+        else:
+            r.publish("game:control", json.dumps({
+                "cmd": "set_ghost_profile",
+                "slot": slot,
+                "speed": payload.get("speed"),
+                "tag_radius": payload.get("tag_radius"),
+            }))
+            _service_message = f"ghost {slot} traits updated"
     elif cmd.startswith("kick_board:"):
         try:
             board_slot = int(cmd.split(":", 1)[1])
@@ -554,6 +576,9 @@ def collect_state():
             "profile_key":     raw.get("profile_key", ""),
             "controller_key":  raw.get("controller_key", ""),
             "identity_source": raw.get("identity_source", ""),
+            "ghost_slot":      _as_optional_int(raw.get("ghost_slot")),
+            "speed":           _as_float(raw.get("speed"), 0.0),
+            "tag_radius":      _as_float(raw.get("tag_radius"), 0.0),
             "sim_slot":        _as_optional_int(raw.get("sim_slot")),
             "is_ghost":        is_ghost,
             "queued":          False,
@@ -585,6 +610,19 @@ def collect_state():
             }
         except Exception:
             slot_modes = {1: "manual", 2: "manual"}
+    ghost_profiles = []
+    if game_raw and game_raw.get("ghost_profiles"):
+        try:
+            ghost_profiles = [
+                {
+                    "slot": _as_int(raw.get("slot", index), index),
+                    "speed": _as_float(raw.get("speed"), 0.0),
+                    "tag_radius": _as_float(raw.get("tag_radius"), 0.0),
+                }
+                for index, raw in enumerate(json.loads(game_raw["ghost_profiles"]), start=1)
+            ]
+        except Exception:
+            ghost_profiles = []
     queued_players = []
     if game_raw and game_raw.get("queued_players"):
         try:
@@ -690,6 +728,7 @@ def collect_state():
         "active_map": active_map,
         "selected_map": selected_map,
         "slot_modes": slot_modes,
+        "ghost_profiles": ghost_profiles,
         "match": {
             "started": match_started,
             "ended": match_ended,
@@ -928,11 +967,11 @@ async def control_handler(request):
         raise web.HTTPBadRequest(text="missing cmd")
 
     try:
-        await asyncio.to_thread(handle_control_command, cmd)
+        message = await asyncio.to_thread(handle_control_command, data)
     except Exception as exc:
         print(f"[monitor] control error for {cmd}: {exc}")
         raise web.HTTPInternalServerError(text="failed to apply control")
-    return web.json_response({"ok": True, "cmd": cmd})
+    return web.json_response({"ok": True, "cmd": cmd, "message": message})
 
 
 async def maps_list_handler(request):

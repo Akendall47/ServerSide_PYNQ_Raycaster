@@ -75,6 +75,9 @@ class RedisIO:
                     "controller_key":  _redis_scalar(p.get("controller_key", "")),
                     "identity_source": _redis_scalar(p.get("identity_source", "")),
                     "sim_slot":        "" if p.get("sim_slot") is None else int(p.get("sim_slot")),
+                    "ghost_slot":      _redis_scalar(p.get("ghost_slot", "")),
+                    "speed":           _redis_scalar(round(float(p.get("speed")), 4) if p.get("speed") is not None else ""),
+                    "tag_radius":      _redis_scalar(round(float(p.get("tag_radius")), 4) if p.get("tag_radius") is not None else ""),
                     "is_ghost":        int(bool(p["flags"] & FLAG_GHOST)),
                 },
             })
@@ -126,6 +129,10 @@ class RedisIO:
             "paused_player_ids": json.dumps(self.state.paused_player_ids),
             "pause_remaining_s": "" if pause_remaining_s is None else round(pause_remaining_s, 2),
             "queued_players":    json.dumps(queued_players),
+            "ghost_profiles":    json.dumps([
+                self.state.ghost_profile(slot)
+                for slot in sorted(getattr(self.state, "ghost_profiles", {}))
+            ]),
             "map":               _redis_scalar(self.map_state.get("name", "")),
             "spawn_positions":   json.dumps([
                 [round(pos[0], 2), round(pos[1], 2)]

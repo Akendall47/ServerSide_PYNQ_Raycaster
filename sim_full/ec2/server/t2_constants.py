@@ -3,7 +3,7 @@ import math
 
 # ── Tag / match rules ─────────────────────────────────────────────────────────
 
-TAG_RADIUS       = 20.0   # world-unit proximity that counts as a tag
+TAG_RADIUS       = 16.0   # tighter live tag proximity; easy to tune before per-ghost traits
 MATCH_PLAYERS    = 2      # players required to start a match
 MAX_PLAYERS      = 4      # raised to 2 humans + up to 3 ghosts (tagger slots)
 TAGS_TO_WIN      = 2      # runner must be tagged this many times to end the match
@@ -16,8 +16,8 @@ GHOST_SPEED      = 0.15   # world units per tick (~9 wu/s at 60 Hz — tuned dow
 
 # ── Bits (GAME_MODE_CHASE_BITS) ───────────────────────────────────────────────
 
-BIT_COLLECT_RADIUS = 10.0   # world units — smaller than TAG_RADIUS
-PLAYER_COLLISION_RADIUS = 2.5
+BIT_COLLECT_RADIUS = 8.0    # smaller collect radius to match tighter gameplay
+PLAYER_COLLISION_RADIUS = 2.0
 SPAWN_CLEARANCE_RADIUS = 3.25
 
 # ── Timing (seconds) ──────────────────────────────────────────────────────────

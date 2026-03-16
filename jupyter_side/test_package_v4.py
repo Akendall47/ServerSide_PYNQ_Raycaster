@@ -82,7 +82,7 @@ ANGLE_MASK            = ANGLE_STEPS - 1
 # ── movement config ───────────────────────────────────────────────────────────
 MOVE_SPEED   = 0.25    # world units per tick at 50 Hz, manual
 TURN_STEP    = 26      # angle units per tick at 50 Hz, manual
-COLLISION_R  = 2.5
+COLLISION_R  = 2.0
 AUTO_SPEED   = 0.10    # world units per tick for auto steering
 AUTO_TURN    = 80      # angle units per tick for auto steering
 BTN_RIGHT    = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input

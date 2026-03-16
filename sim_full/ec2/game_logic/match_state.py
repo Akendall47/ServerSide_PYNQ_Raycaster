@@ -6,8 +6,17 @@
 import time
 from t2_constants import (
     SPAWN_POSITIONS, SPAWN_ANGLES, LOCKOUT_S, GRACE_TICKS, PAUSE_ABORT_S,
+    GHOST_SPEED, TAG_RADIUS, MAX_GHOSTS,
 )
 from protocol import GAME_MODE_CHASE
+
+
+def _clamp_float(value, default: float, minimum: float, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
 
 
 # All mutable state that belongs to one match lifecycle — passed by reference to sub-modules
@@ -21,6 +30,10 @@ class MatchState:
 
     def reset_all(self):
         self.spawn_positions = list(SPAWN_POSITIONS)
+        self.ghost_profiles = {
+            slot: self.default_ghost_profile(slot)
+            for slot in range(1, MAX_GHOSTS + 1)
+        }
         self.clear_match(arm_lockout=False)
 
     # ── Player position helpers ───────────────────────────────────────────────
@@ -98,6 +111,37 @@ class MatchState:
 
     def set_spawn_positions(self, positions):
         self.spawn_positions = [tuple(pos) for pos in positions] if positions else list(SPAWN_POSITIONS)
+
+    def default_ghost_profile(self, slot: int) -> dict:
+        return {
+            "slot": int(slot),
+            "speed": round(float(GHOST_SPEED), 4),
+            "tag_radius": round(float(TAG_RADIUS), 4),
+        }
+
+    def ghost_profile(self, slot: int) -> dict:
+        slot_key = int(slot)
+        profile = self.ghost_profiles.get(slot_key)
+        if profile is None:
+            profile = self.default_ghost_profile(slot_key)
+            self.ghost_profiles[slot_key] = profile
+        return {
+            "slot": slot_key,
+            "speed": float(profile.get("speed", GHOST_SPEED)),
+            "tag_radius": float(profile.get("tag_radius", TAG_RADIUS)),
+        }
+
+    def set_ghost_profile(self, slot: int, speed=None, tag_radius=None) -> dict | None:
+        slot_key = int(slot)
+        if slot_key < 1 or slot_key > MAX_GHOSTS:
+            return None
+        current = self.ghost_profile(slot_key)
+        if speed is not None:
+            current["speed"] = round(_clamp_float(speed, GHOST_SPEED, 0.02, 1.0), 4)
+        if tag_radius is not None:
+            current["tag_radius"] = round(_clamp_float(tag_radius, TAG_RADIUS, 2.0, 64.0), 4)
+        self.ghost_profiles[slot_key] = current
+        return dict(current)
 
     # Return the player dict for the runner (player_id=1), or None if not yet registered
     def runner(self):

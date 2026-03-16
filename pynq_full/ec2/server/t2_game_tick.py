@@ -129,6 +129,14 @@ class GameTick:
         elif cmd == "set_ghost_count":
             count = int(data.get("count", 0))
             self.packets.set_ghost_count(count)
+        elif cmd == "set_ghost_profile":
+            slot = int(data.get("slot", 0) or 0)
+            updated, message = self.packets.set_ghost_profile(
+                slot,
+                speed=data.get("speed"),
+                tag_radius=data.get("tag_radius"),
+            )
+            print(f"[T2] set_ghost_profile: {message}")
         elif cmd == "set_node_mode":
             board_slot = int(data.get("board_slot", 0) or 0)
             mode = str(data.get("mode", "manual"))

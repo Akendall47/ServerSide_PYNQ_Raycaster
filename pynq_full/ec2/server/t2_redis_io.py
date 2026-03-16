@@ -85,6 +85,9 @@ class RedisIO:
                     "profile_key":     _redis_scalar(p.get("profile_key", "")),
                     "controller_key":  _redis_scalar(p.get("controller_key", "")),
                     "identity_source": _redis_scalar(p.get("identity_source", "")),
+                    "ghost_slot":      _redis_scalar(p.get("ghost_slot", "")),
+                    "speed":           _redis_scalar(round(float(p.get("speed")), 4) if p.get("speed") is not None else ""),
+                    "tag_radius":      _redis_scalar(round(float(p.get("tag_radius")), 4) if p.get("tag_radius") is not None else ""),
                     "is_ghost":        int(bool(p["flags"] & FLAG_GHOST)),
                 },
             })
@@ -136,6 +139,10 @@ class RedisIO:
             "pause_remaining_s": "" if pause_remaining_s is None else round(pause_remaining_s, 2),
             "queued_players":    json.dumps(queued_players),
             "slot_modes":        json.dumps(getattr(self.state, "slot_modes", {1: "manual", 2: "manual"})),
+            "ghost_profiles":    json.dumps([
+                self.state.ghost_profile(slot)
+                for slot in sorted(getattr(self.state, "ghost_profiles", {}))
+            ]),
             "map":               _redis_scalar(self.map_state.get("name", "")),
             "bits": json.dumps([[round(b[0], 2), round(b[1], 2)]
                                  for b in self.state.bits]),

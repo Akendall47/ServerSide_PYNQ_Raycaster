@@ -4,10 +4,10 @@ const frameChartCanvas = document.getElementById('frame-chart');
 const frameChartCtx = frameChartCanvas.getContext('2d');
 const stackedFrameChart = document.getElementById('stacked-frame-chart');
 const W = canvas.width, H = canvas.height;
-const TAG_RADIUS     = 20.0;   // must match t2_game_tick.py TAG_RADIUS
+const TAG_RADIUS     = 16.0;   // must match t2_constants.py TAG_RADIUS
 const WORLD_LIMIT    = 80.0;   // fallback half-extent when no map is loaded
 const TILE_SCALE     = 8;      // world units per tile — must match MAP_TILE_SCALE
-const PLAYER_COLLISION_RADIUS = 2.5;
+const PLAYER_COLLISION_RADIUS = 2.0;
 const FLAG_TAGGED    = 0x02;
 const FLAG_MATCH_END = 0x04;
 const MAP_VIEW_PAD  = 24;

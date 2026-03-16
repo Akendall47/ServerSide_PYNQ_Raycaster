@@ -14,11 +14,57 @@ import {
 
 const MONITOR_STATE_EVENT = 'monitor:state';
 const MAX_VISIBLE_PROFILES = 4;
+const DEFAULT_GHOST_SPEED = 0.15;
+const DEFAULT_GHOST_TAG_RADIUS = 16.0;
 
-function buildGhostSlots(ghosts) {
+function defaultGhostProfile(slotNumber) {
+  return {
+    slot: slotNumber,
+    speed: DEFAULT_GHOST_SPEED,
+    tag_radius: DEFAULT_GHOST_TAG_RADIUS,
+  };
+}
+
+function buildDefaultGhostProfiles() {
+  return Array.from({ length: 3 }, (_, index) => defaultGhostProfile(index + 1));
+}
+
+function normaliseGhostProfile(rawProfile, slotNumber) {
+  const safeSlot = Math.max(1, Math.min(3, asNumber(rawProfile?.slot, slotNumber)));
+  return {
+    slot: safeSlot,
+    speed: asNumber(rawProfile?.speed, DEFAULT_GHOST_SPEED),
+    tag_radius: asNumber(rawProfile?.tag_radius, DEFAULT_GHOST_TAG_RADIUS),
+  };
+}
+
+function ghostSlotNumber(ghost, fallbackSlot) {
+  return Math.max(1, Math.min(3, asNumber(
+    ghost?.ghost_slot,
+    asNumber(ghost?.id, fallbackSlot + 2) - 2,
+  )));
+}
+
+function buildGhostSlots(ghosts, ghostProfiles) {
+  const ghostsBySlot = new Map();
+  ghosts.forEach((ghost, index) => {
+    const slotNumber = ghostSlotNumber(ghost, index + 1);
+    if (!ghostsBySlot.has(slotNumber)) {
+      ghostsBySlot.set(slotNumber, ghost);
+    }
+  });
+
+  const profilesBySlot = new Map(
+    (ghostProfiles.length ? ghostProfiles : buildDefaultGhostProfiles()).map((profile, index) => {
+      const normalised = normaliseGhostProfile(profile, index + 1);
+      return [normalised.slot, normalised];
+    }),
+  );
+
   return Array.from({ length: 3 }, (_, index) => {
     const slotNumber = index + 1;
-    const ghost = ghosts[index] || null;
+    const ghost = ghostsBySlot.get(slotNumber) || null;
+    const profile = profilesBySlot.get(slotNumber) || defaultGhostProfile(slotNumber);
     const entitySeed = String(
       ghost?.entity_key
       || ghost?.profile_key
@@ -30,6 +76,8 @@ function buildGhostSlots(ghosts) {
     return {
       slotNumber,
       ghost,
+      profile,
+      defaultProfile: defaultGhostProfile(slotNumber),
       key: ghost ? `live-${entitySeed}` : `empty-${slotNumber}`,
       trophyPlayer: {
         player_key: `entity:${entitySeed}`,
@@ -42,7 +90,7 @@ function buildGhostSlots(ghosts) {
         : `Ghost Slot ${slotNumber}`,
       subtitle: ghost
         ? `slot ${slotNumber} · ${entitySeed}`
-        : `slot ${slotNumber} · reserved server lane`,
+        : `slot ${slotNumber} · saved server traits`,
     };
   });
 }
@@ -57,6 +105,7 @@ function preferLiveCandidate(current, next) {
 export default function PlayerStatsTab() {
   const [profiles, setProfiles] = useState([]);
   const [livePlayers, setLivePlayers] = useState([]);
+  const [ghostProfiles, setGhostProfiles] = useState(buildDefaultGhostProfiles());
   const [selectedKey, setSelectedKey] = useState(null);
   const [matchHistory, setMatchHistory] = useState([]);
   const [detailProfile, setDetailProfile] = useState(null);
@@ -90,7 +139,13 @@ export default function PlayerStatsTab() {
       if (!response.ok) throw new Error(`LIVE STATE FETCH FAILED (${response.status})`);
       const payload = await response.json();
       const items = Array.isArray(payload.players) ? payload.players.slice() : [];
-      startTransition(() => setLivePlayers(items));
+      const nextGhostProfiles = Array.isArray(payload.ghost_profiles)
+        ? payload.ghost_profiles.map((profile, index) => normaliseGhostProfile(profile, index + 1))
+        : buildDefaultGhostProfiles();
+      startTransition(() => {
+        setLivePlayers(items);
+        setGhostProfiles(nextGhostProfiles);
+      });
     } catch (_fetchError) {
       // Preserve the last good live snapshot if this refresh fails.
     }
@@ -173,7 +228,13 @@ export default function PlayerStatsTab() {
     fetchLiveState();
     const syncLivePlayers = (state = window.latestState) => {
       const snapshot = Array.isArray(state?.players) ? state.players.slice() : [];
-      startTransition(() => setLivePlayers(snapshot));
+      const nextGhostProfiles = Array.isArray(state?.ghost_profiles)
+        ? state.ghost_profiles.map((profile, index) => normaliseGhostProfile(profile, index + 1))
+        : buildDefaultGhostProfiles();
+      startTransition(() => {
+        setLivePlayers(snapshot);
+        setGhostProfiles(nextGhostProfiles);
+      });
     };
     const handleState = (event) => {
       syncLivePlayers(event.detail);
@@ -213,10 +274,27 @@ export default function PlayerStatsTab() {
   const ghosts = livePlayers
     .filter((player) => isGhostPlayer(player))
     .sort((left, right) => (
-      asNumber(left.id, 999) - asNumber(right.id, 999)
+      ghostSlotNumber(left, 99) - ghostSlotNumber(right, 99)
+      || asNumber(left.id, 999) - asNumber(right.id, 999)
       || String(left.display_name || left.username || left.entity_key || '')
         .localeCompare(String(right.display_name || right.username || right.entity_key || ''))
     ));
+
+  function handleGhostProfileSaved(profile) {
+    const nextProfile = normaliseGhostProfile(profile, profile?.slot || 1);
+    setGhostProfiles((current) => {
+      const nextProfiles = buildDefaultGhostProfiles().map((fallback) => {
+        const existing = current.find((entry) => entry.slot === fallback.slot);
+        return existing ? normaliseGhostProfile(existing, fallback.slot) : fallback;
+      });
+      const targetIndex = nextProfiles.findIndex((entry) => entry.slot === nextProfile.slot);
+      if (targetIndex >= 0) {
+        nextProfiles[targetIndex] = nextProfile;
+      }
+      return nextProfiles;
+    });
+    fetchLiveState();
+  }
 
   const enrichedProfiles = profiles
     .map((profile) => {
@@ -258,7 +336,7 @@ export default function PlayerStatsTab() {
 
   const visibleProfiles = enrichedProfiles.slice(0, MAX_VISIBLE_PROFILES);
   const hiddenProfileCount = Math.max(0, enrichedProfiles.length - visibleProfiles.length);
-  const ghostSlots = buildGhostSlots(ghosts);
+  const ghostSlots = buildGhostSlots(ghosts, ghostProfiles);
   const hiddenGhostCount = Math.max(0, ghosts.length - ghostSlots.filter((slot) => slot.ghost).length);
 
   return (
@@ -365,12 +443,17 @@ export default function PlayerStatsTab() {
           <span className="micro-chip">{`${Math.min(ghosts.length, 3)}/3 ghost lanes active`}</span>
         </div>
         <div className="metric-note entity-section-note">
-          Ghosts are live websocket-only server actors today. These three lanes stay reserved so we can add future
-          server-side traits and non-human entity types without mixing them into the human career cards.
+          Each ghost lane now has saved server-side traits. Adjust speed and tag radius here and the active ghost
+          updates live; standby lanes keep the settings for the next spawn.
         </div>
         <div className="entity-stats-grid">
           {ghostSlots.map((slot) => (
-            <ServerEntityCard key={slot.key} slot={slot} pageVisible={pageVisible} />
+            <ServerEntityCard
+              key={slot.key}
+              slot={slot}
+              pageVisible={pageVisible}
+              onProfileSaved={handleGhostProfileSaved}
+            />
           ))}
         </div>
         {hiddenGhostCount ? (
