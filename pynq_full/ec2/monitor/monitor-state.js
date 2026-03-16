@@ -514,6 +514,10 @@ async function deleteMapFromControls(mapId) {
 // ── State ──────────────────────────────────────────────────────────────────
 let latestState    = null;
 window.latestState = latestState;
+let latestStateVersion = 0;
+let latestStateReceivedAt = performance.now();
+window.latestStateVersion = latestStateVersion;
+window.latestStateReceivedAt = latestStateReceivedAt;
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
 let renderCount = 0, renderLastTime = performance.now();
 
@@ -540,6 +544,9 @@ function resetTransientArenaState() {
   for (const key of Object.keys(tagPos)) delete tagPos[key];
   for (const key of Object.keys(lastLivePos)) delete lastLivePos[key];
   for (const key of Object.keys(prevFlags)) delete prevFlags[key];
+  if (window.resetMonitorInterpolationState) {
+    window.resetMonitorInterpolationState();
+  }
 }
 
 function normalisePlayers(players) {

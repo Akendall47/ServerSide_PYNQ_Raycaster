@@ -1,4 +1,83 @@
 // ── Canvas ─────────────────────────────────────────────────────────────────
+const interpolatedLivePoses = {};
+let lastInterpolatedStateVersion = -1;
+const INTERPOLATION_SNAP_DISTANCE = 18.0;
+const INTERPOLATION_MIN_MS = 25;
+const INTERPOLATION_MAX_MS = 140;
+
+function wrapAngleDelta(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function interpolateAngle(fromAngle, toAngle, t) {
+  return fromAngle + wrapAngleDelta(toAngle - fromAngle) * t;
+}
+
+function resetMonitorInterpolationState() {
+  for (const key of Object.keys(interpolatedLivePoses)) delete interpolatedLivePoses[key];
+  lastInterpolatedStateVersion = -1;
+}
+
+window.resetMonitorInterpolationState = resetMonitorInterpolationState;
+
+function updateInterpolatedLivePlayers(players, now) {
+  const stateVersion = Number(window.latestStateVersion || 0);
+  const receivedAt = Number(window.latestStateReceivedAt || now);
+  const pushHz = Number(latestState?.redis?.monitor_push_hz || 30);
+  const durationMs = Math.max(
+    INTERPOLATION_MIN_MS,
+    Math.min(INTERPOLATION_MAX_MS, Math.round(1000 / Math.max(1, pushHz))),
+  );
+
+  if (stateVersion !== lastInterpolatedStateVersion) {
+    const seenKeys = new Set();
+    players.forEach((player) => {
+      const key = player.entityKey;
+      seenKeys.add(key);
+      const existing = interpolatedLivePoses[key];
+      const flagsChanged = existing && Number(existing.flags) !== Number(player.flags);
+      const movedTooFar = existing && Math.hypot(player.x - existing.toX, player.y - existing.toY) >= INTERPOLATION_SNAP_DISTANCE;
+      const shouldSnap = !existing || player.queued || flagsChanged || movedTooFar;
+      const startX = shouldSnap ? player.x : existing.currentX;
+      const startY = shouldSnap ? player.y : existing.currentY;
+      const startAngle = shouldSnap ? player.angle : existing.currentAngle;
+      interpolatedLivePoses[key] = {
+        currentX: startX,
+        currentY: startY,
+        currentAngle: startAngle,
+        fromX: startX,
+        fromY: startY,
+        fromAngle: startAngle,
+        toX: player.x,
+        toY: player.y,
+        toAngle: player.angle,
+        startedAt: receivedAt,
+        durationMs,
+        flags: player.flags,
+      };
+    });
+    Object.keys(interpolatedLivePoses).forEach((key) => {
+      if (!seenKeys.has(key)) delete interpolatedLivePoses[key];
+    });
+    lastInterpolatedStateVersion = stateVersion;
+  }
+
+  return players.map((player) => {
+    const pose = interpolatedLivePoses[player.entityKey];
+    if (!pose || player.queued) return player;
+    const t = Math.max(0, Math.min(1, (now - pose.startedAt) / Math.max(1, pose.durationMs)));
+    pose.currentX = pose.fromX + (pose.toX - pose.fromX) * t;
+    pose.currentY = pose.fromY + (pose.toY - pose.fromY) * t;
+    pose.currentAngle = interpolateAngle(pose.fromAngle, pose.toAngle, t);
+    return {
+      ...player,
+      x: pose.currentX,
+      y: pose.currentY,
+      angle: pose.currentAngle,
+    };
+  });
+}
+
 function worldToCanvas(wx, wy) {
   const pad = MAP_VIEW_PAD;
   const mapMarginTiles = mapData?.name === 'lobby' ? 2 : 1;
@@ -196,7 +275,11 @@ function renderLoop() {
     const frame = replayState.frames[Math.min(replayState.frameIndex, replayState.frames.length - 1)];
     drawArena(normalisePlayers(frame.players), frame.bits || [], frame.bits_mask ?? 0xFFFF);
   } else if (latestState) {
-    drawArena(normalisePlayers(latestState.players), latestState.bits || [], latestState.bits_mask ?? 0xFFFF);
+    drawArena(
+      updateInterpolatedLivePlayers(normalisePlayers(latestState.players), now),
+      latestState.bits || [],
+      latestState.bits_mask ?? 0xFFFF,
+    );
   }
   renderCount++;
   if (now - renderLastTime >= 1000) {

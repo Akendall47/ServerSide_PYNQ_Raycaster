@@ -554,6 +554,10 @@ function connect() {
     lastActivePlayerCount = activePlayerCount;
     latestState = state;
     window.latestState = state;
+    latestStateVersion += 1;
+    latestStateReceivedAt = performance.now();
+    window.latestStateVersion = latestStateVersion;
+    window.latestStateReceivedAt = latestStateReceivedAt;
     window.dispatchEvent(new CustomEvent(MONITOR_STATE_EVENT, { detail: state }));
     updateGameHud(state);
     if (!replayState.active) updatePlayers(state.players);
