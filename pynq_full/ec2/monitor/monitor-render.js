@@ -116,7 +116,8 @@ function drawArena(players, bits, bitsMask) {
     // Anchor the entire grid from the map's top-left corner in world space.
     // All tile positions are integer multiples of ts from this anchor — no per-tile
     // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
-    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
+    // World top-left corner of the grid: x = -half-width, y = +half-height (world Y-up).
+    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, mh / 2 * tileWu);
     ctx.fillStyle = '#1a1730';
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
