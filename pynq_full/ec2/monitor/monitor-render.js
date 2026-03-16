@@ -89,7 +89,7 @@ function worldToCanvas(wx, wy) {
   const rx  = maxX - minX;
   const ry  = maxY - minY;
   const sc  = Math.min((W - pad*2) / rx, (H - pad*2) / ry);
-  return [(pad + (maxX - wx) * sc), (pad + (wy - minY) * sc), sc];
+  return [(pad + (maxX - wx) * sc), (pad + (maxY - wy) * sc), sc];
 }
 
 function drawArena(players, bits, bitsMask) {
@@ -118,15 +118,15 @@ function drawArena(players, bits, bitsMask) {
     // Row 0 of the tile array = top of the map text file = most-negative world Y.
     // worldToCanvas X is flipped (maxX - wx), so col 0 = left of text file = right of canvas;
     // we correct by anchoring from the right edge: originPx is the canvas X of col=mw.
-    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
+    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, mh / 2 * tileWu);
     ctx.fillStyle = '#1a1730';
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
         if (!cell) return;
-        const px = Math.round(originPx - (ri + 1) * ts);
-        const py = Math.round(originPy + ci * ts);
-        const tw = Math.round(originPx - ri * ts) - px;
-        const th = Math.round(originPy + (ci + 1) * ts) - py;
+        const px = Math.round(originPx - (ci + 1) * ts);
+        const py = Math.round(originPy + ri * ts);
+        const tw = Math.round(originPx - ci * ts) - px;
+        const th = Math.round(originPy + (ri + 1) * ts) - py;
         ctx.fillRect(px, py, tw, th);
       });
     });
@@ -241,7 +241,7 @@ function drawArena(players, bits, bitsMask) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx - Math.cos(drawAngle) * arrowLen, cy + Math.sin(drawAngle) * arrowLen);
+    ctx.lineTo(cx - Math.cos(drawAngle) * arrowLen, cy - Math.sin(drawAngle) * arrowLen);
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
