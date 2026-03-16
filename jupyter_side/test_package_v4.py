@@ -51,7 +51,7 @@ SERVER_PORT  = 9000
 OVERLAY_PATH = "/home/xilinx/jupyter_notebooks/Final_project_test/design_1_wrapper.bit"
 CLOCK_MHZ    = 50.0
 TICK_RATE    = 50        # Hz — main loop rate
-SEND_RATE    = 50        # Hz — state update rate to server
+SEND_RATE    = 40        # Hz — state update rate to server
 REGISTER_RETRY_S = 2.0
 SERVER_SILENCE_S = 5.0
 LOG_PERIOD_S     = 1.0
@@ -80,7 +80,7 @@ ANGLE_STEPS           = 1 << 12
 ANGLE_MASK            = ANGLE_STEPS - 1
 
 # ── movement config ───────────────────────────────────────────────────────────
-MOVE_SPEED   = 0.08    # world units per tick at 50 Hz, manual
+MOVE_SPEED   = 0.25    # world units per tick at 50 Hz, manual
 TURN_STEP    = 26      # angle units per tick at 50 Hz, manual
 COLLISION_R  = 2.5
 AUTO_SPEED   = 0.10    # world units per tick for auto steering

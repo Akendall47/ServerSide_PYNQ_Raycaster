@@ -12,7 +12,7 @@ TAGS_TO_WIN      = 2
 # Spawned when both humans declare RUNNER — max 3 to keep the match fair.
 
 MAX_GHOSTS       = 3
-GHOST_SPEED      = 0.2    # world units per tick (~12 wu/s at 60 Hz — matches sim-side ghost pressure)
+GHOST_SPEED      = 0.15   # world units per tick (~9 wu/s at 60 Hz — tuned down for fairer pressure)
 
 # ── Bits (GAME_MODE_CHASE_BITS) ───────────────────────────────────────────────
 # Bit positions are defined in the map file ('B' tile type).

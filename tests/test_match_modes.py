@@ -1188,7 +1188,9 @@ def test_sim_ghosts_steer_without_crossing_walls():
         )
 
         positions = []
-        for _ in range(18):
+        # Slower ghost tuning still needs to bend around the wall; it just takes
+        # a few more ticks to show the lateral movement clearly.
+        for _ in range(40):
             logic._move_ghosts()
             ghost = state.players["ghost:1"]
             positions.append((ghost["x"], ghost["y"]))
