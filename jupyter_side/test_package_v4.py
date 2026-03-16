@@ -98,10 +98,10 @@ AUTO_TAGGER_SHOOT_PERIOD_TICKS = 4
 SERVER_POSE_SNAP_DISTANCE = 8.0
 SERVER_POSE_SNAP_ANGLE = 0.75
 MAP_SYNC_INPUT_GRACE_S = 0.35
-BTN_RIGHT    = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input
+BTN_LEFT     = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input
 BTN_BACK     = 1 << 1
 BTN_FWD      = 1 << 2
-BTN_LEFT     = 1 << 3
+BTN_RIGHT    = 1 << 3
 
 # ── sprite slot config ─────────────────────────────────────────────────────────
 # design_1_wrapper.bit exposes v_sprite_* (slot 0) and v_r_sprite_* (slot 1)
@@ -671,9 +671,9 @@ def _apply_manual_input(state, buttons):
         return
     raw = buttons.read() & 0xF
     if raw & BTN_LEFT:
-        state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
-    if raw & BTN_RIGHT:
         state["angle_raw"] = (state["angle_raw"] - state["turn_step"]) % ANGLE_STEPS
+    if raw & BTN_RIGHT:
+        state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
     state["angle"] = (state["angle_raw"] * 2.0 * math.pi / ANGLE_STEPS) % (2.0 * math.pi)
 
     move = 0.0
