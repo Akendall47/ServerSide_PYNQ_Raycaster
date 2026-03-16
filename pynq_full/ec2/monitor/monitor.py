@@ -869,9 +869,11 @@ async def ws_handler(request):
     print(f"[monitor] browser connected from {request.remote}")
     try:
         while not ws.closed:
-            # Push state to browser
+            # Push state to browser — inject send timestamp so browser can measure WS RTT
             try:
-                await ws.send_str(_state_cache_json)
+                sent_at_ms = int(time.time() * 1000)
+                payload = _state_cache_json[:-1] + f',"server_sent_at":{sent_at_ms}}}'
+                await ws.send_str(payload)
             except Exception as e:
                 print(f"[monitor] collect error: {e}")
 

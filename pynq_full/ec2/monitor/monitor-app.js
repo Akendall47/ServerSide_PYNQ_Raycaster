@@ -523,6 +523,7 @@ function connect() {
     }
   };
   ws.onmessage = (evt) => {
+    window._lastStateReceivedWallMs = Date.now();
     const state = JSON.parse(evt.data);
     const normalisedPlayers = normalisePlayers(state.players || []);
     const activePlayerCount = normalisedPlayers.filter((player) => !player.queued).length;
@@ -578,6 +579,24 @@ function connect() {
     );
     wsUpdateCount++;
     const now = performance.now();
+    // Push a real pipeline frame: transit = server wall-clock → browser wall-clock,
+    // remainder = JS parse + update overhead this message.
+    if (state.server_sent_at) {
+      const transitMs = Math.max(0, window._lastStateReceivedWallMs - Number(state.server_sent_at));
+      const parseMs = Math.max(0, performance.now() - now);
+      const intervalMs = wsLastMsgAt > 0 ? Math.min(now - wsLastMsgAt, 200) : 1000 / 30;
+      const idleMs = Math.max(0, intervalMs - transitMs - parseMs);
+      pushStackedFrame({
+        total_ms: intervalMs,
+        stages: {
+          dispatch_ms: idleMs,       // time between messages (server cadence)
+          compute_ms: 0,             // reserved for future FPGA compute telemetry
+          network_ms: transitMs,     // server → browser WS transit
+          composite_ms: parseMs,     // JS parse + DOM update
+        },
+      });
+    }
+    wsLastMsgAt = now;
     if (now - wsLastTime >= 1000) {
       wsHz = wsUpdateCount;
       wsUpdateCount = 0; wsLastTime = now;
@@ -639,10 +658,8 @@ function updateThemeButton(button, theme) {
 
 updateGameHud(null);
 drawFrameChart();
-if (stackedFrameChart) {
-  seedStackedFrameChart();
-  setInterval(() => pushStackedFrame(generateDummyPipelineFrame()), 100);
-}
+// Stacked pipeline chart now shows real WS inter-arrival intervals rather than
+// dummy data. Samples are pushed from the onmessage handler below.
 // Expose functions needed by inline onclick handlers in the template HTML.
 window.stopReplay = stopReplay;
 window.startBoardReplay = startBoardReplay;

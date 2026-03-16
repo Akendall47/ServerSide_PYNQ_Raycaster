@@ -283,12 +283,24 @@ function renderLoop() {
   }
   renderCount++;
   if (now - renderLastTime >= 1000) {
+    // "Render Rate" card: WS push rate from server (wsHz) + browser frame time
     document.getElementById('fps').textContent = String(wsHz);
-    document.getElementById('hud-frame-ms').textContent = `${averageFrameMs().toFixed(1)} ms/frame`;
+    document.getElementById('hud-frame-ms').textContent = `${averageFrameMs().toFixed(1)} ms/frame · ${renderCount} fps`;
+    // Latency card: WS transport time = browser receive time − server send time.
+    // server_sent_at is monotonic ms on the server; latestStateReceivedAt is
+    // performance.now() on the browser — clocks differ, so this measures the
+    // WS message transit time only (not full pipeline RTT).
+    // Latency: server embeds wall-clock ms at send time; browser compares to Date.now()
+    // at receive time. Both use UTC epoch ms so the difference is real WS transit time
+    // (plus any server/browser wall-clock skew, which is small on the same LAN).
     let latencyText = '— ms';
-    if (latestState?.timestamp) {
-      const stateAge = (now - latestState.timestamp) * 1000;
-      latencyText = `${Math.round(stateAge)} ms`;
+    if (latestState?.server_sent_at) {
+      const transitMs = window._lastStateReceivedWallMs
+        ? (window._lastStateReceivedWallMs - Number(latestState.server_sent_at))
+        : null;
+      if (transitMs !== null && transitMs >= 0 && transitMs < 2000) {
+        latencyText = `${Math.round(transitMs)} ms`;
+      }
     }
     document.getElementById('hud-latency').textContent = latencyText;
     renderCount = 0; renderLastTime = now;

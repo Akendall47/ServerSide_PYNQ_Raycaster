@@ -518,7 +518,7 @@ let latestStateVersion = 0;
 let latestStateReceivedAt = performance.now();
 window.latestStateVersion = latestStateVersion;
 window.latestStateReceivedAt = latestStateReceivedAt;
-let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now();
+let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now(), wsLastMsgAt = 0;
 let renderCount = 0, renderLastTime = performance.now();
 
 // ── Tag animation state ─────────────────────────────────────────────────────

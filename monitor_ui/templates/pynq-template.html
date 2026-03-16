@@ -40,12 +40,12 @@
 
       <div class="hud-grid">
         <div class="panel-raised hud-card">
-          <div class="hud-label">Render Rate</div>
+          <div class="hud-label">WS Push Rate</div>
           <div class="fps-stack">
             <span id="fps">0</span>
-            <span class="fps-unit">FPS</span>
+            <span class="fps-unit">Hz</span>
           </div>
-          <div id="hud-frame-ms" class="hud-sub">0.0 ms/frame</div>
+          <div id="hud-frame-ms" class="hud-sub">0.0 ms/frame · 0 fps</div>
         </div>
 
         <div class="panel-raised hud-card">
@@ -61,9 +61,9 @@
         </div>
 
         <div class="panel-raised hud-card">
-          <div class="hud-label">Est. Latency</div>
+          <div class="hud-label">WS Latency</div>
           <div id="hud-latency" class="hud-value">— ms</div>
-          <div class="hud-sub">server state age</div>
+          <div class="hud-sub">server → browser transit</div>
         </div>
 
         <div class="panel-terminal hud-events-card">
@@ -161,13 +161,13 @@
             </div>
 
             <div class="legend">
-              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-dispatch)"></span>Dispatch</div>
-              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-compute)"></span>FPGA Compute</div>
-              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-network)"></span>Network</div>
-              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-composite)"></span>Composite</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-dispatch)"></span>Server cadence</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-compute)"></span>FPGA (reserved)</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-network)"></span>WS transit</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-composite)"></span>JS parse</div>
             </div>
 
-            <div class="metric-note profiler-note">Development timing shim for now. Replace this buffer with real per-stage frame telemetry once the websocket exposes it.</div>
+            <div class="metric-note profiler-note">Real per-message pipeline timing. Transit = server wall-clock → browser wall-clock (requires clocks in sync on same LAN). FPGA slot reserved for future telemetry.</div>
           </div>
 
           <div class="panel-raised player-panel">
