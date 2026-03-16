@@ -42,7 +42,16 @@ class RedisIO:
         if not self.state.players:
             return
 
-        players     = list(self.state.players.values())
+        if self.state.match_started:
+            players = list(self.state.players.values())
+        else:
+            players = [
+                player
+                for addr, player in self.state.players.items()
+                if not str(addr).startswith("ghost:")
+            ]
+        if not players:
+            return
         human_addrs = [a for a in self.state.players if not str(a).startswith("ghost:")]
         header  = struct.pack('<HHI', 0x0002, tick_count & 0xFFFF,
                               int(time.time() * 1000) & 0xFFFFFFFF)

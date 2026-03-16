@@ -307,7 +307,18 @@ class PacketHandler:
         print(f"[T2] player queued from {addr} (lobby humans={human_count}, ghosts={self._ghost_count()})")
 
     def _human_addrs(self):
-        return [addr for addr in self.state.players if not str(addr).startswith("ghost:")]
+        humans = [
+            (addr, player)
+            for addr, player in self.state.players.items()
+            if not str(addr).startswith("ghost:")
+        ]
+        humans.sort(
+            key=lambda item: (
+                int(item[1].get("board_slot") or MATCH_PLAYERS + 1),
+                repr(item[0]),
+            )
+        )
+        return [addr for addr, _ in humans]
 
     def _ghost_count(self):
         return sum(1 for addr in self.state.players if str(addr).startswith("ghost:"))
