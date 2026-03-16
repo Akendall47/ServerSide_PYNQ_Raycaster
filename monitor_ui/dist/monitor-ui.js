@@ -197,6 +197,10 @@ Error generating stack: `+n.message+`
               <span class="status-name">Monitor</span>
               <span id="svc-monitor" class="status-slot">\u2014</span>
             </div>
+            <div class="panel-inset status-card">
+              <span class="status-name">Live View</span>
+              <span id="server-view-card" class="status-slot">game telemetry</span>
+            </div>
             <div class="panel-inset status-card node-perf-card">
               <div class="node-perf-head">
                 <span class="status-name">P1 Node</span>
@@ -244,10 +248,6 @@ Error generating stack: `+n.message+`
                   <span class="node-perf-item" id="bs-p2-overrun-inline">\u2014</span>
                 </div>
               </div>
-            </div>
-            <div class="panel-inset status-card">
-              <span class="status-name">Live View</span>
-              <span id="server-view-card" class="status-slot">game telemetry</span>
             </div>
           </div>
         </div>

@@ -329,7 +329,10 @@ function drawFrameChart() {
   });
 }
 
-function pushBoardHzSample(hz) {
+function pushBoardHzSample(hz, now) {
+  // PKT_PERF arrives every ~2s; gate pushes to avoid duplicate samples per WS message
+  if (now - _lastBoardHzPushedAt < 1500) return;
+  _lastBoardHzPushedAt = now;
   boardHzHistory.push(hz);
   if (boardHzHistory.length > BOARD_HZ_BUFFER_SIZE) boardHzHistory.shift();
   _lastLatencyRender = 0; // force chart redraw on next render loop tick
@@ -375,20 +378,29 @@ function maybeRenderLatencyChart() {
     ctx2.fillText(`${hz}Hz`, 2, y - 2);
   });
 
-  const step = boardHzHistory.length > 1 ? W2 / (boardHzHistory.length - 1) : W2;
+  // Fixed pixel spacing — newest sample pinned to right edge, older ones step left.
+  // This gives a scrolling effect: each new sample shifts everything left by STEP_PX.
+  const STEP_PX = 8;
+  const toY = (hz) => H2 - ((hz - minY) / (maxY - minY)) * (H2 - 4) - 2;
+  // Map index 0=oldest → left, last=newest → right edge
+  const n = boardHzHistory.length;
+  const xOf = (i) => W2 - (n - 1 - i) * STEP_PX;
+
   ctx2.beginPath();
   boardHzHistory.forEach((hz, i) => {
-    const x = i * step;
-    const y = H2 - ((hz - minY) / (maxY - minY)) * (H2 - 4) - 2;
-    if (i === 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
+    const x = xOf(i);
+    if (x < 0) return; // clip older samples that scroll off left edge
+    const y = toY(hz);
+    if (i === 0 || xOf(i - 1) < 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
   });
   ctx2.strokeStyle = '#00d4ff';
   ctx2.lineWidth = 1.5;
   ctx2.stroke();
 
   boardHzHistory.forEach((hz, i) => {
-    const x = i * step;
-    const y = H2 - ((hz - minY) / (maxY - minY)) * (H2 - 4) - 2;
+    const x = xOf(i);
+    if (x < 0) return;
+    const y = toY(hz);
     ctx2.beginPath();
     ctx2.arc(x, y, 3, 0, Math.PI * 2);
     ctx2.fillStyle = hz >= 58 ? '#00ff88' : hz >= 50 ? '#ffd700' : '#ff4444';
@@ -514,6 +526,7 @@ let latestStateReceivedAt = performance.now();
 window.latestStateVersion = latestStateVersion;
 window.latestStateReceivedAt = latestStateReceivedAt;
 let wsHz = 0, wsUpdateCount = 0, wsLastTime = performance.now(), wsLastMsgAt = 0;
+let _lastBoardHzPushedAt = 0;
 let renderCount = 0, renderLastTime = performance.now();
 
 // ── Tag animation state ─────────────────────────────────────────────────────

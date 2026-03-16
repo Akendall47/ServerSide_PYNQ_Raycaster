@@ -3106,14 +3106,14 @@
   gap: 3px;
 }
 .node-perf-label {
-  font-size: 8px;
+  font-size: 10px;
   font-family: 'Courier New', monospace;
   color: #556677;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 .node-perf-item {
-  font-size: 13px;
+  font-size: 18px;
   font-family: 'Courier New', monospace;
   color: #aabbcc;
   font-weight: bold;

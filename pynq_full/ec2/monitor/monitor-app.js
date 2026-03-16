@@ -629,7 +629,7 @@ function connect() {
     const boardHz = normalisedPlayers.reduce(
       (max, p) => (p.perf?.tick_rate_hz ? Math.max(max, p.perf.tick_rate_hz) : max), 0
     );
-    if (boardHz > 0) pushBoardHzSample(boardHz);
+    if (boardHz > 0) pushBoardHzSample(boardHz, now);
     wsLastMsgAt = now;
     if (now - wsLastTime >= 1000) {
       wsHz = wsUpdateCount;
