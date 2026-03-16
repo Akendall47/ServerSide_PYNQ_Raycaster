@@ -14,11 +14,12 @@
 #                   auto mode   = 100% server authority on position/angle.
 #                   Both modes  = local collision + BRAM writes every tick.
 #
-# NOTE — multiple sprite rendering deferred:
-#   The FPGA raycaster currently supports rendering only ONE remote entity
-#   (sprite slot 0). Entity count and slots 1-3 are written to BRAM but the
-#   hardware ignores them until the raycaster is updated to support N sprites.
-#   Re-enable when the HDL sprite pipeline is extended.
+# Hardware note (design_1_wrapper.bit / design_1.hwh):
+#   ray_caster_0 uses COORD_FRAC_BITS=16 (Q6.16 fixed-point) and has both
+#   v_sprite_* and v_r_sprite_* port groups, confirming at least two sprite
+#   slots are active in the raycaster pipeline. All MAX_ENTITIES slots (up to 4)
+#   are written to BRAM; the hardware renders as many as its pipeline supports.
+#   axi_gpio_0 is 4-bit wide (C_GPIO_WIDTH=4), matching BTN_LEFT/RIGHT/FWD/BACK.
 #
 # Copy to board:
 #   scp jupyter_side/test_package_v4.py pynq_full/interfacing/protocol.py \
@@ -85,10 +86,16 @@ TURN_STEP    = 26      # angle units per tick at 50 Hz, manual
 COLLISION_R  = 2.5
 AUTO_SPEED   = 0.10    # world units per tick for auto steering
 AUTO_TURN    = 80      # angle units per tick for auto steering
-BTN_RIGHT    = 1 << 0
+BTN_RIGHT    = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input
 BTN_BACK     = 1 << 1
 BTN_FWD      = 1 << 2
 BTN_LEFT     = 1 << 3
+
+# ── sprite slot config ─────────────────────────────────────────────────────────
+# design_1_wrapper.bit exposes v_sprite_* (slot 0) and v_r_sprite_* (slot 1)
+# ports in ray_caster_0, confirming at least 2 sprite slots are rendered.
+# All MAX_ENTITIES slots are staged in BRAM; hardware renders up to HW_SPRITE_SLOTS.
+HW_SPRITE_SLOTS = 2   # confirmed active in current bitstream (v_sprite + v_r_sprite)
 
 # ── hw stubs ──────────────────────────────────────────────────────────────────
 class _NullBram:
@@ -136,19 +143,32 @@ def _write_pose(bram, state):
     bram.write(PLAYER_ANGLE_OFFSET, state["angle_raw"] & ANGLE_MASK)
 
 def _write_sprites(bram, state):
-    """Write remote entities and bit markers to BRAM sprite region."""
+    """Write remote entities and bit markers to BRAM sprite region.
+
+    Entity slot layout (2 words per slot, starting at ENTITY_BASE_OFFSET):
+      Word+0: xy position  — x_q6_10[31:16] | y_q6_10[15:0]
+      Word+1: metadata     — valid[31] | entity_id[30:24] | flags[23:16] | angle_raw[11:0]
+
+    Ghosts (FLAG_GHOST in flags byte) are included as normal remote entities.
+    Hardware renders up to HW_SPRITE_SLOTS (2 confirmed active in current bitstream);
+    remaining slots are staged in BRAM for future hardware upgrades.
+    """
     ts = state["tile_scale"]
     w, h = state["map_w"], state["map_h"]
     pid = state["player_id"]
 
-    # remote entities — other players + ghosts, excluding self
-    entities = [
-        p for p in state["players"]
-        if p["player_id"] not in (0, pid)
-    ]
-    # stable order by id so slots don't shuffle each tick
-    entities.sort(key=lambda p: p["player_id"])
-    entities = entities[:MAX_ENTITIES]
+    # Remote entities: all players except self and unregistered (id=0).
+    # Ghosts (id >= 3, FLAG_GHOST set) are included — they appear as regular sprites.
+    # Human opponent first (lowest id), then ghosts — slot 0 = most important target.
+    humans  = sorted(
+        [p for p in state["players"] if p["player_id"] not in (0, pid) and not (int(p["flags"]) & protocol.FLAG_GHOST)],
+        key=lambda p: p["player_id"],
+    )
+    ghosts  = sorted(
+        [p for p in state["players"] if p["player_id"] not in (0, pid) and (int(p["flags"]) & protocol.FLAG_GHOST)],
+        key=lambda p: p["player_id"],
+    )
+    entities = (humans + ghosts)[:MAX_ENTITIES]
 
     bram.write(ENTITY_COUNT_OFFSET, len(entities) & 0xFFFFFFFF)
     for slot in range(MAX_ENTITIES):
@@ -299,6 +319,7 @@ def _handle(data, state, bram):
         else:
             state["bits"] = []
         state["bits_mask"] = 0xFFFF
+        state["sprites_dirty"] = True
         print(f"[BITS_INIT] count={len(raw_bits)}")
 
     elif pkt_type == protocol.PKT_NODE_MODE:
@@ -315,6 +336,7 @@ def _handle(data, state, bram):
         state["game_mode"]  = game_mode
         state["bits_mask"]  = bits_mask
         state["players"]    = players
+        state["sprites_dirty"] = True  # entity positions + bits_mask changed
 
         # anticheat: detect FLAG_TAGGED on self → server will move us to spawn
         # trust that snap; do not fight it.
@@ -475,6 +497,7 @@ def main():
         "last_reg_tx":    0.0,
         "last_state_tx":  0.0,
         "last_log":       0.0,
+        "sprites_dirty":  True,  # flush once at startup, then on PKT_GAME_STATE / PKT_BITS_INIT
     }
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -483,7 +506,6 @@ def main():
     addr = (args.server, args.port)
 
     next_tick = time.monotonic()
-    sprites_dirty = True   # write sprites once at startup
 
     try:
         while True:
@@ -496,10 +518,10 @@ def main():
             if state["registered"] and state["last_rx"] and \
                     now - state["last_rx"] > SERVER_SILENCE_S:
                 print("[NET] server silent — re-registering")
-                state["registered"] = False
-                state["player_id"]  = None
-                state["players"]    = []
-                sprites_dirty = True
+                state["registered"]    = False
+                state["player_id"]     = None
+                state["players"]       = []
+                state["sprites_dirty"] = True
 
             if state["match_ended"]:
                 # halted — just keep the BRAM current and send heartbeats
@@ -512,11 +534,11 @@ def main():
                 _apply_manual_input(state, buttons)
                 _write_pose(bram, state)
 
-            # sprite BRAM — update whenever player list changes (set by _drain)
-            # We mark dirty on any state-changing packet; flush once per tick.
-            if sprites_dirty or state["players"]:
+            # sprite BRAM — write only when something changed (dirty flag set in _handle).
+            # PKT_GAME_STATE and PKT_BITS_INIT both set sprites_dirty; ACK/MAP flush inline.
+            if state["sprites_dirty"]:
                 _write_sprites(bram, state)
-                sprites_dirty = False
+                state["sprites_dirty"] = False
 
             if not state["registered"]:
                 if now - state["last_reg_tx"] >= REGISTER_RETRY_S:

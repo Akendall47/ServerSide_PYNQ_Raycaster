@@ -167,16 +167,18 @@ function startReplayPlayback(matchId, events) {
   replayState.matchId = matchId;
   setReplayStatus(`playing ${matchId.replace(/^match-/, '')} from S3 (${frames.length} frames)`);
   updatePlayers(frames[0].players);
+  updateBitsPanel({ bits: frames[0].bits || [], bits_mask: frames[0].bits_mask ?? 0xFFFF, game_mode: frames[0].game_mode ?? 0 });
 
   replayState.timer = setInterval(() => {
     replayState.frameIndex += 1;
     if (replayState.frameIndex >= replayState.frames.length) {
-      stopReplay();
-      setReplayStatus(`replay complete for ${matchId.replace(/^match-/, '')}`);
+      stopReplay(`replay complete for ${matchId.replace(/^match-/, '')}`);
       return;
     }
     const frame = replayState.frames[replayState.frameIndex];
     updatePlayers(frame.players);
+    // Keep the bits panel in sync with each replay frame so it shows correct collection state.
+    updateBitsPanel({ bits: frame.bits || [], bits_mask: frame.bits_mask ?? 0xFFFF, game_mode: frame.game_mode ?? 0 });
   }, 1000 / REPLAY_FPS);
 }
 
@@ -225,6 +227,10 @@ async function autoPlayReplay(matchId) {
     return;
   }
   replayLoading = true;
+  // Clear any stale autoplay session synchronously before stopReplay, so that
+  // stopReplay's cleanup block does not fire a concurrent restoreAutoPlaySessionModes
+  // that could race with the new session we're about to create.
+  clearAutoPlaySession();
   stopReplay('replay stopped — returning to live control');
   setReplayStatus(`preparing auto play for ${matchId.replace(/^match-/, '')}...`);
   try {
