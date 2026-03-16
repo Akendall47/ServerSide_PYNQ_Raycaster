@@ -168,6 +168,9 @@ class GameTick:
             kicked, message = self._kick_board_slot(board_slot)
             print(f"[T2] kick_board: {message}")
         elif cmd == "set_map":
+            if self.state.match_started and not self.state.match_ended:
+                print("[T2] set_map ignored — map cannot be changed during a live match")
+                return
             name = data.get("map", "chase")
             new_map = load_map(os.path.join(_MAPS_DIR, f"{name}.txt"))
             if new_map["width"] > 0:

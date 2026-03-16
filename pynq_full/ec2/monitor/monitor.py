@@ -391,7 +391,7 @@ def handle_control_command(payload_or_cmd):
             r.publish("game:control", payload)
             _active_map = map_name
             _prime_map_state_cache(map_name)
-            _service_message = f"map set to {map_name} — active players are returned to the lobby on the new map"
+            _service_message = f"map change to {map_name} requested — ignored if a match is live"
     elif cmd.startswith("set_ghosts_"):
         count = int(cmd.split("_")[-1])
         r.publish("game:control", json.dumps({"cmd": "set_ghost_count", "count": count}))
