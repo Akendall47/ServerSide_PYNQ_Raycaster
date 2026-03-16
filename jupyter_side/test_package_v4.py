@@ -12,6 +12,8 @@
 # Design principle: manual mode = 100% local authority.
 #                   auto mode   = local board steering with server resync on
 #                                 tagged/map-reset/large divergence.
+#                   replay      = monitor/browser only; recorded matches are
+#                                 not streamed back through this client.
 #                   Both modes  = local collision + BRAM writes every tick.
 #
 # Hardware note (design_1_wrapper.bit / design_1.hwh):
@@ -623,9 +625,9 @@ def _apply_manual_input(state, buttons):
         return
     raw = buttons.read() & 0xF
     if raw & BTN_LEFT:
-        state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
-    if raw & BTN_RIGHT:
         state["angle_raw"] = (state["angle_raw"] - state["turn_step"]) % ANGLE_STEPS
+    if raw & BTN_RIGHT:
+        state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
     state["angle"] = (state["angle_raw"] * 2.0 * math.pi / ANGLE_STEPS) % (2.0 * math.pi)
 
     move = 0.0

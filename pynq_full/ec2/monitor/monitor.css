@@ -1575,14 +1575,9 @@
 
   .replay-entry {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     align-items: stretch;
-  }
-
-  .replay-live-btn {
-    min-width: 132px;
-    text-align: center;
   }
 
   .controls-actions {

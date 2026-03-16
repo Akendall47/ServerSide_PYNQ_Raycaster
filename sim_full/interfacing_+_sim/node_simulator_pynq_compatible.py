@@ -157,9 +157,9 @@ def _radians_to_hw_angle(angle_radians: float) -> int:
 def _apply_button_input(state: dict, buttons: int) -> None:
     """Apply button presses to update position and angle."""
     if buttons & BUTTON_TURN_LEFT_MASK:
-        state["angle_raw"] = (state["angle_raw"] + TURN_STEP) % HW_ANGLE_STEPS
-    if buttons & BUTTON_TURN_RIGHT_MASK:
         state["angle_raw"] = (state["angle_raw"] - TURN_STEP) % HW_ANGLE_STEPS
+    if buttons & BUTTON_TURN_RIGHT_MASK:
+        state["angle_raw"] = (state["angle_raw"] + TURN_STEP) % HW_ANGLE_STEPS
 
     state["angle"] = (state["angle_raw"] * (2.0 * math.pi / HW_ANGLE_STEPS)) % (2.0 * math.pi)
 

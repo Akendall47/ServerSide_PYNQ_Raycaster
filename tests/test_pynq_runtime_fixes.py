@@ -154,6 +154,34 @@ def test_test_package_v3_manual_turns_match_real_left_right():
         assert right_state["angle_raw"] == (test_package.HW_ANGLE_STEPS - 64)
 
 
+def test_test_package_v4_manual_turns_match_dashboard_left_right():
+    with pynq_import_context():
+        test_package = importlib.import_module("test_package_v4")
+
+        base_state = {
+            "input_flags": 0,
+            "angle_raw": 0,
+            "angle": 0.0,
+            "x": 0.0,
+            "y": 0.0,
+            "move_speed": 0.2,
+            "turn_step": 64,
+            "map_w": 32,
+            "map_h": 32,
+            "tile_scale": 8,
+            "tiles": bytearray(32 * 32),
+            "input_suspended_until": 0.0,
+        }
+
+        left_state = dict(base_state)
+        test_package._apply_manual_input(left_state, FakeButtons(test_package.BTN_LEFT))
+        assert left_state["angle_raw"] == (test_package.ANGLE_STEPS - 64)
+
+        right_state = dict(base_state)
+        test_package._apply_manual_input(right_state, FakeButtons(test_package.BTN_RIGHT))
+        assert right_state["angle_raw"] == 64
+
+
 def test_test_package_v3_tick_rate_scaling_preserves_20hz_baseline():
     with pynq_import_context():
         test_package = importlib.import_module("test_package_v3")

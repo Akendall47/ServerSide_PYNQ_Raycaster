@@ -78,53 +78,6 @@ function setReplayStatus(text) {
 
 const REPLAY_FPS = 20;
 
-function snapshotSlotModes(state = latestState) {
-  const slotModes = state?.slot_modes || { 1: 'manual', 2: 'manual' };
-  return {
-    1: String(slotModes[1] || 'manual').toLowerCase() === 'auto' ? 'auto' : 'manual',
-    2: String(slotModes[2] || 'manual').toLowerCase() === 'auto' ? 'auto' : 'manual',
-  };
-}
-
-let autoPlaySession = {
-  active: false,
-  matchId: null,
-  restoreModes: null,
-  restoreGhostCount: 0,   // ghost count before autoplay, restored on end
-  restoreInFlight: false,
-  setupInProgress: false, // true while setup commands are in-flight (before start_match)
-};
-
-function clearAutoPlaySession() {
-  autoPlaySession.active = false;
-  autoPlaySession.matchId = null;
-  autoPlaySession.restoreModes = null;
-  autoPlaySession.restoreGhostCount = 0;
-  autoPlaySession.restoreInFlight = false;
-  autoPlaySession.setupInProgress = false;
-}
-
-async function restoreAutoPlaySessionModes(reason = 'auto play ended — restoring prior board modes') {
-  if (!autoPlaySession.active || autoPlaySession.restoreInFlight || !autoPlaySession.restoreModes) {
-    return;
-  }
-  autoPlaySession.restoreInFlight = true;
-  try {
-    // Reset ghost count to 0 (autoplay may have set it; we don't want ghosts lingering)
-    await sendControl('set_ghosts_0', 'ghost count → 0', { forceHttp: true, preserveAutoPlaySession: true });
-    for (const slot of [1, 2]) {
-      const targetMode = autoPlaySession.restoreModes[slot] || 'manual';
-      await sendControl(`node${slot}_${targetMode}`, `board ${slot} ${targetMode}`, {
-        forceHttp: true,
-        preserveAutoPlaySession: true,
-      });
-    }
-    setReplayStatus(reason);
-  } finally {
-    clearAutoPlaySession();
-  }
-}
-
 function stopReplay(statusText = 'replay stopped') {
   if (replayState.timer) {
     clearInterval(replayState.timer);
@@ -142,13 +95,6 @@ function stopReplay(statusText = 'replay stopped') {
       updatePlayers(latestState.players);
       updateNodeLinks(latestState);
     }
-  }
-  // If an autoplay session is active, end the server-side match then restore board modes.
-  if (autoPlaySession.active) {
-    void (async () => {
-      await sendControl('force_end', 'force end match', { forceHttp: true, preserveAutoPlaySession: true });
-      await restoreAutoPlaySessionModes('replay stopped — restoring board modes');
-    })();
   }
 }
 
@@ -198,92 +144,6 @@ async function loadReplay(matchId) {
     startReplayPlayback(matchId, payload.events || []);
   } catch (err) {
     setReplayStatus(`replay load failed: ${err.message}`);
-  } finally {
-    replayLoading = false;
-  }
-}
-
-function extractReplayStartEvent(events) {
-  return (events || []).find((event) => event?.event === 'match_start') || null;
-}
-
-// Poll latestState until at least 2 human board slots are queued (lobby), or timeout.
-// Returns true if boards are ready, false if timed out.
-async function waitForBoardsQueued(timeoutMs = 2500) {
-  const deadline = performance.now() + timeoutMs;
-  while (performance.now() < deadline) {
-    const players = normalisePlayers(latestState?.players || []);
-    const queued = players.filter((p) => p.queued && p.boardSlot !== null);
-    if (queued.length >= 2) return true;
-    setReplayStatus(`waiting for boards... (${queued.length}/2 ready)`);
-    await new Promise((resolve) => window.setTimeout(resolve, 100));
-  }
-  // Timed out — proceed anyway (e.g. only 1 board connected)
-  return false;
-}
-
-async function autoPlayReplay(matchId) {
-  if (replayLoading) {
-    return;
-  }
-  replayLoading = true;
-  // Clear any stale autoplay session synchronously before stopReplay, so that
-  // stopReplay's cleanup block does not fire a concurrent restoreAutoPlaySessionModes
-  // that could race with the new session we're about to create.
-  clearAutoPlaySession();
-  stopReplay('replay stopped — returning to live control');
-  setReplayStatus(`preparing auto play for ${matchId.replace(/^match-/, '')}...`);
-  try {
-    const resp = await fetch(`/api/replay/${encodeURIComponent(matchId)}`);
-    if (!resp.ok) {
-      const msg = await resp.text();
-      throw new Error(msg || `HTTP ${resp.status}`);
-    }
-    const payload = await resp.json();
-    const startEvent = extractReplayStartEvent(payload.events || []);
-    if (!startEvent) {
-      throw new Error('replay has no match_start event');
-    }
-
-    const mapName = String(startEvent.map || '').trim();
-    const ghostCount = Math.max(0, Math.min(3, Number(startEvent.ghost_count || 0)));
-    if (!isValidMapName(mapName)) {
-      throw new Error('replay map metadata is missing');
-    }
-
-    autoPlaySession.active = true;
-    autoPlaySession.setupInProgress = true; // guard ws.onmessage restore until match is actually running
-    autoPlaySession.matchId = matchId;
-    autoPlaySession.restoreModes = snapshotSlotModes(latestState);
-    autoPlaySession.restoreInFlight = false;
-
-    updateMapSelector(mapName, mapName);
-    if (!await sendControl(`set_map:${mapName}`, `map → ${mapName}`, { forceHttp: true })) {
-      throw new Error(`failed to set map '${mapName}'`);
-    }
-    window.invalidateMonitorMapCache?.(mapName);
-    await loadMap(mapName, { force: true });
-    if (!await sendControl(`set_ghosts_${ghostCount}`, `ghost count → ${ghostCount}`, { forceHttp: true })) {
-      throw new Error(`failed to set ghost count to ${ghostCount}`);
-    }
-    // preserveAutoPlaySession: true prevents sendControl's guard from clearing the session
-    if (!await sendControl('node1_auto', 'board 1 auto', { forceHttp: true, preserveAutoPlaySession: true })) {
-      throw new Error('failed to switch board 1 to auto');
-    }
-    if (!await sendControl('node2_auto', 'board 2 auto', { forceHttp: true, preserveAutoPlaySession: true })) {
-      throw new Error('failed to switch board 2 to auto');
-    }
-    // Wait until both board slots appear as queued in latestState before starting.
-    // set_map returned everyone to lobby — we need confirmation they've re-registered
-    // before firing start_match, otherwise start_match finds no queued players.
-    await waitForBoardsQueued(2500);
-    if (!await sendControl('start_match', 'start match', { forceHttp: true })) {
-      throw new Error('failed to start match');
-    }
-    autoPlaySession.setupInProgress = false; // match is now running — allow ws.onmessage to trigger restore
-    setReplayStatus(`auto play armed for ${matchId.replace(/^match-/, '')} on ${mapName}`);
-  } catch (err) {
-    await restoreAutoPlaySessionModes(`auto play failed: ${err.message}`);
   } finally {
     replayLoading = false;
   }
@@ -422,9 +282,6 @@ function updateMatches(matches) {
         <button class="replay-btn" onclick="loadReplay('${m.match_id}')">
           replay ${m.match_id.replace(/^match-/, '')} (${m.replay_frames}f)
         </button>
-        <button class="control-btn start replay-live-btn" onclick="autoPlayReplay('${m.match_id}')">
-          auto play
-        </button>
       </div>
     `).join('');
     lastReplayListSignature = replaySignature;
@@ -512,12 +369,8 @@ function scheduleMapRefresh(cmd) {
 }
 
 async function sendControl(cmd, label, options = {}) {
-  const preserveAutoPlaySession = Boolean(options.preserveAutoPlaySession);
   if (replayState.active) {
     stopReplay('replay stopped — returning to live control');
-  }
-  if (!preserveAutoPlaySession && autoPlaySession.active && /^node[12]_(auto|manual)$/.test(String(cmd || ''))) {
-    clearAutoPlaySession();
   }
   if (cmd === 'start_match' && !isValidMapName(latestState?.selected_map || _selectedMapName)) {
     setServiceNote('select a map before starting the match');
@@ -574,9 +427,6 @@ function connect() {
     }
     if (activeMapChanged || returnedToLobby || exitedEndHold) {
       window.resetTransientArenaState?.();
-    }
-    if (autoPlaySession.active && !autoPlaySession.setupInProgress && !autoPlaySession.restoreInFlight && (matchEnded || returnedToLobby)) {
-      void restoreAutoPlaySessionModes();
     }
     // New match boundary: drop any previous round's tag/match-end visual state.
     if (state.events && state.events.length > 0 && state.events[0].event === 'match_start') {

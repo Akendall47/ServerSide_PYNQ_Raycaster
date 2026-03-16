@@ -1,5 +1,25 @@
 # Replay Notes
 
+## Hardware Replay Removed
+
+We intentionally removed the old "auto play" / hardware replay button from the
+monitor and kept replay as a browser minimap feature only.
+
+Why:
+
+1. The stored replay data is authoritative and already contains per-frame
+   `x`, `y`, and `angle` snapshots.
+2. The old hardware path was **not** streaming those recorded frames back to the
+   PYNQ boards.
+3. Instead, it only read the replay's `match_start` metadata, set the map and
+   ghost count, switched boards to auto, and started a brand new live match.
+4. That meant the hardware "replay" could drift from the real recorded match,
+   confuse debugging, and make playback look wrong even when the replay artifact
+   itself was correct.
+
+Until we build a true server-driven replay mode that streams recorded
+`state_snapshot` frames over UDP, replay should stay monitor-only.
+
 ## Why Replay Was Flaky Before
 
 The first replay implementation worked, but it was unreliable in practice for three specific reasons:
@@ -81,7 +101,7 @@ The replay path now works like this:
 3. The replay is stored in S3 as compressed NDJSON
 4. DynamoDB `META` stores the replay key and frame counts
 5. The monitor fetches the replay from S3 by `match_id`
-6. The browser plays back `state_snapshot` frames at the current monitor replay cadence
+6. The browser minimap plays back `state_snapshot` frames at the current monitor replay cadence
 
 ## Remaining Nice-to-Haves
 
