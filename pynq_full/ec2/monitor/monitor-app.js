@@ -86,7 +86,8 @@ function updateNodeLinks(stateOrPlayers) {
 function updateBoardStats(players) {
   const normalised = normalisePlayers(players || []);
   [1, 2].forEach((slot) => {
-    const p = normalised.find((pl) => !pl.queued && pl.boardSlot === slot);
+    // Show perf for any player in this board slot (active or queued in lobby)
+    const p = normalised.find((pl) => pl.boardSlot === slot);
     const perf = p?.perf;
     const tempEl    = document.getElementById(`bs-p${slot}-temp`);
     const hzEl      = document.getElementById(`bs-p${slot}-hz`);
@@ -98,8 +99,8 @@ function updateBoardStats(players) {
       tempEl.style.color = hzEl.style.color = bramEl.style.color = overrunEl.style.color = '';
       return;
     }
-    tempEl.textContent = `${perf.cpu_temp_c} °C`;
-    tempEl.style.color = perf.cpu_temp_c > 70 ? '#ffaa00' : perf.cpu_temp_c > 80 ? '#ff6666' : '';
+    tempEl.textContent = perf.cpu_temp_c > 0 ? `${perf.cpu_temp_c} °C` : 'N/A';
+    tempEl.style.color = perf.cpu_temp_c > 80 ? '#ff6666' : perf.cpu_temp_c > 70 ? '#ffaa00' : '';
 
     hzEl.textContent = `${perf.tick_rate_hz} Hz`;
     hzEl.style.color = perf.tick_rate_hz < 55 ? '#ffaa00' : '';
@@ -616,9 +617,9 @@ function connect() {
     );
     wsUpdateCount++;
     const now = performance.now();
-    if (state.server_sent_at) {
-      const transitMs = Math.max(0, window._lastStateReceivedWallMs - Number(state.server_sent_at));
-      if (transitMs < 2000) pushLatencySample(transitMs);
+    if (wsLastMsgAt > 0) {
+      const intervalMs = now - wsLastMsgAt;
+      if (intervalMs < 500) pushLatencySample(intervalMs);
     }
     wsLastMsgAt = now;
     if (now - wsLastTime >= 1000) {

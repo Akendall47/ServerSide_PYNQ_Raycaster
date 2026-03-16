@@ -354,8 +354,9 @@ function maybeRenderLatencyChart() {
     return;
   }
 
-  const maxMs = Math.max(80, ...latencyHistory);
-  const gridLines = [20, 40, 60];
+  const maxMs = Math.max(100, ...latencyHistory);
+  // Grid at 33ms (target) and 66ms
+  const gridLines = [33, 66];
   ctx2.strokeStyle = 'rgba(0, 212, 255, 0.15)';
   ctx2.lineWidth = 1;
   gridLines.forEach((ms) => {
@@ -378,13 +379,12 @@ function maybeRenderLatencyChart() {
   ctx2.lineWidth = 1.5;
   ctx2.stroke();
 
-  // Colour-coded dots at each sample
   latencyHistory.forEach((ms, i) => {
     const x = i * step;
     const y = H2 - (ms / maxMs) * (H2 - 4) - 2;
     ctx2.beginPath();
     ctx2.arc(x, y, 2, 0, Math.PI * 2);
-    ctx2.fillStyle = ms >= 60 ? '#ff4444' : ms >= 20 ? '#ffd700' : '#00ff88';
+    ctx2.fillStyle = ms >= 80 ? '#ff4444' : ms >= 40 ? '#ffd700' : '#00ff88';
     ctx2.fill();
   });
 

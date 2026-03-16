@@ -134,7 +134,7 @@ Error generating stack: `+n.message+`
         <div class="game-sidebar">
           <div class="panel-raised frame-panel sidebar-profiler-panel">
             <div class="panel-head">
-              <h2>WS Latency</h2>
+              <h2>WS Push Interval</h2>
               <span class="micro-chip" id="latency-chart-current">\u2014 ms</span>
             </div>
             <canvas id="latency-chart" width="260" height="120" style="width:100%;display:block;"></canvas>
@@ -143,7 +143,7 @@ Error generating stack: `+n.message+`
               <span id="latency-chart-avg">avg \u2014 ms</span>
               <span>now</span>
             </div>
-            <div class="metric-note profiler-note">Server \u2192 browser WS transit per message (server_sent_at wall-clock vs Date.now()). Green &lt;20 ms \xB7 yellow &lt;60 ms \xB7 red \u226560 ms.</div>
+            <div class="metric-note profiler-note">Time between consecutive WS messages arriving (target 33ms at 30 Hz). Green &lt;40 ms \xB7 yellow &lt;80 ms \xB7 red \u226580 ms. Clock-skew-free.</div>
           </div>
 
           <div class="panel-raised player-panel">

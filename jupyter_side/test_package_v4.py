@@ -471,11 +471,27 @@ def _send_register(sock, addr, state):
         state["last_reg_tx"] = time.monotonic()
 
 def _read_cpu_temp():
+    # Try standard Linux thermal zone first (works on many SBCs)
     try:
         with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            val = int(f.read().strip())
+            return val // 1000 if val > 1000 else val  # millidegrees or degrees
+    except Exception:
+        pass
+    # Zynq-7020 XADC IIO — millidegrees Celsius
+    try:
+        with open("/sys/bus/iio/devices/iio:device0/in_temp0_input") as f:
             return int(f.read().strip()) // 1000
     except Exception:
-        return 0
+        pass
+    # Zynq-7020 XADC IIO — raw ADC value, needs conversion
+    try:
+        with open("/sys/bus/iio/devices/iio:device0/in_temp0_raw") as f:
+            raw = int(f.read().strip())
+            return int(raw * 503.975 / 4096 - 273.15)
+    except Exception:
+        pass
+    return 0
 
 
 def _send_perf(sock, addr, state):

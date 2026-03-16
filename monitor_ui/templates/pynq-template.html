@@ -139,7 +139,7 @@
         <div class="game-sidebar">
           <div class="panel-raised frame-panel sidebar-profiler-panel">
             <div class="panel-head">
-              <h2>WS Latency</h2>
+              <h2>WS Push Interval</h2>
               <span class="micro-chip" id="latency-chart-current">— ms</span>
             </div>
             <canvas id="latency-chart" width="260" height="120" style="width:100%;display:block;"></canvas>
@@ -148,7 +148,7 @@
               <span id="latency-chart-avg">avg — ms</span>
               <span>now</span>
             </div>
-            <div class="metric-note profiler-note">Server → browser WS transit per message (server_sent_at wall-clock vs Date.now()). Green &lt;20 ms · yellow &lt;60 ms · red ≥60 ms.</div>
+            <div class="metric-note profiler-note">Time between consecutive WS messages arriving (target 33ms at 30 Hz). Green &lt;40 ms · yellow &lt;80 ms · red ≥80 ms. Clock-skew-free.</div>
           </div>
 
           <div class="panel-raised player-panel">
