@@ -358,8 +358,11 @@ function maybeRenderLatencyChart() {
     return;
   }
 
-  const minY = 0;
-  const maxY = Math.max(70, ...boardHzHistory);
+  const dataMin = Math.min(...boardHzHistory);
+  const dataMax = Math.max(...boardHzHistory);
+  const spread = Math.max(dataMax - dataMin, 4);
+  const minY = Math.max(0, dataMin - spread * 0.5);
+  const maxY = dataMax + spread * 0.5;
   // Grid at 50 and 60 Hz
   [50, 60].forEach((hz) => {
     const y = H2 - ((hz - minY) / (maxY - minY)) * (H2 - 4) - 2;

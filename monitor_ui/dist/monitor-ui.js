@@ -203,10 +203,22 @@ Error generating stack: `+n.message+`
                 <span id="node1-link" class="status-slot">offline \xB7 fpga</span>
               </div>
               <div class="node-perf-rows" id="node1-perf-rows">
-                <span class="node-perf-item" id="bs-p1-temp-inline"></span>
-                <span class="node-perf-item" id="bs-p1-hz-inline"></span>
-                <span class="node-perf-item" id="bs-p1-bram-inline"></span>
-                <span class="node-perf-item" id="bs-p1-overrun-inline"></span>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">cpu temp</span>
+                  <span class="node-perf-item" id="bs-p1-temp-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">tick rate</span>
+                  <span class="node-perf-item" id="bs-p1-hz-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">bram write</span>
+                  <span class="node-perf-item" id="bs-p1-bram-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">overrun</span>
+                  <span class="node-perf-item" id="bs-p1-overrun-inline">\u2014</span>
+                </div>
               </div>
             </div>
             <div class="panel-inset status-card node-perf-card">
@@ -215,10 +227,22 @@ Error generating stack: `+n.message+`
                 <span id="node2-link" class="status-slot">offline \xB7 fpga</span>
               </div>
               <div class="node-perf-rows" id="node2-perf-rows">
-                <span class="node-perf-item" id="bs-p2-temp-inline"></span>
-                <span class="node-perf-item" id="bs-p2-hz-inline"></span>
-                <span class="node-perf-item" id="bs-p2-bram-inline"></span>
-                <span class="node-perf-item" id="bs-p2-overrun-inline"></span>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">cpu temp</span>
+                  <span class="node-perf-item" id="bs-p2-temp-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">tick rate</span>
+                  <span class="node-perf-item" id="bs-p2-hz-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">bram write</span>
+                  <span class="node-perf-item" id="bs-p2-bram-inline">\u2014</span>
+                </div>
+                <div class="node-perf-metric">
+                  <span class="node-perf-label">overrun</span>
+                  <span class="node-perf-item" id="bs-p2-overrun-inline">\u2014</span>
+                </div>
               </div>
             </div>
             <div class="panel-inset status-card">
