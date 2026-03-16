@@ -84,6 +84,27 @@ class PacketHandler:
                 return addr
         return None
 
+    # Remove the human currently occupying a board slot.
+    def evict_board_slot(self, board_slot: int):
+        addr = self._addr_for_board_slot(board_slot)
+        if addr is None:
+            return False, f"board {board_slot} not connected"
+
+        player = self.state.players.pop(addr)
+        self.state.pending_roles.pop(addr, None)
+
+        player_id = int(player.get("player_id", 0) or 0)
+        self.write_queue.put({"op": "del", "key": f"player:{player_id}"})
+
+        label = player.get("display_name") or player.get("username") or (
+            f"player {player_id}" if player_id > 0 else "queued player"
+        )
+        print(
+            f"[T2] evicted board {board_slot} from {addr} "
+            f"(player_id={player_id}, label={label})"
+        )
+        return True, f"board {board_slot} kicked ({label})"
+
     # Send the runtime control mode packet to one connected board.
     def _send_control_mode(self, addr):
         if self.udp_transport is None:

@@ -1032,3 +1032,80 @@ def test_pynq_game_tick_set_map_returns_players_to_lobby_on_new_map():
         assert game_tick.state.players["ghost:1"]["flags"] == protocol.FLAG_GHOST
         assert packet_queue.empty()
         assert broadcast_queue.empty()
+
+
+def test_pynq_game_tick_kick_board_removes_target_and_returns_remaining_players_to_lobby():
+    with pynq_import_context():
+        import asyncio
+        import queue
+
+        protocol = importlib.import_module("protocol")
+        game_tick_mod = importlib.import_module("t2_game_tick")
+
+        packet_queue = asyncio.Queue()
+        broadcast_queue = asyncio.Queue()
+        write_queue = queue.SimpleQueue()
+        game_tick = game_tick_mod.GameTick(packet_queue, broadcast_queue, write_queue)
+
+        game_tick.state.players = {
+            ("runner", 1): {
+                "player_id": 1,
+                "x": 4.0,
+                "y": 8.0,
+                "angle": 0.25,
+                "flags": 0,
+                "last_seen": 0.0,
+                "last_seq": 5,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_RUNNER,
+                "board_slot": 1,
+                "control_mode": "manual",
+                "display_name": "runner",
+            },
+            ("tagger", 2): {
+                "player_id": 2,
+                "x": 12.0,
+                "y": 8.0,
+                "angle": 1.0,
+                "flags": 0,
+                "last_seen": 0.0,
+                "last_seq": 7,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+                "preferred_role": protocol.ROLE_TAGGER,
+                "board_slot": 2,
+                "control_mode": "manual",
+                "display_name": "tagger",
+            },
+            "ghost:1": {
+                "player_id": 3,
+                "x": 20.0,
+                "y": 8.0,
+                "angle": 1.57,
+                "flags": protocol.FLAG_GHOST,
+                "last_seen": 0.0,
+                "last_seq": None,
+                "movement_mode": 0,
+                "protocol_version": 1,
+                "timed_out": False,
+            },
+        }
+        game_tick.state.match_started = True
+        game_tick.state.pending_roles = {
+            ("runner", 1): protocol.ROLE_RUNNER,
+            ("tagger", 2): protocol.ROLE_TAGGER,
+        }
+
+        game_tick._apply_control_command({"cmd": "kick_board", "board_slot": 2})
+
+        assert ("tagger", 2) not in game_tick.state.players
+        assert game_tick.state.match_started is False
+        assert game_tick.state.match_ended is False
+        assert game_tick.state.players[("runner", 1)]["player_id"] == 0
+        assert game_tick.state.players[("runner", 1)]["control_mode"] == "manual"
+        assert game_tick.state.players["ghost:1"]["player_id"] == 3
+        assert game_tick.state.players["ghost:1"]["flags"] == protocol.FLAG_GHOST
+        assert game_tick.state.pending_roles == {("runner", 1): protocol.ROLE_RUNNER}

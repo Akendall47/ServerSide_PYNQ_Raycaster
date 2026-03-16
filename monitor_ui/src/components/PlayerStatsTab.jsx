@@ -13,6 +13,7 @@ import {
 } from './player-stats/utils.js';
 
 const MONITOR_STATE_EVENT = 'monitor:state';
+const MAX_VISIBLE_PROFILES = 4;
 
 function buildGhostSlots(ghosts) {
   return Array.from({ length: 3 }, (_, index) => {
@@ -231,6 +232,8 @@ export default function PlayerStatsTab() {
     return acc;
   }, { totalWins: 0, totalBits: 0, onlinePlayers: 0, livePlayers: 0, queuedPlayers: 0 });
 
+  const visibleProfiles = enrichedProfiles.slice(0, MAX_VISIBLE_PROFILES);
+  const hiddenProfileCount = Math.max(0, enrichedProfiles.length - visibleProfiles.length);
   const ghostSlots = buildGhostSlots(ghosts);
   const hiddenGhostCount = Math.max(0, ghosts.length - ghostSlots.filter((slot) => slot.ghost).length);
 
@@ -296,8 +299,17 @@ export default function PlayerStatsTab() {
       ) : null}
 
       {!loading && !error && enrichedProfiles.length ? (
-        <div className="player-stats-grid">
-          {enrichedProfiles.map((player) => {
+        <>
+          {hiddenProfileCount ? (
+            <div className="panel-raised player-status-panel">
+              <div className="player-detail-status">
+                SHOWING {visibleProfiles.length} MOST RECENT HUMAN PROFILES. {hiddenProfileCount} OLDER
+                PLAYER{hiddenProfileCount === 1 ? '' : 'S'} HIDDEN TO KEEP THE PANEL CLEAR.
+              </div>
+            </div>
+          ) : null}
+          <div className="player-stats-grid">
+            {visibleProfiles.map((player) => {
             const selected = selectedKey === player.player_key;
             const detailMatches = selected ? matchHistory : [];
             const displayProfile = selected && detailProfile?.player_key === player.player_key ? detailProfile : player;
@@ -315,8 +327,9 @@ export default function PlayerStatsTab() {
                 onToggle={togglePlayer}
               />
             );
-          })}
-        </div>
+            })}
+          </div>
+        </>
       ) : null}
 
       <div className="panel-raised entity-section-panel">

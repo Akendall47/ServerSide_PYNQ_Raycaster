@@ -135,6 +135,10 @@ class GameTick:
             if board_slot in (1, 2):
                 started, message = self.packets.set_node_mode(board_slot, mode)
                 print(f"[T2] set_node_mode: {message}")
+        elif cmd == "kick_board":
+            board_slot = int(data.get("board_slot", 0) or 0)
+            kicked, message = self._kick_board_slot(board_slot)
+            print(f"[T2] kick_board: {message}")
         elif cmd == "set_map":
             name = data.get("map", "chase")
             new_map = load_map(os.path.join(_MAPS_DIR, f"{name}.txt"))
@@ -142,6 +146,20 @@ class GameTick:
                 self._selected_map = copy.deepcopy(new_map)
                 self.state.selected_map_name = self._selected_map.get("name", "")
                 self._swap_map(new_map)
+
+    def _kick_board_slot(self, board_slot: int):
+        if board_slot not in (1, 2):
+            return False, f"invalid board slot {board_slot}"
+
+        match_was_live = self.state.match_started and not self.state.match_ended
+        kicked, message = self.packets.evict_board_slot(board_slot)
+        if not kicked:
+            return False, message
+
+        if match_was_live:
+            self._return_players_to_lobby("player_kicked")
+            return True, f"{message}; remaining players returned to lobby"
+        return True, message
 
     def _swap_map(self, new_map: dict):
         self._return_players_to_lobby("map_changed", next_map=new_map)

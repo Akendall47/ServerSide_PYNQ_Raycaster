@@ -388,6 +388,17 @@ def handle_control_command(cmd: str):
         count = int(cmd.split("_")[-1])
         r.publish("game:control", json.dumps({"cmd": "set_ghost_count", "count": count}))
         _service_message = f"ghost count → {count} sent"
+    elif cmd.startswith("kick_board:"):
+        try:
+            board_slot = int(cmd.split(":", 1)[1])
+        except (TypeError, ValueError):
+            _service_message = "invalid board slot for kick"
+        else:
+            if board_slot not in (1, 2):
+                _service_message = f"invalid board slot: {board_slot}"
+            else:
+                r.publish("game:control", json.dumps({"cmd": "kick_board", "board_slot": board_slot}))
+                _service_message = f"kick sent for board {board_slot}"
     elif cmd == "restart_stack":
         _stop_service("sidecar")
         _stop_service("server")

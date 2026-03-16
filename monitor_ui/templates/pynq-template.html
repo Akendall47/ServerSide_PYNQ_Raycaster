@@ -436,14 +436,20 @@
             <div class="metric-note">Board Runtime Modes</div>
             <div class="metric-note">Use auto/manual live to let one board act as the AI role during demos without restarting the client script.</div>
             <div class="metric-note" style="margin-top:12px;">P1 Board</div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="sendControl('node1_auto', 'board 1 auto mode')">P1 Auto</button>
-              <button class="control-btn restart" type="button" onclick="sendControl('node1_manual', 'board 1 manual mode')">P1 Manual</button>
+            <div class="control-stack">
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="sendControl('node1_auto', 'board 1 auto mode')">P1 Auto</button>
+                <button class="control-btn restart" type="button" onclick="sendControl('node1_manual', 'board 1 manual mode')">P1 Manual</button>
+              </div>
+              <button class="control-btn stop" type="button" onclick="sendControl('kick_board:1', 'kick board 1')">Kick P1</button>
             </div>
             <div class="metric-note" style="margin-top:12px;">P2 Board</div>
-            <div class="control-pair">
-              <button class="control-btn start" type="button" onclick="sendControl('node2_auto', 'board 2 auto mode')">P2 Auto</button>
-              <button class="control-btn restart" type="button" onclick="sendControl('node2_manual', 'board 2 manual mode')">P2 Manual</button>
+            <div class="control-stack">
+              <div class="control-pair">
+                <button class="control-btn start" type="button" onclick="sendControl('node2_auto', 'board 2 auto mode')">P2 Auto</button>
+                <button class="control-btn restart" type="button" onclick="sendControl('node2_manual', 'board 2 manual mode')">P2 Manual</button>
+              </div>
+              <button class="control-btn stop" type="button" onclick="sendControl('kick_board:2', 'kick board 2')">Kick P2</button>
             </div>
             <div class="metric-note">Server ghost controls add pressure on the EC2 side without changing the board firmware.</div>
             <div class="metric-note" style="margin-top:12px;">Ghost Taggers</div>
