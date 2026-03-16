@@ -111,18 +111,20 @@ function drawArena(players, bits, bitsMask) {
   if (mapData && mapData.tiles && mapData.tiles.length) {
     const mw = mapData.width, mh = mapData.height;
     const ts = (mapData.tile_scale || TILE_SCALE) * sc;   // tile size in canvas px
-    // Map origin: top-left tile's world centre is (-(mw/2)+0.5, -(mh/2)+0.5) * tile_scale
+    // Tile centres in world space match server cell_to_world: (col - w/2 + 0.5) * tile_scale
+    // Draw each tile centred on that world point (offset fillRect by -ts/2).
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
         if (!cell) return;
-        const wx = (ci - mw / 2) * (mapData.tile_scale || TILE_SCALE);
-        const wy = (ri - mh / 2) * (mapData.tile_scale || TILE_SCALE);
+        const tileWu = mapData.tile_scale || TILE_SCALE;
+        const wx = (ci - mw / 2 + 0.5) * tileWu;
+        const wy = (ri - mh / 2 + 0.5) * tileWu;
         const [px, py] = worldToCanvas(wx, wy);
         ctx.fillStyle = '#1a1730';
-        ctx.fillRect(px, py, ts, ts);
+        ctx.fillRect(px - ts / 2, py - ts / 2, ts, ts);
         ctx.strokeStyle = '#2a2448';
         ctx.lineWidth = 0.5;
-        ctx.strokeRect(px, py, ts, ts);
+        ctx.strokeRect(px - ts / 2, py - ts / 2, ts, ts);
       });
     });
   }

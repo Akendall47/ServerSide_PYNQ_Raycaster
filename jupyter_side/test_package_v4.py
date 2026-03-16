@@ -671,9 +671,9 @@ def _apply_manual_input(state, buttons):
         return
     raw = buttons.read() & 0xF
     if raw & BTN_LEFT:
-        state["angle_raw"] = (state["angle_raw"] - state["turn_step"]) % ANGLE_STEPS
-    if raw & BTN_RIGHT:
         state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
+    if raw & BTN_RIGHT:
+        state["angle_raw"] = (state["angle_raw"] - state["turn_step"]) % ANGLE_STEPS
     state["angle"] = (state["angle_raw"] * 2.0 * math.pi / ANGLE_STEPS) % (2.0 * math.pi)
 
     move = 0.0
@@ -944,7 +944,9 @@ def main():
                 if now - state["last_reg_tx"] >= REGISTER_RETRY_S:
                     _send_register(sock, addr, state)
             else:
-                if now - state["last_state_tx"] >= send_interval:
+                # Wait for PKT_MAP before sending poses — avoids phantom collisions
+                # from the server using lobby-map collision against pre-map coordinates.
+                if state["last_map_ts"] is not None and now - state["last_state_tx"] >= send_interval:
                     _send_state(sock, addr, state)
                 if now - state["last_perf_tx"] >= 2.0:
                     _send_perf(sock, addr, state)
