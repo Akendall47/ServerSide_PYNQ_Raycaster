@@ -240,7 +240,7 @@ function drawArena(players, bits, bitsMask) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy + Math.sin(drawAngle) * arrowLen);
+    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy - Math.sin(drawAngle) * arrowLen);
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
