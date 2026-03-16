@@ -225,10 +225,11 @@ export default function PlayerStatsTab() {
       const displayName = normaliseIdentityText(profile.display_name);
       const controllerKey = normaliseIdentityText(profile.controller_key);
       const inferredSimSlot = inferSimSlotFromProfile(profile);
+      const canMatchByControllerKey = profile.identity_source === 'controller';
       const live = liveByProfileKey.get(profileKey)
         || liveByUsername.get(username)
         || liveByDisplayName.get(displayName)
-        || liveByControllerKey.get(controllerKey)
+        || (canMatchByControllerKey ? liveByControllerKey.get(controllerKey) : null)
         || (inferredSimSlot !== null ? liveBySimSlot.get(inferredSimSlot) : null)
         || null;
       return {
