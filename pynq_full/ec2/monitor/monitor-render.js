@@ -89,7 +89,7 @@ function worldToCanvas(wx, wy) {
   const rx  = maxX - minX;
   const ry  = maxY - minY;
   const sc  = Math.min((W - pad*2) / rx, (H - pad*2) / ry);
-  return [(pad + (wx - minX) * sc), (pad + (wy - minY) * sc), sc];
+  return [(pad + (maxX - wx) * sc), (pad + (wy - minY) * sc), sc];
 }
 
 function drawArena(players, bits, bitsMask) {
@@ -112,22 +112,21 @@ function drawArena(players, bits, bitsMask) {
     const mw = mapData.width, mh = mapData.height;
     const tileWu = mapData.tile_scale || TILE_SCALE;
     const ts = tileWu * sc;   // tile size in canvas px
-    // Anchor the entire grid from the map's top-left corner in world space.
-    // All tile positions are integer multiples of ts from this anchor — no per-tile
-    // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
+    // Compute a single pixel anchor from the grid's top-left world corner so that
+    // all tile positions are integer multiples of ts — no per-tile float drift,
+    // adjacent wall tiles share exact pixel edges (no corner gaps).
+    // Row 0 of the tile array = top of the map text file = most-negative world Y.
+    // worldToCanvas X is flipped (maxX - wx), so col 0 = left of text file = right of canvas;
+    // we correct by anchoring from the right edge: originPx is the canvas X of col=mw.
     const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
     ctx.fillStyle = '#1a1730';
-    const numRows = mapData.tiles.length;
     mapData.tiles.forEach((row, ri) => {
-      const flippedRi = numRows - 1 - ri;
-      const numCols = row.length;
       row.forEach((cell, ci) => {
         if (!cell) return;
-        const flippedCi = numCols - 1 - ci;
-        const px = Math.round(originPx + flippedCi * ts);
-        const py = Math.round(originPy + flippedRi * ts);
-        const tw = Math.round(originPx + (flippedCi + 1) * ts) - px;
-        const th = Math.round(originPy + (flippedRi + 1) * ts) - py;
+        const px = Math.round(originPx - (ci + 1) * ts);
+        const py = Math.round(originPy + ri * ts);
+        const tw = Math.round(originPx - ci * ts) - px;
+        const th = Math.round(originPy + (ri + 1) * ts) - py;
         ctx.fillRect(px, py, tw, th);
       });
     });
@@ -242,7 +241,7 @@ function drawArena(players, bits, bitsMask) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy + Math.sin(drawAngle) * arrowLen);
+    ctx.lineTo(cx - Math.cos(drawAngle) * arrowLen, cy + Math.sin(drawAngle) * arrowLen);
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
