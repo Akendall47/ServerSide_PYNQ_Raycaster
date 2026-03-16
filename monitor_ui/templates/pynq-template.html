@@ -162,12 +162,12 @@
 
             <div class="legend">
               <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-dispatch)"></span>Server cadence</div>
-              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-compute)"></span>FPGA (reserved)</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-compute)"></span>FPGA BRAM</div>
               <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-network)"></span>WS transit</div>
               <div class="legend-item"><span class="legend-swatch" style="background:var(--stage-composite)"></span>JS parse</div>
             </div>
 
-            <div class="metric-note profiler-note">Real per-message pipeline timing. Transit = server wall-clock → browser wall-clock (requires clocks in sync on same LAN). FPGA slot reserved for future telemetry.</div>
+            <div class="metric-note profiler-note">Real per-message pipeline timing. Transit = server wall-clock → browser wall-clock (requires clocks in sync on same LAN). FPGA BRAM = board BRAM write time from PKT_PERF (µs). See Board Stats on Server Monitoring tab.</div>
           </div>
 
           <div class="panel-raised player-panel">
@@ -177,7 +177,7 @@
             </div>
             <div class="player-table-wrap">
               <table class="player-table">
-                <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th></tr></thead>
+                <thead><tr><th>ID</th><th>role</th><th>X</th><th>Y</th><th>angle</th><th>dist</th><th>status</th><th>board</th></tr></thead>
                 <tbody id="player-tbody"></tbody>
               </table>
             </div>
@@ -406,6 +406,34 @@
           </div>
           <canvas id="frame-chart" width="560" height="88"></canvas>
           <div class="metric-note">Recent monitor render times. Taller bars mean slower browser-side drawing.</div>
+        </div>
+
+        <div class="panel-raised board-stats-panel">
+          <div class="panel-head">
+            <h2>PYNQ Board Stats</h2>
+            <span class="micro-chip">PKT_PERF · 2 s window</span>
+          </div>
+          <div class="board-stats-grid">
+            <div class="panel-inset board-stat-card" id="board-stat-p1">
+              <div class="board-stat-title">P1 Board</div>
+              <div class="board-stat-rows">
+                <div class="board-stat-row"><span>CPU temp</span><span id="bs-p1-temp">—</span></div>
+                <div class="board-stat-row"><span>Tick rate</span><span id="bs-p1-hz">—</span></div>
+                <div class="board-stat-row"><span>BRAM write</span><span id="bs-p1-bram">—</span></div>
+                <div class="board-stat-row"><span>Tick overrun</span><span id="bs-p1-overrun">—</span></div>
+              </div>
+            </div>
+            <div class="panel-inset board-stat-card" id="board-stat-p2">
+              <div class="board-stat-title">P2 Board</div>
+              <div class="board-stat-rows">
+                <div class="board-stat-row"><span>CPU temp</span><span id="bs-p2-temp">—</span></div>
+                <div class="board-stat-row"><span>Tick rate</span><span id="bs-p2-hz">—</span></div>
+                <div class="board-stat-row"><span>BRAM write</span><span id="bs-p2-bram">—</span></div>
+                <div class="board-stat-row"><span>Tick overrun</span><span id="bs-p2-overrun">—</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="metric-note">Sent by the PYNQ board every ~2 s via PKT_PERF. Tick overrun: positive = board fell behind its 60 Hz target. No data = board not connected or running simulator.</div>
         </div>
       </div>
     </section>

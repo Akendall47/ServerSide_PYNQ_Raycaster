@@ -83,6 +83,36 @@ function updateNodeLinks(stateOrPlayers) {
   });
 }
 
+function updateBoardStats(players) {
+  const normalised = normalisePlayers(players || []);
+  [1, 2].forEach((slot) => {
+    const p = normalised.find((pl) => !pl.queued && pl.boardSlot === slot);
+    const perf = p?.perf;
+    const tempEl    = document.getElementById(`bs-p${slot}-temp`);
+    const hzEl      = document.getElementById(`bs-p${slot}-hz`);
+    const bramEl    = document.getElementById(`bs-p${slot}-bram`);
+    const overrunEl = document.getElementById(`bs-p${slot}-overrun`);
+    if (!tempEl) return;
+    if (!perf) {
+      tempEl.textContent = hzEl.textContent = bramEl.textContent = overrunEl.textContent = '—';
+      tempEl.style.color = hzEl.style.color = bramEl.style.color = overrunEl.style.color = '';
+      return;
+    }
+    tempEl.textContent = `${perf.cpu_temp_c} °C`;
+    tempEl.style.color = perf.cpu_temp_c > 70 ? '#ffaa00' : perf.cpu_temp_c > 80 ? '#ff6666' : '';
+
+    hzEl.textContent = `${perf.tick_rate_hz} Hz`;
+    hzEl.style.color = perf.tick_rate_hz < 55 ? '#ffaa00' : '';
+
+    bramEl.textContent = `${perf.bram_write_us} µs`;
+    bramEl.style.color = perf.bram_write_us > 500 ? '#ffaa00' : '';
+
+    const overrun = perf.worst_overrun_us;
+    overrunEl.textContent = overrun > 0 ? `+${overrun} µs` : 'on time';
+    overrunEl.style.color = overrun > 1000 ? '#ff6666' : overrun > 200 ? '#ffaa00' : '#00ff88';
+  });
+}
+
 function updateBitsPanel(state) {
   const bits = state?.bits || [];
   const total = bits.length;
@@ -569,6 +599,7 @@ function connect() {
     updateGameHud(state);
     if (!replayState.active) updatePlayers(state.players);
     updateNodeLinks(state);
+    updateBoardStats(state.players);
     if (!replayState.active) updateBitsPanel(state);
     updateRedis(state.redis);
     updateServices(state.services);

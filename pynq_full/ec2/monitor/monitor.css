@@ -3057,3 +3057,32 @@
       margin: 0 auto;
     }
   }
+
+/* ── Board Stats panel ──────────────────────────────────────────────────────── */
+.board-stats-panel { margin-top: 12px; }
+.board-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+.board-stat-card { padding: 10px 14px; }
+.board-stat-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.board-stat-rows { display: flex; flex-direction: column; gap: 4px; }
+.board-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted, #8899bb);
+}
+.board-stat-row span:last-child {
+  color: var(--text, #e8e8e8);
+  font-family: 'Courier New', monospace;
+}
