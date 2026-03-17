@@ -55,7 +55,6 @@ OVERLAY_PATH = "/home/xilinx/jupyter_notebooks/Final_project_test/design_1_wrapp
 CLOCK_MHZ    = 50.0
 TICK_RATE    = 60        # Hz — main loop rate, aligned with server authoritative tick
 SEND_RATE    = 60        # Hz — state update rate to server to reduce board-side jitter
-LOCAL_PORT       = 5001      # set to 5002 on the second board (avoids NAT collision)
 REGISTER_RETRY_S = 2.0
 SERVER_SILENCE_S = 5.0
 LOG_PERIOD_S     = 1.0
@@ -898,7 +897,6 @@ def main():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 262144)
-    sock.bind(('', LOCAL_PORT))
     sock.setblocking(False)
     addr = (args.server, args.port)
 
