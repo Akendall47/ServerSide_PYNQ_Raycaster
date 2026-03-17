@@ -268,6 +268,12 @@ class PacketHandler:
             return
         p = self.state.players.get(addr)
         if p is None:
+            # username-keyed player — find by stored _addr
+            for candidate in self.state.players.values():
+                if candidate.get("_addr") == addr:
+                    p = candidate
+                    break
+        if p is None:
             return
         p["perf"] = {
             "tick_rate_hz":      pkt["tick_rate_hz"],
