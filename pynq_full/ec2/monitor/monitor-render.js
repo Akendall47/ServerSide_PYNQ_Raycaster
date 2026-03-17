@@ -110,19 +110,21 @@ function drawArena(players, bits, bitsMask) {
   // Tile map
   if (mapData && mapData.tiles && mapData.tiles.length) {
     const mw = mapData.width, mh = mapData.height;
-    const ts = (mapData.tile_scale || TILE_SCALE) * sc;   // tile size in canvas px
-    // Map origin: top-left tile's world centre is (-(mw/2)+0.5, -(mh/2)+0.5) * tile_scale
+    const tileWu = mapData.tile_scale || TILE_SCALE;
+    const ts = tileWu * sc;   // tile size in canvas px
+    // Anchor the entire grid from the map's top-left corner in world space.
+    // All tile positions are integer multiples of ts from this anchor — no per-tile
+    // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
+    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
+    ctx.fillStyle = '#1a1730';
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
         if (!cell) return;
-        const wx = (ci - mw / 2) * (mapData.tile_scale || TILE_SCALE);
-        const wy = (ri - mh / 2) * (mapData.tile_scale || TILE_SCALE);
-        const [px, py] = worldToCanvas(wx, wy);
-        ctx.fillStyle = '#1a1730';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.strokeStyle = '#2a2448';
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(px, py, ts, ts);
+        const px = Math.round(originPx + ci * ts);
+        const py = Math.round(originPy + ri * ts);
+        const tw = Math.round(originPx + (ci + 1) * ts) - px;
+        const th = Math.round(originPy + (ri + 1) * ts) - py;
+        ctx.fillRect(px, py, tw, th);
       });
     });
   }

@@ -98,10 +98,10 @@ AUTO_TAGGER_SHOOT_PERIOD_TICKS = 4
 SERVER_POSE_SNAP_DISTANCE = 8.0
 SERVER_POSE_SNAP_ANGLE = 0.75
 MAP_SYNC_INPUT_GRACE_S = 0.35
-BTN_RIGHT    = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input
+BTN_LEFT     = 1 << 0  # axi_gpio_0 C_GPIO_WIDTH=4 → 4-bit button input
 BTN_BACK     = 1 << 1
 BTN_FWD      = 1 << 2
-BTN_LEFT     = 1 << 3
+BTN_RIGHT    = 1 << 3
 
 # ── sprite slot config ─────────────────────────────────────────────────────────
 # design_1_wrapper.bit exposes v_sprite_* (slot 0) and v_r_sprite_* (slot 1)
@@ -152,7 +152,7 @@ def _write_map(bram, tiles, w, h):
         base = row * w
         for col in range(min(w, MAP_COLS)):
             if tiles[base + col]:
-                word |= 1 << (MAP_COLS - 1 - col)
+                word |= 1 << col
         bram.write(row * 4, word & 0xFFFFFFFF)
     print(f"[HW] map written ({w}x{h})")
     return True
@@ -669,10 +669,12 @@ def _apply_manual_input(state, buttons):
     state["input_flags"] = 0
     if _input_is_temporarily_suspended(state):
         return
+    
+    #can change lefts and rights here by inverting +/- state 
     raw = buttons.read() & 0xF
-    if raw & BTN_LEFT:
+    if raw & BTN_LEFT:      # physical BTN0 — right
         state["angle_raw"] = (state["angle_raw"] - state["turn_step"]) % ANGLE_STEPS
-    if raw & BTN_RIGHT:
+    if raw & BTN_RIGHT:     # physical BTN3 — left
         state["angle_raw"] = (state["angle_raw"] + state["turn_step"]) % ANGLE_STEPS
     state["angle"] = (state["angle_raw"] * 2.0 * math.pi / ANGLE_STEPS) % (2.0 * math.pi)
 
@@ -944,7 +946,9 @@ def main():
                 if now - state["last_reg_tx"] >= REGISTER_RETRY_S:
                     _send_register(sock, addr, state)
             else:
-                if now - state["last_state_tx"] >= send_interval:
+                # Wait for PKT_MAP before sending poses — avoids phantom collisions
+                # from the server using lobby-map collision against pre-map coordinates.
+                if state["last_map_ts"] is not None and now - state["last_state_tx"] >= send_interval:
                     _send_state(sock, addr, state)
                 if now - state["last_perf_tx"] >= 2.0:
                     _send_perf(sock, addr, state)
