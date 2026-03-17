@@ -2933,6 +2933,15 @@
       inset -4px -4px 0 0 #ffffff;
   }
 
+  /* Viewport wrap — surround around the arena canvas */
+  [data-theme="light"] .viewport-wrap {
+    background: #e8e3da;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset 4px 4px 0 0 #d9d4cb,
+      inset -4px -4px 0 0 #f5f0e8;
+  }
+
   [data-theme="light"] .frame-chart-container {
     background: #f8f6f2;
     border-color: #c5bfb4;
