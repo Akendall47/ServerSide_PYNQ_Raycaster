@@ -152,7 +152,7 @@ def _write_map(bram, tiles, w, h):
         base = row * w
         for col in range(min(w, MAP_COLS)):
             if tiles[base + col]:
-                word |= 1 << (MAP_COLS - 1 - col)
+                word |= 1 << col
         bram.write(row * 4, word & 0xFFFFFFFF)
     print(f"[HW] map written ({w}x{h})")
     return True
