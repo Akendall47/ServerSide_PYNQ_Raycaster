@@ -117,13 +117,15 @@ function drawArena(players, bits, bitsMask) {
     // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
     const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, mh / 2 * tileWu);
     ctx.fillStyle = '#1a1730';
+    const numRows = mapData.tiles.length;
     mapData.tiles.forEach((row, ri) => {
+      const fri = numRows - 1 - ri;
       row.forEach((cell, ci) => {
         if (!cell) return;
         const px = Math.round(originPx + ci * ts);
-        const py = Math.round(originPy + ri * ts);
+        const py = Math.round(originPy + fri * ts);
         const tw = Math.round(originPx + (ci + 1) * ts) - px;
-        const th = Math.round(originPy + (ri + 1) * ts) - py;
+        const th = Math.round(originPy + (fri + 1) * ts) - py;
         ctx.fillRect(px, py, tw, th);
       });
     });
