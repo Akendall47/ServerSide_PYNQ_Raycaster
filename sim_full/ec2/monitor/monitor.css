@@ -26,17 +26,17 @@
     --coral: #c41e3a;
     --coral-dark: #8b1538;
     --coral-light: #dc3545;
-    --bg-dark: #f0ebe5;
-    --bg-panel: #e4dcd2;
-    --bg-card: #d9d0c4;
-    --bg-deep: #cec5bb;
-    --green: #228b22;
-    --green-dark: #1a5f1a;
-    --cyan: #0066cc;
-    --yellow: #d97706;
+    --bg-dark: #ede8e0;
+    --bg-panel: #ffffff;
+    --bg-card: #f9f8f6;
+    --bg-deep: #f0ece4;
+    --green: #0a7a0a;
+    --green-dark: #065c06;
+    --cyan: #1a5caa;
+    --yellow: #b45300;
     --purple: #6930c3;
-    --white: #2d2520;
-    --gray: #666688;
+    --white: #1a1a1a;
+    --gray: #777788;
     --stage-dispatch: #7c3aed;
     --stage-compute: #0284c7;
     --stage-network: #ea580c;
@@ -67,9 +67,9 @@
 
   [data-theme="light"] body {
     background:
-      radial-gradient(circle at top left, rgba(196, 30, 58, 0.06), transparent 28%),
-      radial-gradient(circle at top right, rgba(2, 132, 199, 0.06), transparent 32%),
-      linear-gradient(180deg, #ede8e0 0%, var(--bg-dark) 55%, #ebe5de 100%);
+      radial-gradient(circle at top left, rgba(196, 30, 58, 0.05), transparent 28%),
+      radial-gradient(circle at top right, rgba(2, 132, 199, 0.05), transparent 32%),
+      linear-gradient(180deg, #f0ece4 0%, var(--bg-dark) 55%, #ece7df 100%);
   }
 
   body::before {
@@ -2715,6 +2715,449 @@
 
   [data-theme="light"] .map-library-search {
     background: linear-gradient(180deg, rgba(244, 240, 232, 0.98) 0%, rgba(244, 240, 232, 0.92) 80%, rgba(244, 240, 232, 0) 100%);
+  }
+
+  /* ── Light-mode polish pass ─────────────────────────────────────────────── */
+
+  /* Topbar */
+  [data-theme="light"] .topbar {
+    background: #f5f0e8;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -4px -4px 0 0 #d9d4cb,
+      inset 4px 4px 0 0 #ffffff,
+      8px 8px 0 0 rgba(0,0,0,0.18);
+  }
+
+  [data-theme="light"] .brand-sub {
+    color: #b45300;
+  }
+
+  /* Section label */
+  [data-theme="light"] .section-label {
+    color: var(--coral);
+  }
+
+  /* Panels — white cards on warm bg */
+  [data-theme="light"] .panel-raised {
+    background: #ffffff;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -4px -4px 0 0 #e8e3da,
+      inset 4px 4px 0 0 #ffffff,
+      6px 6px 0 0 rgba(0,0,0,0.15);
+  }
+
+  [data-theme="light"] .panel-inset {
+    background: #f0ece4;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset 4px 4px 0 0 #dbd6cd,
+      inset -4px -4px 0 0 #ffffff;
+  }
+
+  [data-theme="light"] .panel-terminal {
+    background: #f8f6f2;
+    border-color: #228B22;
+    box-shadow: none;
+  }
+
+  [data-theme="light"] .panel-terminal::before {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 120, 0, 0.025) 2px,
+      rgba(0, 120, 0, 0.025) 4px
+    );
+  }
+
+  /* Panel headings */
+  [data-theme="light"] .panel-head h2,
+  [data-theme="light"] .panel-head h3 {
+    color: #1a5caa;
+  }
+
+  [data-theme="light"] .micro-chip,
+  [data-theme="light"] .panel-head-note {
+    color: #b45300;
+    border-color: rgba(180, 83, 0, 0.3);
+    background: rgba(180, 83, 0, 0.07);
+  }
+
+  [data-theme="light"] .micro-chip.active {
+    color: #0a7a0a;
+    border-color: rgba(10, 122, 10, 0.3);
+    background: rgba(10, 122, 10, 0.07);
+  }
+
+  [data-theme="light"] .micro-chip.editor {
+    color: #b45300;
+    border-color: rgba(180, 83, 0, 0.28);
+    background: rgba(180, 83, 0, 0.07);
+  }
+
+  /* Primary text */
+  [data-theme="light"] .hud-label {
+    color: #b45300;
+  }
+
+  [data-theme="light"] .hud-value {
+    color: #1a1a1a;
+  }
+
+  [data-theme="light"] .hud-sub {
+    color: #555555;
+  }
+
+  [data-theme="light"] #fps,
+  [data-theme="light"] .fps-unit {
+    text-shadow: none;
+  }
+
+  /* Helper / metric text */
+  [data-theme="light"] .metric-note {
+    color: #555555;
+  }
+
+  [data-theme="light"] .metric-row span:first-child {
+    color: #b45300;
+  }
+
+  [data-theme="light"] .metric-row span:last-child {
+    color: #1a1a1a;
+  }
+
+  /* Stat label inside map-editor panels */
+  [data-theme="light"] .map-editor-label,
+  [data-theme="light"] .map-editor-stat-label {
+    color: #1a5caa;
+  }
+
+  /* Inputs */
+  [data-theme="light"] .map-editor-input,
+  [data-theme="light"] .control-search-input {
+    background: #ffffff;
+    border-color: #c5bfb4;
+    color: #1a1a1a;
+  }
+
+  [data-theme="light"] .map-editor-input:focus,
+  [data-theme="light"] .control-search-input:focus {
+    outline: 2px solid rgba(196, 30, 58, 0.35);
+    border-color: #c41e3a;
+  }
+
+  /* Map editor notice / validation */
+  [data-theme="light"] .map-editor-notice {
+    background: #f8f6f2;
+    border-color: rgba(0, 102, 204, 0.2);
+    color: #2d2d2d;
+  }
+
+  [data-theme="light"] .map-editor-notice.success {
+    border-color: rgba(10, 122, 10, 0.3);
+    color: #0a5c0a;
+  }
+
+  [data-theme="light"] .map-editor-notice.error {
+    border-color: rgba(196, 30, 58, 0.35);
+    color: #c41e3a;
+  }
+
+  [data-theme="light"] .map-editor-validation {
+    background: #f8f6f2;
+    border-color: rgba(0, 102, 204, 0.18);
+    color: #2d2d2d;
+  }
+
+  [data-theme="light"] .map-editor-validation.ready {
+    border-color: rgba(10, 122, 10, 0.28);
+    color: #0a5c0a;
+  }
+
+  [data-theme="light"] .map-editor-validation.blocked {
+    border-color: rgba(180, 83, 0, 0.32);
+    color: #b45300;
+  }
+
+  [data-theme="light"] .map-editor-status-grid .panel-inset {
+    color: #1a1a1a;
+  }
+
+  /* Map library cards */
+  [data-theme="light"] .map-library-card {
+    background: #ffffff;
+    border-color: #c5bfb4;
+  }
+
+  [data-theme="light"] .map-library-card h3 {
+    color: #1a1a1a;
+  }
+
+  /* Live event feed */
+  [data-theme="light"] .panel-terminal .hud-feed-empty {
+    color: #2d6e38;
+  }
+
+  [data-theme="light"] .game-event-row {
+    background: rgba(0, 0, 0, 0.04);
+    color: #1a5c1a;
+  }
+
+  [data-theme="light"] .game-event-row .event-time {
+    color: #4d7a58;
+  }
+
+  [data-theme="light"] .game-event-row.player_tagged { color: #8b0000; }
+  [data-theme="light"] .game-event-row.match_start { color: #1a5c1a; }
+  [data-theme="light"] .game-event-row.match_end { color: #7a4a00; }
+  [data-theme="light"] .game-event-row.match_aborted { color: #8b0000; }
+  [data-theme="light"] .game-event-row.match_paused { color: #7a4a00; }
+  [data-theme="light"] .game-event-row.match_resumed { color: #0a5c7a; }
+  [data-theme="light"] .game-event-row.bit_collected { color: #0a5c7a; }
+  [data-theme="light"] .game-event-row.unknown { color: #555555; }
+
+  /* Arena canvas border */
+  [data-theme="light"] #arena {
+    border-color: #c5bfb4;
+    box-shadow: 0 0 0 4px #e8e3da;
+  }
+
+  /* Frame chart */
+  [data-theme="light"] #frame-chart {
+    background: #f0ece4;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset 4px 4px 0 0 #e0dbd2,
+      inset -4px -4px 0 0 #ffffff;
+  }
+
+  [data-theme="light"] .frame-chart-container {
+    background: #f8f6f2;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset 4px 4px 0 0 #e0dbd2,
+      inset -4px -4px 0 0 #ffffff;
+  }
+
+  [data-theme="light"] .target-label {
+    background: rgba(248, 246, 242, 0.92);
+    color: #555555;
+  }
+
+  [data-theme="light"] .target-60fps .target-label { color: #0a7a0a; }
+  [data-theme="light"] .target-30fps .target-label { color: #b45300; }
+
+  [data-theme="light"] .bar-time-axis {
+    color: #666666;
+  }
+
+  [data-theme="light"] .legend-item {
+    color: #555555;
+  }
+
+  [data-theme="light"] .stacked-bars-empty {
+    color: #666666;
+  }
+
+  /* Player table */
+  [data-theme="light"] td {
+    background: rgba(255, 255, 255, 0.7);
+    border-top-color: #c5bfb4;
+    border-bottom-color: #e0dbd2;
+    color: #1a1a1a;
+  }
+
+  [data-theme="light"] td:first-child { border-left-color: #c5bfb4; }
+  [data-theme="light"] td:last-child { border-right-color: #e0dbd2; }
+
+  [data-theme="light"] th {
+    color: #b45300;
+  }
+
+  /* Bits progress track */
+  [data-theme="light"] .bits-track {
+    background: #e8e3da;
+    border-color: #c5bfb4;
+  }
+
+  /* SEDA pipeline */
+  [data-theme="light"] .pipeline-summary {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -3px -3px 0 0 #e0dbd2,
+      inset 3px 3px 0 0 #ffffff;
+    color: #2d2d2d;
+  }
+
+  [data-theme="light"] .pipeline-lane-tag {
+    background: rgba(255, 255, 255, 0.6);
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -3px -3px 0 0 #e0dbd2,
+      inset 3px 3px 0 0 #ffffff;
+    color: #1a5caa;
+  }
+
+  [data-theme="light"] .pipe-jump {
+    background: #f5f0e8;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -3px -3px 0 0 #e0dbd2,
+      inset 3px 3px 0 0 #ffffff;
+  }
+
+  [data-theme="light"] .pipe-jump-source {
+    background: #fef9ee;
+    border-color: #c9960a;
+    box-shadow:
+      inset -3px -3px 0 0 #e8d8a0,
+      inset 3px 3px 0 0 #ffffff;
+  }
+
+  [data-theme="light"] .pipe-jump-arrow { color: #c41e3a; }
+  [data-theme="light"] .pipe-jump-label { color: #555555; }
+
+  [data-theme="light"] .pipe-card {
+    background: #ffffff;
+    border-color: #c5bfb4;
+    box-shadow:
+      inset -3px -3px 0 0 #e0dbd2,
+      inset 3px 3px 0 0 #ffffff,
+      4px 4px 0 0 rgba(0,0,0,0.12);
+  }
+
+  [data-theme="light"] .pipe-card.stage-net {
+    background: #f0faf8;
+    border-color: #7bbfba;
+    box-shadow:
+      inset -3px -3px 0 0 #c8e8e4,
+      inset 3px 3px 0 0 #ffffff,
+      4px 4px 0 0 rgba(0,0,0,0.10);
+  }
+
+  [data-theme="light"] .pipe-card.stage-io {
+    background: #fffaf0;
+    border-color: #c9960a;
+    box-shadow:
+      inset -3px -3px 0 0 #eedfa0,
+      inset 3px 3px 0 0 #ffffff,
+      4px 4px 0 0 rgba(0,0,0,0.10);
+  }
+
+  [data-theme="light"] .pipe-card.stage-store {
+    background: #fdf4fd;
+    border-color: #b07ab0;
+    box-shadow:
+      inset -3px -3px 0 0 #e4c4e4,
+      inset 3px 3px 0 0 #ffffff,
+      4px 4px 0 0 rgba(0,0,0,0.10);
+  }
+
+  [data-theme="light"] .pipe-card.stage-ext {
+    background: #f4f4ff;
+    border-color: #9090cc;
+    box-shadow:
+      inset -3px -3px 0 0 #d0d0ee,
+      inset 3px 3px 0 0 #ffffff,
+      4px 4px 0 0 rgba(0,0,0,0.10);
+  }
+
+  [data-theme="light"] .pipe-card-label { color: #666666; }
+
+  [data-theme="light"] .pipe-card-desc,
+  [data-theme="light"] .pipe-card-val,
+  [data-theme="light"] .pipe-card-metric {
+    color: #2d2d2d;
+  }
+
+  [data-theme="light"] .pipe-card-val span,
+  [data-theme="light"] .pipe-card-metric span {
+    color: #b45300;
+  }
+
+  [data-theme="light"] .pipe-card.stage-net .pipe-card-title { color: #0a7a0a; }
+  [data-theme="light"] .pipe-card.stage-logic .pipe-card-title { color: #1a5caa; }
+  [data-theme="light"] .pipe-card.stage-io .pipe-card-title { color: #b45300; }
+  [data-theme="light"] .pipe-card.stage-store .pipe-card-title { color: #8b1538; }
+  [data-theme="light"] .pipe-card.stage-ext .pipe-card-title { color: #6930c3; }
+
+  /* Archive drawer */
+  [data-theme="light"] .archive-drawer {
+    background: rgba(248, 246, 242, 0.97);
+    border: 4px solid #c5bfb4;
+  }
+
+  [data-theme="light"] .archive-drawer-head {
+    border-bottom-color: rgba(0, 0, 0, 0.12);
+  }
+
+  [data-theme="light"] .archive-drawer-head h2 {
+    color: #1a5caa;
+  }
+
+  [data-theme="light"] .match-row {
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+  }
+
+  [data-theme="light"] .match-id { color: #1a1a1a; }
+  [data-theme="light"] .match-time { color: #666666; }
+  [data-theme="light"] .ddb-note { color: #555555; }
+
+  /* Controls */
+  [data-theme="light"] .controls-map-subtitle {
+    color: #555555;
+  }
+
+  [data-theme="light"] .controls-maps .control-search-input {
+    background: #ffffff;
+  }
+
+  [data-theme="light"] .control-btn,
+  [data-theme="light"] .replay-btn {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  [data-theme="light"] .scroll-panel-footer {
+    color: #555555;
+    border-top-color: rgba(0, 0, 0, 0.1);
+  }
+
+  /* Board stats panel */
+  [data-theme="light"] .board-stat-title { color: #1a5caa; }
+  [data-theme="light"] .board-stat-row { color: #555555; }
+  [data-theme="light"] .board-stat-row span:last-child { color: #1a1a1a; }
+  [data-theme="light"] .node-perf-label { color: #888888; }
+  [data-theme="light"] .node-perf-item { color: #1a1a1a; }
+  [data-theme="light"] .node-perf-rows { border-top-color: rgba(0,0,0,0.1); }
+
+  /* Status cards */
+  [data-theme="light"] .status-slot { color: #1a1a1a; }
+
+  /* Archive / replay button variants */
+  [data-theme="light"] .archive-toggle-btn {
+    background: #dde8f5;
+    color: #1a3a6b;
+    box-shadow:
+      inset -3px -3px 0 0 #c8d8ef,
+      inset 3px 3px 0 0 #eef4fc,
+      4px 4px 0 0 rgba(0,0,0,0.18);
+  }
+
+  [data-theme="light"] .archive-toggle-btn.active {
+    background: #c0eef8;
+    color: #065a73;
+    box-shadow:
+      inset -3px -3px 0 0 #a0d8ea,
+      inset 3px 3px 0 0 #e4f8ff,
+      4px 4px 0 0 rgba(0,0,0,0.18);
+  }
+
+  /* About page */
+  [data-theme="light"] .about-hero {
+    background: linear-gradient(180deg, rgba(240, 236, 228, 0.55), rgba(240, 236, 228, 0.12));
   }
 
   @keyframes player-spin {
