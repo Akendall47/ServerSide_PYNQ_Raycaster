@@ -89,7 +89,7 @@ function worldToCanvas(wx, wy) {
   const rx  = maxX - minX;
   const ry  = maxY - minY;
   const sc  = Math.min((W - pad*2) / rx, (H - pad*2) / ry);
-  return [(pad + (wx - minX) * sc), (pad + (wy - minY) * sc), sc];
+  return [(pad + (wx - minX) * sc), (pad + (maxY - wy) * sc), sc];
 }
 
 function drawArena(players, bits, bitsMask) {
@@ -115,7 +115,7 @@ function drawArena(players, bits, bitsMask) {
     // Anchor the entire grid from the map's top-left corner in world space.
     // All tile positions are integer multiples of ts from this anchor — no per-tile
     // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
-    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
+    const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, mh / 2 * tileWu);
     ctx.fillStyle = '#1a1730';
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
@@ -238,7 +238,7 @@ function drawArena(players, bits, bitsMask) {
     // Direction arrow
     ctx.strokeStyle = colour; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy - Math.sin(drawAngle) * arrowLen);
+    ctx.lineTo(cx + Math.cos(drawAngle) * arrowLen, cy - Math.sin(drawAngle) * arrowLen); // Y-up: -sin
     ctx.stroke();
 
     // Player dot — smoothly scales up on tag
