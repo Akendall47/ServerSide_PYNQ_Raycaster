@@ -180,12 +180,18 @@ class PacketHandler:
         username         = pkt.get("username", "") if pkt_type == PKT_REGISTER else ""
 
         # Resolve key: username-keyed when username present, addr-keyed otherwise.
-        # Also search existing players by addr in case they registered without a username.
+        # For non-REGISTER packets (no username), scan for a username-keyed player
+        # whose _addr matches this UDP source — handles boards behind shared NAT.
         key = self._player_key(addr, username)
         if key not in self.state.players:
-            # Fall back: find an existing addr-keyed entry for this addr
-            if addr in self.state.players:
-                key = addr
+            # Search all players for one whose real UDP addr matches
+            found_key = None
+            for k, p in self.state.players.items():
+                if not str(k).startswith("ghost:") and p.get("_addr") == addr:
+                    found_key = k
+                    break
+            if found_key is not None:
+                key = found_key
             elif pkt_type == PKT_REGISTER:
                 self._register_player(key, addr, x, y, angle,
                                       preferred_role=preferred_role,
