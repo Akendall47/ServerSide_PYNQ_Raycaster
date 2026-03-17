@@ -2995,8 +2995,9 @@
   [data-theme="light"] .game-event-row.bit_collected { color: #0a5c7a; }
   [data-theme="light"] .game-event-row.unknown { color: #555555; }
 
-  /* Arena canvas border — keep canvas dark, just fix the container */
+  /* Arena canvas — light bg so it doesn't flash dark before first JS paint */
   [data-theme="light"] #arena {
+    background: #ede8e0;
     border-color: #c5bfb4;
     box-shadow: 0 0 0 4px #e8e3da;
   }
