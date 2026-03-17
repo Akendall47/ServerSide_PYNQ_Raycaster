@@ -483,7 +483,7 @@ class GameTick:
             self.packets._send_ack(addr, view_player_id)
             self.packets._send_map(addr, replay_map)
             self.packets._send_bits_init(addr, replay_bits)
-            self.packets._send_control_mode(addr)
+            self.packets._send_control_mode(addr, player)
             self._set_board_replay_summary(
                 board_slot,
                 match_id=match_id,
