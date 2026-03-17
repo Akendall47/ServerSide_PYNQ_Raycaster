@@ -60,7 +60,7 @@ class RedisIO:
         if not players:
             return
         human_addrs = [
-            addr
+            player.get("_addr") or addr
             for addr, player in self.state.players.items()
             if (
                 not str(addr).startswith("ghost:")
