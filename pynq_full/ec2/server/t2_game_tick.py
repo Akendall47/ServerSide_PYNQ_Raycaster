@@ -449,12 +449,13 @@ class GameTick:
             if not has_perspective:
                 raise ValueError(f"replay {match_id} has no player {view_player_id} perspective")
 
-            addr = self.packets._addr_for_board_slot(board_slot)
-            if addr is None:
+            key = self.packets._addr_for_board_slot(board_slot)
+            if key is None:
                 raise ValueError(f"board {board_slot} disconnected before replay start")
-            player = self.state.players.get(addr)
-            if not player or str(addr).startswith("ghost:"):
+            player = self.state.players.get(key)
+            if not player or str(key).startswith("ghost:"):
                 raise ValueError(f"board {board_slot} is not available for replay")
+            addr = player.get("_addr") or key
 
             replay_map = self._load_replay_map(payload)
             replay_bits = self._extract_replay_bits(payload)
@@ -558,11 +559,13 @@ class GameTick:
             if session is None:
                 continue
 
-            current_addr = self.packets._addr_for_board_slot(board_slot)
-            if current_addr is None:
+            current_key = self.packets._addr_for_board_slot(board_slot)
+            if current_key is None:
                 self._stop_board_replay(board_slot, "board_disconnected", restore_board=False)
                 continue
-            if current_addr != session.get("addr"):
+            current_player = self.state.players.get(current_key)
+            current_udp = (current_player.get("_addr") or current_key) if current_player else current_key
+            if current_udp != session.get("addr"):
                 self._stop_board_replay(board_slot, "board_reconnected", restore_board=True)
                 continue
 
