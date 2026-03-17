@@ -862,6 +862,7 @@
     background: #02050b;
     border: var(--px) solid #365d90;
     box-shadow: 0 0 0 var(--px) #081321;
+    transform: rotate(-90deg);
   }
 
   .game-sidebar {
