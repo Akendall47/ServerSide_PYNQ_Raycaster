@@ -48,8 +48,8 @@ MAPS_DIR     = REPO_ROOT / "pynq_full" / "ec2" / "maps"
 MONITOR_DIR  = Path(__file__).resolve().parent
 LOGO_ASSET_PATHS = {
     "PNG_LOGO.png": REPO_ROOT / "PNG_LOGO.png",
-    "BNW_LOGO.png": REPO_ROOT / "BNW_LOGO.png",
-    "assets/pynqcast-white.png": REPO_ROOT / "BNW_LOGO.png",
+    "BNW_LOGO.png": REPO_ROOT / "images" / "BNW_LOGO.png",
+    "assets/pynqcast-white.png": REPO_ROOT / "images" / "BNW_LOGO.png",
 }
 LOGO_ASSET_NAMES = tuple(LOGO_ASSET_PATHS.keys())
 MONITOR_UI_ASSET_NAME = "monitor-ui.js"
