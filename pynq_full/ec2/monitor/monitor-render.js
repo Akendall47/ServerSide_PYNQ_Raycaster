@@ -93,11 +93,17 @@ function worldToCanvas(wx, wy) {
 }
 
 function drawArena(players, bits, bitsMask) {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
   ctx.clearRect(0, 0, W, H);
+
+  // Fill background explicitly so the canvas doesn't show through as transparent
+  ctx.fillStyle = isLight ? '#ede8e0' : '#02050b';
+  ctx.fillRect(0, 0, W, H);
 
   // Origin axes
   const [ox, oy] = worldToCanvas(0, 0);
-  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
+  ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.12)' : '#1e1e1e'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(ox,0); ctx.lineTo(ox,H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0,oy); ctx.lineTo(W,oy); ctx.stroke();
 
@@ -116,7 +122,7 @@ function drawArena(players, bits, bitsMask) {
     // All tile positions are integer multiples of ts from this anchor — no per-tile
     // floating-point drift, so adjacent wall tiles share exact pixel edges (no corner gaps).
     const [originPx, originPy] = worldToCanvas(-mw / 2 * tileWu, -mh / 2 * tileWu);
-    ctx.fillStyle = '#1a1730';
+    ctx.fillStyle = isLight ? '#3a3550' : '#1a1730';
     mapData.tiles.forEach((row, ri) => {
       row.forEach((cell, ci) => {
         if (!cell) return;
@@ -135,7 +141,7 @@ function drawArena(players, bits, bitsMask) {
       const active = (bitsMask & (1 << i)) !== 0;
       const [bx, by] = worldToCanvas(b[0], b[1]);
       ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2);
-      ctx.fillStyle = active ? '#ffdd00' : '#333344';
+      ctx.fillStyle = active ? '#ffdd00' : (isLight ? '#aaaaaa' : '#333344');
       ctx.fill();
       if (active) {
         ctx.beginPath(); ctx.arc(bx, by, 8, 0, Math.PI * 2);
@@ -196,10 +202,10 @@ function drawArena(players, bits, bitsMask) {
     const dist = Math.sqrt(dx*dx + dy*dy);
     const close = dist <= TAG_RADIUS;
     ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
-    ctx.strokeStyle = close ? 'rgba(255,68,68,0.7)' : 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = close ? 'rgba(255,68,68,0.7)' : (isLight ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.08)');
     ctx.setLineDash([4,4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
     const mx = (ax+bx)/2, my = (ay+by)/2;
-    ctx.fillStyle = close ? '#ff6666' : '#444';
+    ctx.fillStyle = close ? '#ff6666' : (isLight ? '#555' : '#444');
     ctx.font = '11px Courier New';
     ctx.fillText(`${dist.toFixed(1)}u`, mx+4, my-4);
   }
@@ -207,7 +213,7 @@ function drawArena(players, bits, bitsMask) {
   players.forEach((p, i) => {
     const isGhost = (p.flags & FLAG_GHOST) !== 0;
     const isQueued = Boolean(p.queued);
-    const colour  = isQueued ? '#4da3ff' : (isGhost ? '#555566' : PLAYER_COLOURS[i % PLAYER_COLOURS.length]);
+    const colour  = isQueued ? (isLight ? '#1a5caa' : '#4da3ff') : (isGhost ? (isLight ? '#888899' : '#555566') : PLAYER_COLOURS[i % PLAYER_COLOURS.length]);
     const tagged  = (p.flags & FLAG_TAGGED) !== 0;
     const matchEnded = (p.flags & FLAG_MATCH_END) !== 0;
 
@@ -221,7 +227,7 @@ function drawArena(players, bits, bitsMask) {
     ctx.beginPath(); ctx.arc(cx, cy, tagPx, 0, Math.PI*2);
     ctx.strokeStyle = tagged
       ? `rgba(255,68,68,${0.3 + 0.25 * Math.sin(now / 120)})`
-      : matchEnded ? 'rgba(255,180,64,0.35)' : 'rgba(255,255,255,0.07)';
+      : matchEnded ? 'rgba(255,180,64,0.35)' : (isLight ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.07)');
     ctx.lineWidth = tagged ? 2 : (matchEnded ? 1.5 : 1);
     ctx.stroke();
 
@@ -257,7 +263,7 @@ function drawArena(players, bits, bitsMask) {
     const label = isQueued
       ? `${p.displayName || `Q${p.queueSlot ?? '?'}`} ${role}`
       : `P${p.id} ${role}`;
-    ctx.fillStyle = isQueued ? '#9bd2ff' : (isGhost ? '#888' : '#fff'); ctx.font = 'bold 11px Courier New';
+    ctx.fillStyle = isQueued ? (isLight ? '#1a3a6b' : '#9bd2ff') : (isGhost ? (isLight ? '#666' : '#888') : (isLight ? '#1a1a1a' : '#fff')); ctx.font = 'bold 11px Courier New';
     ctx.fillText(label, cx + arrowLen + 4, cy - bodyBase);
 
     // Cache the latest live server pose for edge-triggered freeze latching.

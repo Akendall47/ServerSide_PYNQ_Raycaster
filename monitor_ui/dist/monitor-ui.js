@@ -502,8 +502,8 @@ Error generating stack: `+n.message+`
             <div class="control-stack controls-map-list" id="map-btn-list">
               <span style="color:#90a3c4">loading maps...</span>
             </div>
-            <div class="metric-note">Map changes publish to the live server and take effect on the next match reset.</div>
           </div>
+          <div class="metric-note scroll-panel-footer">Map changes publish to the live server and take effect on the next match reset.</div>
         </div>
 
         <div class="panel-raised controls-notes scroll-panel">
@@ -1047,8 +1047,8 @@ Error generating stack: `+n.message+`
             <div class="control-stack controls-map-list" id="map-btn-list">
               <span style="color:#90a3c4">loading maps...</span>
             </div>
-            <div class="metric-note">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
           </div>
+          <div class="metric-note scroll-panel-footer">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
         </div>
 
         <div class="panel-raised controls-notes scroll-panel">
