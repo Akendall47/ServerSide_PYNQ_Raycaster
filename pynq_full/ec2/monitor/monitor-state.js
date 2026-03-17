@@ -347,12 +347,13 @@ function maybeRenderLatencyChart() {
   if (!canvas) return;
   const ctx2 = canvas.getContext('2d');
   const W2 = canvas.width, H2 = canvas.height;
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
   ctx2.clearRect(0, 0, W2, H2);
-  ctx2.fillStyle = '#07101e';
+  ctx2.fillStyle = isLight ? '#f0ece4' : '#07101e';
   ctx2.fillRect(0, 0, W2, H2);
 
   if (!boardHzHistory.length) {
-    ctx2.fillStyle = '#7aa3d1';
+    ctx2.fillStyle = isLight ? '#666666' : '#7aa3d1';
     ctx2.font = '12px Courier New';
     ctx2.fillText('no board connected', 10, H2 / 2);
     const currentEl = document.getElementById('board-hz-current');
@@ -370,10 +371,14 @@ function maybeRenderLatencyChart() {
   // Grid at 50 and 60 Hz
   [50, 60].forEach((hz) => {
     const y = H2 - ((hz - minY) / (maxY - minY)) * (H2 - 4) - 2;
-    ctx2.strokeStyle = hz === 60 ? 'rgba(0,255,136,0.25)' : 'rgba(255,215,0,0.2)';
+    ctx2.strokeStyle = hz === 60
+      ? (isLight ? 'rgba(10,122,10,0.3)' : 'rgba(0,255,136,0.25)')
+      : (isLight ? 'rgba(180,83,0,0.25)' : 'rgba(255,215,0,0.2)');
     ctx2.lineWidth = 1;
     ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(W2, y); ctx2.stroke();
-    ctx2.fillStyle = hz === 60 ? 'rgba(0,255,136,0.5)' : 'rgba(255,215,0,0.4)';
+    ctx2.fillStyle = hz === 60
+      ? (isLight ? 'rgba(10,122,10,0.7)' : 'rgba(0,255,136,0.5)')
+      : (isLight ? 'rgba(180,83,0,0.7)' : 'rgba(255,215,0,0.4)');
     ctx2.font = '9px Courier New';
     ctx2.fillText(`${hz}Hz`, 2, y - 2);
   });
@@ -393,7 +398,7 @@ function maybeRenderLatencyChart() {
     const y = toY(hz);
     if (i === 0 || xOf(i - 1) < 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
   });
-  ctx2.strokeStyle = '#00d4ff';
+  ctx2.strokeStyle = isLight ? '#1a5caa' : '#00d4ff';
   ctx2.lineWidth = 1.5;
   ctx2.stroke();
 
@@ -403,7 +408,9 @@ function maybeRenderLatencyChart() {
     const y = toY(hz);
     ctx2.beginPath();
     ctx2.arc(x, y, 3, 0, Math.PI * 2);
-    ctx2.fillStyle = hz >= 58 ? '#00ff88' : hz >= 50 ? '#ffd700' : '#ff4444';
+    ctx2.fillStyle = isLight
+      ? (hz >= 58 ? '#0a7a0a' : hz >= 50 ? '#b45300' : '#c41e3a')
+      : (hz >= 58 ? '#00ff88' : hz >= 50 ? '#ffd700' : '#ff4444');
     ctx2.fill();
   });
 
@@ -413,7 +420,9 @@ function maybeRenderLatencyChart() {
   const avgEl = document.getElementById('latency-chart-avg');
   if (currentEl) {
     currentEl.textContent = `${Math.round(current)} Hz`;
-    currentEl.style.color = current >= 58 ? '#00ff88' : current >= 50 ? '#ffd700' : '#ff4444';
+    currentEl.style.color = isLight
+      ? (current >= 58 ? '#0a7a0a' : current >= 50 ? '#b45300' : '#c41e3a')
+      : (current >= 58 ? '#00ff88' : current >= 50 ? '#ffd700' : '#ff4444');
   }
   if (avgEl) avgEl.textContent = `avg ${avg.toFixed(1)} Hz`;
 }

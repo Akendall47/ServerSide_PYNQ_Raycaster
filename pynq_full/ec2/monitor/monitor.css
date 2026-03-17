@@ -3001,6 +3001,12 @@
     box-shadow: 0 0 0 4px #e8e3da;
   }
 
+  /* Board tick rate canvas — background matches JS-drawn bg */
+  [data-theme="light"] #latency-chart {
+    background: #f0ece4;
+    border: 1px solid #c5bfb4;
+  }
+
   /* Frame chart / sidebar profiler */
   [data-theme="light"] #frame-chart {
     background: #f0ece4;
@@ -3284,6 +3290,33 @@
   /* About page */
   [data-theme="light"] .about-hero {
     background: linear-gradient(180deg, rgba(240, 236, 228, 0.55), rgba(240, 236, 228, 0.12));
+  }
+
+  [data-theme="light"] .about-title {
+    color: #1a5caa;
+    text-shadow: none;
+  }
+
+  [data-theme="light"] .about-copy {
+    color: #1a1a1a;
+    text-shadow: none;
+  }
+
+  [data-theme="light"] .about-copy-kicker {
+    color: #c41e3a;
+  }
+
+  [data-theme="light"] .about-credit-chip {
+    color: #5a1a1a;
+    background: rgba(196, 30, 58, 0.08);
+    border-color: rgba(196, 30, 58, 0.28);
+    box-shadow:
+      inset -2px -2px 0 0 rgba(180, 83, 0, 0.15),
+      inset 2px 2px 0 0 rgba(255, 200, 200, 0.3);
+  }
+
+  [data-theme="light"] .about-stage-label {
+    color: #b45300;
   }
 
   @keyframes player-spin {

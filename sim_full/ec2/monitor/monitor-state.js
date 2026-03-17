@@ -392,12 +392,13 @@ function averageFrameMs() {
 function drawFrameChart() {
   const width = frameChartCanvas.width;
   const height = frameChartCanvas.height;
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
   frameChartCtx.clearRect(0, 0, width, height);
 
-  frameChartCtx.fillStyle = '#07101e';
+  frameChartCtx.fillStyle = isLight ? '#f0ece4' : '#07101e';
   frameChartCtx.fillRect(0, 0, width, height);
 
-  frameChartCtx.strokeStyle = 'rgba(0, 212, 255, 0.18)';
+  frameChartCtx.strokeStyle = isLight ? 'rgba(26,92,170,0.15)' : 'rgba(0, 212, 255, 0.18)';
   frameChartCtx.lineWidth = 1;
   for (let y = 1; y < 4; y += 1) {
     const row = Math.floor((height / 4) * y);
@@ -408,7 +409,7 @@ function drawFrameChart() {
   }
 
   if (!frameTimeHistory.length) {
-    frameChartCtx.fillStyle = '#7aa3d1';
+    frameChartCtx.fillStyle = isLight ? '#666666' : '#7aa3d1';
     frameChartCtx.font = '18px VT323';
     frameChartCtx.fillText('waiting for frame samples...', 12, 28);
     return;
@@ -420,7 +421,9 @@ function drawFrameChart() {
     const barHeight = Math.max(3, Math.round((value / maxMs) * (height - 14)));
     const x = index * barWidth;
     const y = height - barHeight - 4;
-    frameChartCtx.fillStyle = value > 20 ? '#f05252' : value > 14 ? '#ffd700' : '#00d4ff';
+    frameChartCtx.fillStyle = isLight
+      ? (value > 20 ? '#c41e3a' : value > 14 ? '#b45300' : '#1a5caa')
+      : (value > 20 ? '#f05252' : value > 14 ? '#ffd700' : '#00d4ff');
     frameChartCtx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
   });
 }
