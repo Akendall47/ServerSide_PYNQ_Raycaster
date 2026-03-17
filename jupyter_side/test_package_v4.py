@@ -631,6 +631,8 @@ def _handle(data, state, bram):
         if new_mode != state["mode"]:
             print(f"[CTRL] mode {state['mode']} -> {new_mode} (server request)")
             state["mode"] = new_mode
+            if new_mode == "replay":
+                state["last_game_state_seq"] = None  # reset so replay frames aren't dropped as stale
         else:
             print(f"[CTRL] mode confirmed: {state['mode']}")
 
