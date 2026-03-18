@@ -163,17 +163,8 @@ def _write_pose(bram, state):
     bram.write(PLAYER_POS_OFFSET,   _xy_word(state["x"], state["y"], ts, w, h))
     bram.write(PLAYER_ANGLE_OFFSET, state["angle_raw"] & ANGLE_MASK)
 
+# Write remote entities (including ghosts) and bit markers to BRAM sprite/bits region.
 def _write_sprites(bram, state):
-    """Write remote entities and bit markers to BRAM sprite region.
-
-    Entity slot layout (2 words per slot, starting at ENTITY_BASE_OFFSET):
-      Word+0: xy position  — x_q6_10[31:16] | y_q6_10[15:0]
-      Word+1: metadata     — valid[31] | entity_id[30:24] | flags[23:16] | angle_raw[11:0]
-
-    Ghosts (FLAG_GHOST in flags byte) are included as normal remote entities.
-    Hardware renders up to HW_SPRITE_SLOTS (2 confirmed active in current bitstream);
-    remaining slots are staged in BRAM for future hardware upgrades.
-    """
     ts = state["tile_scale"]
     w, h = state["map_w"], state["map_h"]
     pid = state["player_id"]
@@ -221,6 +212,7 @@ def _write_sprites(bram, state):
             bram.write(offset, 0)
 
 # ── collision ─────────────────────────────────────────────────────────────────
+# True if a 5-point bounding circle centred at (x, y) sits entirely in open tiles.
 def _walkable(state, x, y):
     tiles = state["tiles"]
     w, h, s = state["map_w"], state["map_h"], state["tile_scale"]
@@ -235,6 +227,7 @@ def _walkable(state, x, y):
             return False
     return True
 
+# Slide along walls: try full move, then axis-only fallbacks, then cancel.
 def _resolve_move(state, nx, ny):
     if _walkable(state, nx, ny):          return nx, ny
     if _walkable(state, nx, state["y"]):  return nx, state["y"]
@@ -242,6 +235,7 @@ def _resolve_move(state, nx, ny):
     return state["x"], state["y"]
 
 
+# Convert grid cell (col, row) to world-space centre position.
 def _cell_to_world(col, row, width, height, tile_scale):
     return (
         (col - width / 2.0 + 0.5) * tile_scale,
@@ -249,6 +243,7 @@ def _cell_to_world(col, row, width, height, tile_scale):
     )
 
 
+# Convert world position to (col, row); returns None if out of map bounds.
 def _world_to_cell(state, x, y):
     map_w = state["map_w"]
     map_h = state["map_h"]
@@ -262,6 +257,7 @@ def _world_to_cell(state, x, y):
     return (col, row)
 
 
+# True if the tile at (col, row) is floor (value 0) and within map bounds.
 def _cell_is_open(state, col, row):
     map_w = state["map_w"]
     map_h = state["map_h"]
@@ -273,6 +269,7 @@ def _cell_is_open(state, col, row):
     return tiles[row * map_w + col] == 0
 
 
+# BFS outward from world position to find the nearest open (floor) cell.
 def _nearest_open_cell(state, x, y):
     origin = _world_to_cell(state, x, y)
     map_w = state["map_w"]
