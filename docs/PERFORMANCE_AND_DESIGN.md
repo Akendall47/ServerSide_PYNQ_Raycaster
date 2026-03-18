@@ -374,9 +374,35 @@ Ghost AI does not run A*. At 60 Hz, running full A* per ghost per tick would be 
 
 No path cache, no graph search, no memory of previous positions. Each tick is entirely stateless. This is cheaper than A* and produces believable tagger behaviour — ghosts reach the runner in a few seconds on any of the current maps.
 
-### 6.3 Grid A* for simulator auto-mode and board auto-mode
+### 6.3 Simulator auto-mode — A* with role-aware objectives
 
-Where actual pathfinding is needed (the PC simulator and PYNQ auto mode), 4-direction A* on the 32×32 tile grid is used. The grid is tiny: 32×32 = 1024 cells. A* on this completes in microseconds. The node computes the full path, then steps one cell per tick with collision-resolved motion.
+The PC node simulator (`sim_full/interfacing_+_sim/node_simulator.py`) uses full 4-direction A* on the 32×32 tile grid for navigation. The grid is tiny (1024 cells) so A* completes in microseconds per tick.
+
+Navigation goes through `path_step_target()`, which runs A* from the player's current cell to the target cell and returns the next waypoint. `choose_best_step_towards()` then takes one collision-resolved step toward that waypoint each tick.
+
+What A* navigates *toward* depends on role and situation — decided each tick by `choose_auto_objective()`:
+
+| Role | Situation | Objective |
+|------|-----------|-----------|
+| Tagger (player 2) | Always | Chase runner — A* directly to runner's position |
+| Runner (player 1) | Tagger within `AUTO_RUNNER_EVADE_DISTANCE` | **Evade** — flee away from tagger (highest priority) |
+| Runner (player 1) | Tagger not close + chase-bits map + bits remaining | **Collect nearest bit** — A* to closest uncollected bit by Euclidean distance |
+| Runner (player 1) | Tagger not close + no bits / plain chase map | **Kite** — maintain distance from tagger |
+| Either | No valid objective | **Roam** — step forward along current heading |
+
+So in `GAME_MODE_CHASE_BITS`, the auto runner does actively seek bits — but evading the tagger always takes priority if the tagger gets close. The bit target is always the nearest uncollected one (cheapest Euclidean distance, then A* to navigate there through walls).
+
+The A* implementation (`sim_full/interfacing_+_sim/node_simulator.py`):
+```python
+# 4-direction grid A* with Manhattan distance heuristic
+open_heap = []
+heapq.heappush(open_heap, (0, 0, start_cell))
+# ... standard A* with g_score dict and closed set
+heuristic = abs(goal_cell[0] - next_col) + abs(goal_cell[1] - next_row)
+heapq.heappush(open_heap, (next_cost + heuristic, next_cost, neighbour))
+```
+
+**This is simulator-only.** The PYNQ board client (`jupyter_side/test_package_v4.py`) also has an auto mode but its movement logic is simpler — it steers toward a target using heading arithmetic rather than full grid A*.
 
 ### 6.4 Collision resolution
 
