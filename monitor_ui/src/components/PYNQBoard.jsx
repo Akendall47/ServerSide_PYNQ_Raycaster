@@ -29,6 +29,7 @@ function BoardStage({ hostSlot }) {
   const stageRef = useRef(null);
   const mountRef = useRef(null);
   const shadowRef = useRef(null);
+  const tooltipRef = useRef(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -60,6 +61,7 @@ function BoardStage({ hostSlot }) {
     renderer.domElement.style.width = `${W}px`;
     renderer.domElement.style.height = `${H}px`;
     renderer.domElement.style.imageRendering = 'pixelated';
+    renderer.domElement.style.pointerEvents = 'auto';
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
@@ -289,20 +291,179 @@ function BoardStage({ hostSlot }) {
       }
     });
 
+    // ── Interaction state ──
+    const interact = {
+      hovering: false,
+      dragging: false,
+      lastX: 0,
+      lastY: 0,
+      // User-controlled offsets blended over auto-rotation
+      userYaw: 0,
+      userPitch: 0,
+      // Velocity for inertia after drag
+      velYaw: 0,
+      velPitch: 0,
+      // Zoom
+      zoom: 1,
+      // Whether user has taken control (dims auto-spin)
+      controlled: false,
+      autoSpinFade: 1, // 1 = full auto spin, 0 = user controlled
+    };
+
+    const canvas = renderer.domElement;
+
+    const onMouseEnter = () => {
+      interact.hovering = true;
+      canvas.style.cursor = 'grab';
+      if (tooltipRef.current) {
+        tooltipRef.current.style.opacity = '1';
+        tooltipRef.current.style.transform = 'translateY(0)';
+      }
+    };
+    const onMouseLeave = () => {
+      interact.hovering = false;
+      interact.dragging = false;
+      canvas.style.cursor = '';
+      if (tooltipRef.current) {
+        tooltipRef.current.style.opacity = '0';
+        tooltipRef.current.style.transform = 'translateY(4px)';
+      }
+    };
+    const onMouseDown = (e) => {
+      interact.dragging = true;
+      interact.controlled = true;
+      interact.lastX = e.clientX;
+      interact.lastY = e.clientY;
+      canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+    const onMouseMove = (e) => {
+      if (!interact.dragging) return;
+      const dx = e.clientX - interact.lastX;
+      const dy = e.clientY - interact.lastY;
+      interact.lastX = e.clientX;
+      interact.lastY = e.clientY;
+      const sensitivity = 0.008;
+      interact.velYaw   = dx * sensitivity;
+      interact.velPitch = dy * sensitivity;
+      interact.userYaw   += interact.velYaw;
+      interact.userPitch += interact.velPitch;
+      interact.userPitch = Math.max(-1.2, Math.min(1.2, interact.userPitch));
+    };
+    const onMouseUp = () => {
+      interact.dragging = false;
+      canvas.style.cursor = interact.hovering ? 'grab' : '';
+    };
+    const onWheel = (e) => {
+      interact.controlled = true;
+      interact.zoom *= 1 - e.deltaY * 0.001;
+      interact.zoom = Math.max(0.5, Math.min(2.2, interact.zoom));
+      e.preventDefault();
+    };
+
+    // Touch support
+    let touchStartDist = 0;
+    const onTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        interact.dragging = true;
+        interact.controlled = true;
+        interact.lastX = e.touches[0].clientX;
+        interact.lastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        touchStartDist = Math.hypot(dx, dy);
+      }
+      e.preventDefault();
+    };
+    const onTouchMove = (e) => {
+      if (e.touches.length === 1 && interact.dragging) {
+        const dx = e.touches[0].clientX - interact.lastX;
+        const dy = e.touches[0].clientY - interact.lastY;
+        interact.lastX = e.touches[0].clientX;
+        interact.lastY = e.touches[0].clientY;
+        const sensitivity = 0.008;
+        interact.velYaw   = dx * sensitivity;
+        interact.velPitch = dy * sensitivity;
+        interact.userYaw   += interact.velYaw;
+        interact.userPitch += interact.velPitch;
+        interact.userPitch = Math.max(-1.2, Math.min(1.2, interact.userPitch));
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        interact.zoom *= dist / touchStartDist;
+        interact.zoom = Math.max(0.5, Math.min(2.2, interact.zoom));
+        touchStartDist = dist;
+        interact.controlled = true;
+      }
+      e.preventDefault();
+    };
+    const onTouchEnd = () => { interact.dragging = false; };
+
+    canvas.addEventListener('mouseenter', onMouseEnter);
+    canvas.addEventListener('mouseleave', onMouseLeave);
+    canvas.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd);
+
+    // Double-click resets to auto-spin
+    canvas.addEventListener('dblclick', () => {
+      interact.controlled = false;
+      interact.userYaw = 0;
+      interact.userPitch = 0;
+      interact.velYaw = 0;
+      interact.velPitch = 0;
+      interact.zoom = 1;
+    });
+
     // ── Animation ──
     let rafId = 0;
     const timer = new THREE.Timer();
+    const BASE_CAM_Z = 7.5;
 
     const render = () => {
       timer.update();
       const t = timer.getElapsed();
+
+      // Fade auto-spin in/out based on user control
+      const targetFade = interact.controlled ? 0 : 1;
+      interact.autoSpinFade += (targetFade - interact.autoSpinFade) * 0.04;
+
+      // Inertia: decay velocity when not dragging
+      if (!interact.dragging) {
+        interact.velYaw   *= 0.92;
+        interact.velPitch *= 0.92;
+        interact.userYaw   += interact.velYaw;
+        interact.userPitch += interact.velPitch;
+        interact.userPitch = Math.max(-1.2, Math.min(1.2, interact.userPitch));
+        // Slowly return pitch toward 0 when not interacting
+        if (!interact.hovering) {
+          interact.userPitch *= 0.98;
+        }
+      }
+
       const bob = Math.sin(t * 1.4);
       const bobPhase = (bob + 1) / 2;
 
-      board.rotation.y = t * 1.1;
-      board.rotation.x = 0.25 + Math.sin(t * 0.5) * 0.08;
-      board.rotation.z = Math.sin(t * 0.7) * 0.06;
+      const autoYaw   = t * 1.1;
+      const autoPitchX = 0.25 + Math.sin(t * 0.5) * 0.08;
+      const autoRollZ  = Math.sin(t * 0.7) * 0.06;
+
+      // Blend auto rotation with user rotation
+      const f = interact.autoSpinFade;
+      board.rotation.y = autoYaw * f + interact.userYaw;
+      board.rotation.x = autoPitchX * f + interact.userPitch * (1 - f);
+      board.rotation.z = autoRollZ * f;
       board.position.y = 0.22 + bob * 0.18;
+
+      // Zoom via camera Z
+      const targetCamZ = BASE_CAM_Z / interact.zoom;
+      camera.position.z += (targetCamZ - camera.position.z) * 0.1;
 
       redKey.position.x = Math.cos(t * 0.6) * 4;
       redKey.position.z = Math.sin(t * 0.6) * 4 + 2;
@@ -329,6 +490,15 @@ function BoardStage({ hostSlot }) {
     return () => {
       wrap.classList.remove('board-ready');
       cancelAnimationFrame(rafId);
+      canvas.removeEventListener('mouseenter', onMouseEnter);
+      canvas.removeEventListener('mouseleave', onMouseLeave);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
       tex.dispose();
       envMap.dispose();
       materials.forEach((m) => m.dispose());
@@ -349,6 +519,7 @@ function BoardStage({ hostSlot }) {
           inset: 0,
           overflow: 'visible',
           transform: 'translateY(-88px)',
+          pointerEvents: 'none', // canvas element itself has pointer-events: auto
         }}
       />
       <div
@@ -365,6 +536,27 @@ function BoardStage({ hostSlot }) {
           transformOrigin: 'center center',
         }}
       />
+      <div
+        ref={tooltipRef}
+        style={{
+          position: 'absolute',
+          bottom: 40,
+          left: '50%',
+          transform: 'translateX(-50%) translateY(4px)',
+          opacity: 0,
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+          pointerEvents: 'none',
+          color: 'rgba(255,200,190,0.7)',
+          fontSize: '11px',
+          letterSpacing: '0.06em',
+          fontFamily: 'monospace',
+          textAlign: 'center',
+          whiteSpace: 'nowrap',
+          textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+        }}
+      >
+        drag to spin &nbsp;·&nbsp; scroll to zoom &nbsp;·&nbsp; double-click to reset
+      </div>
     </div>
   );
 }
