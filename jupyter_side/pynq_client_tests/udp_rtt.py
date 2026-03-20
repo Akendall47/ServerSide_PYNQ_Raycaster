@@ -17,13 +17,16 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    import protocol
-except ModuleNotFoundError:
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    JUPYTER_SIDE_DIR = os.path.dirname(SCRIPT_DIR)
-    if JUPYTER_SIDE_DIR not in sys.path:
-        sys.path.insert(0, JUPYTER_SIDE_DIR)
-    import protocol
+    from . import protocol
+except Exception:
+    try:
+        import protocol
+    except ModuleNotFoundError:
+        SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+        JUPYTER_SIDE_DIR = os.path.dirname(SCRIPT_DIR)
+        if JUPYTER_SIDE_DIR not in sys.path:
+            sys.path.insert(0, JUPYTER_SIDE_DIR)
+        import protocol
 
 try:
     import run_pynq as pynq_runtime

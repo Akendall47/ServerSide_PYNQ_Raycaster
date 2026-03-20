@@ -2,10 +2,10 @@
 
 Board-side direct UDP RTT benchmarking for report-ready numbers.
 
-Copy to the board alongside `protocol.py` and `run_pynq.py`:
+This folder is self-contained, including its own `protocol.py`, so you can copy it on its own:
 
 ```bash
-scp -r jupyter_side/pynq_client_tests jupyter_side/protocol.py jupyter_side/run_pynq.py \
+scp -r jupyter_side/pynq_client_tests \
     xilinx@<PYNQ_IP>:/home/xilinx/jupyter_notebooks/Final_project_test/
 ```
 
@@ -13,6 +13,12 @@ Run from the `jupyter_side/` directory on the PYNQ board:
 
 ```bash
 python3 -m pynq_client_tests --server 3.9.71.204 --samples 100 --label idle
+```
+
+or directly from inside the folder:
+
+```bash
+python3 launch_rtt.py --server 3.9.71.204 --samples 100 --label idle
 ```
 
 Optional CSV + JSON export:
