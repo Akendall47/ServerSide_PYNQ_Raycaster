@@ -1,6 +1,6 @@
 # PYNQ Client Tests
 
-Board-side direct UDP RTT benchmarking for report-ready numbers.
+Board-side latency benchmarking for report-ready numbers.
 
 This folder is self-contained, including its own `protocol.py`, so you can copy it on its own:
 
@@ -38,7 +38,7 @@ python3 -m pynq_client_tests \
   --json-out udp_rtt_idle.json
 ```
 
-Optional button-triggered mode:
+Optional button-triggered RTT mode:
 
 ```bash
 python3 run_pynq_rtt.py \
@@ -50,6 +50,17 @@ python3 run_pynq_rtt.py \
   --json-out udp_rtt_button.json
 ```
 
+Optional local button-to-visible mode:
+
+```bash
+python3 run_pynq_rtt.py \
+  --measure button_to_visible \
+  --samples 20 \
+  --label button-visible \
+  --csv-out button_to_visible.csv \
+  --json-out button_to_visible.json
+```
+
 Key outputs:
 
 - `avg_rtt_ms`
@@ -59,17 +70,24 @@ Key outputs:
 - `loss_pct`
 - `samples_ok`
 - `samples_lost`
+- `button_to_visible_avg_ms`
+- `button_to_visible_p50_ms`
+- `button_to_visible_p95_ms`
+- `button_to_visible_max_ms`
 
 What this benchmark is measuring:
 
 - Direct UDP round-trip time from the PYNQ board to the EC2 game server and back.
 - Each sample is a dedicated RTT probe packet sent to server port `9000`, followed by the server's immediate echo reply.
 - This is a network-path benchmark for `board -> server -> board`.
+- In `button_to_visible` mode, each sample is the local board-side time from a new button edge being detected to `run_pynq.py` applying the movement and finishing the BRAM pose write.
+- `button_to_visible` is the local board-visible path for the player's own movement, not a server round trip.
 
 What this benchmark is not measuring:
 
 - It does not measure monitor/browser latency.
-- It does not measure full gameplay response time from button press to visible movement on screen.
+- `rtt` mode does not measure visible movement on screen.
+- `button_to_visible` mode does not measure server-authoritative state returning from EC2.
 - It does not require the game monitor or SSH tunnel to be running.
 
 How to read the stats:
@@ -81,8 +99,14 @@ How to read the stats:
 - `loss_pct`: percentage of probes that timed out with no RTT reply.
 - `samples_ok`: number of successful RTT replies received.
 - `samples_lost`: number of timed out RTT probes.
+- `button_to_visible_*_ms`: local board-side latency from button edge to BRAM pose write completion.
 
-Trigger modes:
+Measurement modes:
+
+- `rtt`: direct UDP round-trip benchmark.
+- `button_to_visible`: local board button edge to visible-state write benchmark.
+
+Trigger modes for `rtt`:
 
 - `auto`: sends probes immediately one after another.
 - `button`: sends one RTT probe per new board button press using the `run_pynq.py` GPIO button path.
@@ -91,12 +115,13 @@ Recommended report wording:
 
 - "Measured direct board-to-server UDP RTT using dedicated echo probes over the live `pynq_dev.sh` stack."
 - "Quoted `p95_rtt_ms` as the main latency stability metric, with `avg_rtt_ms` and `max_rtt_ms` for context."
+- "Measured local board button-to-visible latency as button edge detection through to `run_pynq.py` completing the BRAM pose write."
 
 Notebook wrapper:
 
 - [UDP_RTT_Benchmark.ipynb](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/jupyter_side/pynq_client_tests/UDP_RTT_Benchmark.ipynb)
 
-That notebook just runs the same terminal RTT command and then displays the saved JSON stats cleanly.
+That notebook just runs the same terminal benchmark command and then displays the saved JSON stats cleanly.
 
 Plotting from saved CSV files:
 

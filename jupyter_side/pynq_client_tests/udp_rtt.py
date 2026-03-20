@@ -43,7 +43,10 @@ CSV_COLUMNS = [
     "seq",
     "status",
     "rtt_ms",
+    "button_to_visible_ms",
     "trigger",
+    "measurement",
+    "button_mask",
 ]
 
 
@@ -61,6 +64,8 @@ class MetricStats:
 @dataclass
 class UdpRTTReport:
     label: str
+    measurement: str
+    trigger: str
     server: str
     port: int
     samples_target: int
@@ -71,6 +76,8 @@ class UdpRTTReport:
     expected_client_send_hz: float
     rtt_stats: Optional[MetricStats]
     rtt_samples_ms: list[float]
+    button_to_visible_stats: Optional[MetricStats]
+    button_to_visible_samples_ms: list[float]
     started_at_unix_ms: int
 
 
@@ -93,9 +100,11 @@ def _summarise_ms(values: list[float]) -> MetricStats:
 
 
 def _print_report(report: UdpRTTReport):
-    print("\nPYNQ UDP RTT Benchmark")
+    print("\nPYNQ Benchmark")
     print(f"server: {report.server}:{report.port}")
     print(f"label: {report.label or 'default'}")
+    print(f"measurement: {report.measurement}")
+    print(f"trigger: {report.trigger}")
     print(
         "configured_rates_hz: "
         f"client_tick={report.expected_client_tick_hz:.1f}, "
@@ -104,6 +113,18 @@ def _print_report(report: UdpRTTReport):
     print(f"samples_ok: {report.samples_ok}")
     print(f"samples_lost: {report.samples_lost}")
     print(f"loss_pct: {report.loss_pct:.2f}")
+    if report.measurement == "button_to_visible":
+        if report.button_to_visible_stats is None:
+            print("button_to_visible_stats: no successful samples")
+            return
+        stats = report.button_to_visible_stats
+        print(f"button_to_visible_avg_ms: {stats.avg_ms:.2f}")
+        print(f"button_to_visible_p50_ms: {stats.p50_ms:.2f}")
+        print(f"button_to_visible_p95_ms: {stats.p95_ms:.2f}")
+        print(f"button_to_visible_max_ms: {stats.max_ms:.2f}")
+        print(f"button_to_visible_min_ms: {stats.min_ms:.2f}")
+        print(f"button_to_visible_stddev_ms: {stats.stddev_ms:.2f}")
+        return
     if report.rtt_stats is None:
         print("rtt_stats: no successful replies")
         return
@@ -158,6 +179,49 @@ def _probe_once(sock: socket.socket, server: str, port: int, seq: int, timeout_s
     return "timeout", None
 
 
+class _CapturedButtons:
+    def __init__(self, mask: int):
+        self._mask = int(mask) & 0xF
+
+    def read(self) -> int:
+        return self._mask
+
+
+def _build_manual_state():
+    tiles = pynq_runtime._fallback_map() if pynq_runtime else bytearray(32 * 32)
+    tick_rate = float(getattr(pynq_runtime, "TICK_RATE", 60.0)) if pynq_runtime else 60.0
+    scale = 50.0 / max(1.0, tick_rate)
+    move_speed = float(getattr(pynq_runtime, "MOVE_SPEED", 0.25)) * scale if pynq_runtime else 0.25 * scale
+    turn_step = max(1, int(round(float(getattr(pynq_runtime, "TURN_STEP", 26)) * scale))) if pynq_runtime else max(1, int(round(26 * scale)))
+    return {
+        "input_flags": 0,
+        "input_suspended_until": 0.0,
+        "x": 0.0,
+        "y": 0.0,
+        "angle": 0.0,
+        "angle_raw": 0,
+        "move_speed": move_speed,
+        "turn_step": turn_step,
+        "map_w": int(getattr(pynq_runtime, "MAP_COLS", 32)) if pynq_runtime else 32,
+        "map_h": int(getattr(pynq_runtime, "MAP_ROWS", 32)) if pynq_runtime else 32,
+        "tile_scale": 8,
+        "tiles": tiles,
+    }
+
+
+def _measure_button_to_visible(
+    bram,
+    state,
+    button_mask: int,
+) -> float:
+    sample_buttons = _CapturedButtons(button_mask)
+    started_ns = time.perf_counter_ns()
+    pynq_runtime._apply_manual_input(state, sample_buttons)
+    pynq_runtime._write_pose(bram, state)
+    finished_ns = time.perf_counter_ns()
+    return (finished_ns - started_ns) / 1_000_000.0
+
+
 def run_udp_rtt_benchmark(
     server: str,
     port: int,
@@ -165,32 +229,95 @@ def run_udp_rtt_benchmark(
     samples: int,
     timeout_s: float,
     *,
+    measurement: str = "rtt",
     trigger: str = "auto",
     buttons=None,
+    bram=None,
     poll_hz: float = 60.0,
     debounce_ms: int = 150,
 ) -> tuple[UdpRTTReport, list[dict[str, object]]]:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(SOCKET_TIMEOUT_S)
-
     started_at_unix_ms = int(time.time() * 1000)
     rtt_samples_ms: list[float] = []
+    button_to_visible_samples_ms: list[float] = []
     csv_rows: list[dict[str, object]] = []
+    measure_button_to_visible = measurement == "button_to_visible"
+    if measure_button_to_visible:
+        if pynq_runtime is None:
+            raise RuntimeError("button_to_visible requires run_pynq.py to be available")
+        if buttons is None:
+            raise RuntimeError("button_to_visible requires a button source")
+        if bram is None:
+            raise RuntimeError("button_to_visible requires a BRAM target")
 
-    try:
-        if trigger == "button":
-            if buttons is None:
-                raise RuntimeError("button trigger requested but no button source was provided")
-            previous_mask = 0
-            last_press_at_ms = 0
-            sample_index = 0
-            poll_interval_s = 1.0 / max(1.0, float(poll_hz))
-            print("Press board buttons to capture RTT samples...")
-            while sample_index < max(1, int(samples)):
-                now_ms = int(time.time() * 1000)
-                mask = int(buttons.read()) & 0xF
-                is_new_press = mask != 0 and previous_mask == 0 and (now_ms - last_press_at_ms) >= int(debounce_ms)
-                if is_new_press:
+        state = _build_manual_state()
+        pynq_runtime._write_map(bram, state["tiles"], state["map_w"], state["map_h"])
+        pynq_runtime._write_pose(bram, state)
+
+        previous_mask = 0
+        last_press_at_ms = 0
+        sample_index = 0
+        poll_interval_s = 1.0 / max(1.0, float(poll_hz))
+        print("Press board buttons to capture button_to_visible samples...")
+        while sample_index < max(1, int(samples)):
+            now_ms = int(time.time() * 1000)
+            mask = int(buttons.read()) & 0xF
+            is_new_press = mask != 0 and previous_mask == 0 and (now_ms - last_press_at_ms) >= int(debounce_ms)
+            if is_new_press:
+                sample_ms = _measure_button_to_visible(bram, state, mask)
+                button_to_visible_samples_ms.append(sample_ms)
+                csv_rows.append({
+                    "label": label,
+                    "sample_index": sample_index,
+                    "seq": sample_index + 1,
+                    "status": "ok",
+                    "rtt_ms": "",
+                    "button_to_visible_ms": round(sample_ms, 3),
+                    "trigger": f"button:{mask}",
+                    "measurement": "button_to_visible",
+                    "button_mask": mask,
+                })
+                sample_index += 1
+                last_press_at_ms = now_ms
+            previous_mask = mask
+            time.sleep(poll_interval_s)
+    else:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(SOCKET_TIMEOUT_S)
+        try:
+            if trigger == "button":
+                if buttons is None:
+                    raise RuntimeError("button trigger requested but no button source was provided")
+                previous_mask = 0
+                last_press_at_ms = 0
+                sample_index = 0
+                poll_interval_s = 1.0 / max(1.0, float(poll_hz))
+                print("Press board buttons to capture RTT samples...")
+                while sample_index < max(1, int(samples)):
+                    now_ms = int(time.time() * 1000)
+                    mask = int(buttons.read()) & 0xF
+                    is_new_press = mask != 0 and previous_mask == 0 and (now_ms - last_press_at_ms) >= int(debounce_ms)
+                    if is_new_press:
+                        seq = (sample_index + 1) & 0xFFFF
+                        status, rtt_ms = _probe_once(sock, server, port, seq, timeout_s)
+                        if rtt_ms is not None:
+                            rtt_samples_ms.append(rtt_ms)
+                        csv_rows.append({
+                            "label": label,
+                            "sample_index": sample_index,
+                            "seq": seq,
+                            "status": status,
+                            "rtt_ms": "" if rtt_ms is None else round(rtt_ms, 3),
+                            "button_to_visible_ms": "",
+                            "trigger": f"button:{mask}",
+                            "measurement": "rtt",
+                            "button_mask": mask,
+                        })
+                        sample_index += 1
+                        last_press_at_ms = now_ms
+                    previous_mask = mask
+                    time.sleep(poll_interval_s)
+            else:
+                for sample_index in range(max(1, int(samples))):
                     seq = (sample_index + 1) & 0xFFFF
                     status, rtt_ms = _probe_once(sock, server, port, seq, timeout_s)
                     if rtt_ms is not None:
@@ -201,37 +328,25 @@ def run_udp_rtt_benchmark(
                         "seq": seq,
                         "status": status,
                         "rtt_ms": "" if rtt_ms is None else round(rtt_ms, 3),
-                        "trigger": f"button:{mask}",
+                        "button_to_visible_ms": "",
+                        "trigger": "auto",
+                        "measurement": "rtt",
+                        "button_mask": "",
                     })
-                    sample_index += 1
-                    last_press_at_ms = now_ms
-                previous_mask = mask
-                time.sleep(poll_interval_s)
-        else:
-            for sample_index in range(max(1, int(samples))):
-                seq = (sample_index + 1) & 0xFFFF
-                status, rtt_ms = _probe_once(sock, server, port, seq, timeout_s)
-                if rtt_ms is not None:
-                    rtt_samples_ms.append(rtt_ms)
-                csv_rows.append({
-                    "label": label,
-                    "sample_index": sample_index,
-                    "seq": seq,
-                    "status": status,
-                    "rtt_ms": "" if rtt_ms is None else round(rtt_ms, 3),
-                    "trigger": "auto",
-                })
-    finally:
-        sock.close()
+        finally:
+            sock.close()
 
-    stats = _summarise_ms(rtt_samples_ms) if rtt_samples_ms else None
-    samples_ok = len(rtt_samples_ms)
+    rtt_stats = _summarise_ms(rtt_samples_ms) if rtt_samples_ms else None
+    button_to_visible_stats = _summarise_ms(button_to_visible_samples_ms) if button_to_visible_samples_ms else None
+    samples_ok = len(button_to_visible_samples_ms) if measure_button_to_visible else len(rtt_samples_ms)
     samples_lost = max(0, int(samples) - samples_ok)
     expected_client_tick_hz = float(getattr(pynq_runtime, "TICK_RATE", 60.0)) if pynq_runtime else 60.0
     expected_client_send_hz = float(getattr(pynq_runtime, "SEND_RATE", 60.0)) if pynq_runtime else 60.0
 
     report = UdpRTTReport(
         label=label,
+        measurement=measurement,
+        trigger="button" if measure_button_to_visible else trigger,
         server=server,
         port=port,
         samples_target=int(samples),
@@ -240,8 +355,10 @@ def run_udp_rtt_benchmark(
         loss_pct=round((samples_lost / max(1, int(samples))) * 100.0, 2),
         expected_client_tick_hz=expected_client_tick_hz,
         expected_client_send_hz=expected_client_send_hz,
-        rtt_stats=stats,
+        rtt_stats=rtt_stats,
         rtt_samples_ms=[round(value, 3) for value in rtt_samples_ms],
+        button_to_visible_stats=button_to_visible_stats,
+        button_to_visible_samples_ms=[round(value, 3) for value in button_to_visible_samples_ms],
         started_at_unix_ms=started_at_unix_ms,
     )
     return report, csv_rows
@@ -254,6 +371,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--label", default="default", help="load label for the run, e.g. idle or dual-board")
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="number of RTT probes to send")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S, help="per-sample timeout in seconds")
+    parser.add_argument("--measure", choices=["rtt", "button_to_visible"], default="rtt", help="measure direct UDP RTT or local board button-to-visible latency")
     parser.add_argument("--trigger", choices=["auto", "button"], default="auto", help="send probes automatically or on each new board button press")
     parser.add_argument("--overlay", default=getattr(pynq_runtime, "OVERLAY_PATH", "") if pynq_runtime else "", help="PYNQ overlay path for button-triggered mode")
     parser.add_argument("--no-hw", action="store_true", help="use null buttons in button-triggered mode")
@@ -269,14 +387,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     buttons = None
-    if args.trigger == "button":
+    bram = None
+    needs_hw_path = args.trigger == "button" or args.measure == "button_to_visible"
+    if needs_hw_path:
         if pynq_runtime is None:
-            print("Button-triggered mode requires run_pynq.py to be available next to this folder or in the parent jupyter_side folder.")
+            print("Button-related modes require run_pynq.py to be available next to this folder or in the parent jupyter_side folder.")
             return 1
         if args.no_hw:
             buttons = pynq_runtime._NullButtons()
+            bram = pynq_runtime._NullBram()
         else:
-            _overlay, _bram, buttons = pynq_runtime._load_overlay(args.overlay)
+            _overlay, bram, buttons = pynq_runtime._load_overlay(args.overlay)
 
     report, csv_rows = run_udp_rtt_benchmark(
         server=args.server,
@@ -284,8 +405,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         label=args.label,
         samples=max(1, int(args.samples)),
         timeout_s=max(0.05, float(args.timeout)),
+        measurement=args.measure,
         trigger=args.trigger,
         buttons=buttons,
+        bram=bram,
         poll_hz=max(1.0, float(args.poll_hz)),
         debounce_ms=max(0, int(args.debounce_ms)),
     )
@@ -299,6 +422,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"json_out: {args.json_out}")
 
     if report.samples_ok == 0:
+        if args.measure == "button_to_visible":
+            print("No button_to_visible samples were captured. Press a board button for each requested sample.")
+            return 1
         print("No RTT replies received. Make sure ./pynq_dev.sh is running and UDP port 9000 is reachable.")
         return 1
     return 0

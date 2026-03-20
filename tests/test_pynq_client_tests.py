@@ -46,6 +46,8 @@ def test_udp_rtt_report_prints_key_fields():
 
         report = udp_rtt.UdpRTTReport(
             label="idle",
+            measurement="rtt",
+            trigger="auto",
             server="3.9.71.204",
             port=9000,
             samples_target=10,
@@ -64,6 +66,8 @@ def test_udp_rtt_report_prints_key_fields():
                 stddev_ms=0.8,
             ),
             rtt_samples_ms=[16.2, 16.5, 16.8],
+            button_to_visible_stats=None,
+            button_to_visible_samples_ms=[],
             started_at_unix_ms=0,
         )
 
@@ -75,6 +79,47 @@ def test_udp_rtt_report_prints_key_fields():
         assert "samples_ok: 9" in output
         assert "loss_pct: 10.00" in output
         assert "rtt_p95_ms: 18.20" in output
+
+
+def test_button_to_visible_report_prints_key_fields():
+    with jupyter_import_context():
+        udp_rtt = importlib.import_module("pynq_client_tests.udp_rtt")
+
+        report = udp_rtt.UdpRTTReport(
+            label="button-visible",
+            measurement="button_to_visible",
+            trigger="button",
+            server="3.9.71.204",
+            port=9000,
+            samples_target=5,
+            expected_client_tick_hz=60.0,
+            expected_client_send_hz=60.0,
+            samples_ok=5,
+            samples_lost=0,
+            loss_pct=0.0,
+            rtt_stats=None,
+            rtt_samples_ms=[],
+            button_to_visible_stats=udp_rtt.MetricStats(
+                count=5,
+                avg_ms=0.9,
+                p50_ms=0.8,
+                p95_ms=1.4,
+                max_ms=1.5,
+                min_ms=0.6,
+                stddev_ms=0.2,
+            ),
+            button_to_visible_samples_ms=[0.7, 0.8, 0.9],
+            started_at_unix_ms=0,
+        )
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            udp_rtt._print_report(report)
+        output = buffer.getvalue()
+
+        assert "measurement: button_to_visible" in output
+        assert "trigger: button" in output
+        assert "button_to_visible_p95_ms: 1.40" in output
 
 
 def test_udp_rtt_metric_summary_computes_expected_percentiles():
