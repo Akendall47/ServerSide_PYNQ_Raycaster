@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Board-side UDP diagnostics for the PYNQ client.
+"""Board-side UDP diagnostics for the run_pynq board client.
 
 Measures:
   - register -> ACK RTT
@@ -35,10 +35,7 @@ except ModuleNotFoundError:
 try:
     import run_pynq as pynq_runtime
 except Exception:
-    try:
-        import pynq_client as pynq_runtime
-    except Exception:
-        pynq_runtime = None
+    pynq_runtime = None
 
 
 DEFAULT_SERVER = "3.9.71.204"

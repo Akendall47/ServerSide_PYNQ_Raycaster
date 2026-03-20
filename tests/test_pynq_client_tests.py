@@ -142,3 +142,49 @@ def test_input_latency_plotter_summarises_csv_by_label():
             "avg_input_to_broadcast_ms": 33.0,
             "max_input_to_broadcast_ms": 36.0,
         }]
+
+
+def test_udp_rtt_metric_summary_computes_expected_percentiles():
+    with jupyter_import_context():
+        udp_rtt = importlib.import_module("pynq_client_tests.udp_rtt")
+
+        stats = udp_rtt._summarise_ms([8.0, 10.0, 12.0, 14.0, 16.0])
+
+        assert stats.count == 5
+        assert stats.avg_ms == 12.0
+        assert stats.p50_ms == 12.0
+        assert stats.p95_ms == 16.0
+        assert stats.max_ms == 16.0
+        assert stats.min_ms == 8.0
+
+
+def test_udp_rtt_plotter_summarises_csv_by_label():
+    with TemporaryDirectory() as temp_dir:
+        csv_path = Path(temp_dir) / "udp_rtt_idle.csv"
+        csv_path.write_text(
+            "\n".join([
+                "label,sample_index,seq,status,rtt_ms",
+                "idle,0,1,ok,12.5",
+                "idle,1,2,ok,14.5",
+                "idle,2,3,timeout,",
+            ]),
+            encoding="utf-8",
+        )
+
+        with jupyter_import_context():
+            plotter = importlib.import_module("pynq_client_tests.plot_udp_rtt_csv")
+
+            rows = plotter.load_rtt_rows([str(csv_path)])
+            summary = plotter.summarise_by_label(rows)
+
+        assert len(rows) == 3
+        assert summary == [{
+            "label": "idle",
+            "count": 3,
+            "samples_ok": 2,
+            "samples_lost": 1,
+            "loss_pct": (1 / 3) * 100.0,
+            "avg_rtt_ms": 13.5,
+            "p95_rtt_ms": 12.5,
+            "max_rtt_ms": 14.5,
+        }]

@@ -121,3 +121,40 @@ That notebook lets you:
 - capture a CSV run from inside Jupyter
 - compare multiple CSV runs
 - render the report plots inline
+
+Direct UDP RTT workflow:
+
+```bash
+python3 pynq_client_tests/udp_rtt.py \
+  --server 3.9.71.204 \
+  --samples 100 \
+  --label idle \
+  --csv-out udp_rtt_idle.csv \
+  --json-out udp_rtt_idle.json
+```
+
+That path talks straight to the EC2 UDP server on port `9000`, so it works with the same `./pynq_dev.sh` stack and does not depend on the monitor tunnel.
+
+Notebook-first option:
+
+- [UDP_RTT_Benchmark.ipynb](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/jupyter_side/pynq_client_tests/UDP_RTT_Benchmark.ipynb)
+
+Jupyter plotting from those CSV files:
+
+```python
+from pynq_client_tests.plot_udp_rtt_csv import load_rtt_rows, plot_rtt_rows, summarise_by_label
+
+rows = load_rtt_rows([
+    "udp_rtt_idle.csv",
+    "udp_rtt_dual-board.csv",
+])
+
+summarise_by_label(rows)
+plot_rtt_rows(rows)
+```
+
+This writes:
+
+- `udp_rtt_comparison.png`
+- `udp_rtt_loss.png`
+- `udp_rtt_trace.png`

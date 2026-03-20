@@ -30,6 +30,8 @@ PKT_PERF         = 0x0070   # node  → server: board performance telemetry (sen
                              #   header (8 bytes) + PerfPayload (8 bytes)
                              #   fields: tick_rate_hz(B) cpu_temp_c(B) bram_write_us(H)
                              #           worst_overrun_us(h — signed) pad(2x)
+PKT_RTT_PING     = 0x0080   # node  → server: direct UDP RTT probe for report benchmarks
+PKT_RTT_PONG     = 0x0081   # server → node: echo reply for the RTT probe
 
 # ── Flags bitmask (uint8 flags field) ─────────────────────────────────────────
 #
@@ -398,6 +400,29 @@ def unpack_server_packet(data):
     # Legacy / non-game-state packets — no extension
     players = unpack_player_entries(payload)
     return pkt_type, seq, timestamp, GAME_MODE_CHASE, players, 0xFFFF
+
+
+def pack_rtt_ping_packet(seq, *, timestamp=None):
+    if timestamp is None:
+        timestamp = int(time.time() * 1000) & 0xFFFFFFFF
+    return struct.pack(HEADER_FMT, PKT_RTT_PING, seq & 0xFFFF, int(timestamp) & 0xFFFFFFFF)
+
+
+def pack_rtt_pong_packet(seq, *, timestamp=None):
+    if timestamp is None:
+        timestamp = int(time.time() * 1000) & 0xFFFFFFFF
+    return struct.pack(HEADER_FMT, PKT_RTT_PONG, seq & 0xFFFF, int(timestamp) & 0xFFFFFFFF)
+
+
+def unpack_rtt_packet(data):
+    pkt_type, seq, timestamp = unpack_header(data)
+    if pkt_type not in {PKT_RTT_PING, PKT_RTT_PONG}:
+        raise ValueError(f"expected RTT packet, got 0x{pkt_type:04x}")
+    return {
+        "pkt_type": pkt_type,
+        "seq": seq,
+        "timestamp": timestamp,
+    }
 
 
 # ── PKT_PERF pack / unpack ─────────────────────────────────────────────────────

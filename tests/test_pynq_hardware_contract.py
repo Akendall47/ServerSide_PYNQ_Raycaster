@@ -19,7 +19,7 @@ def pynq_import_context():
     sys.path[:0] = [str(JUPYTER_SIDE), str(PYNQ_INTERFACING), str(PYNQ_SERVER), str(PYNQ_EC2)]
     for name in list(sys.modules):
         if name in {
-            "t2_constants", "t2_map_loader", "pynq_client", "protocol", "test_package_v2",
+            "t2_constants", "t2_map_loader", "run_pynq", "protocol", "test_package_v2",
             "player_profiles", "t2_packet_handler", "t2_redis_io", "t2_game_tick",
             "replay_store", "game_logic.match_state",
         }:
@@ -30,7 +30,7 @@ def pynq_import_context():
         sys.path[:] = original_path
         for name in list(sys.modules):
             if name in {
-                "t2_constants", "t2_map_loader", "pynq_client", "protocol", "test_package_v2",
+                "t2_constants", "t2_map_loader", "run_pynq", "protocol", "test_package_v2",
                 "player_profiles", "t2_packet_handler", "t2_redis_io", "t2_game_tick",
                 "replay_store", "game_logic.match_state",
             }:
@@ -73,9 +73,9 @@ def test_pynq_map_loader_rejects_non_32x32_map(tmp_path):
         assert map_state["spawn_positions"] == []
 
 
-def test_pynq_client_encodes_map_pose_and_angle_for_real_hardware():
+def test_run_pynq_encodes_map_pose_and_angle_for_real_hardware():
     with pynq_import_context():
-        pynq_client = importlib.import_module("pynq_client")
+        run_pynq = importlib.import_module("run_pynq")
 
         tiles = bytearray(32 * 32)
         tiles[0] = 1
@@ -91,21 +91,21 @@ def test_pynq_client_encodes_map_pose_and_angle_for_real_hardware():
                 self.writes[offset] = value
 
         bram = DummyBram()
-        assert pynq_client._write_map(bram, tiles, 32, 32) is True
+        assert run_pynq._write_map(bram, tiles, 32, 32) is True
 
         assert bram.writes[0] == ((1 << 0) | (1 << 5) | (1 << 31))
         assert bram.writes[7 * 4] == (1 << 3)
         assert bram.writes[8 * 4] == 0
 
-        assert pynq_client._q6_10(0.0, 8, 32) == (16 << 10)
-        assert pynq_client._q6_10(-8.0, 8, 32) == (15 << 10)
-        assert pynq_client._hw_angle(0.0) == 0
-        assert pynq_client._hw_angle(3.141592653589793 / 2) == 1024
+        assert run_pynq._q6_10(0.0, 8, 32) == (16 << 10)
+        assert run_pynq._q6_10(-8.0, 8, 32) == (15 << 10)
+        assert run_pynq._hw_angle(0.0) == 0
+        assert run_pynq._hw_angle(3.141592653589793 / 2) == 1024
 
 
-def test_pynq_client_keeps_remote_entities_including_ghosts():
+def test_run_pynq_keeps_remote_entities_including_ghosts():
     with pynq_import_context():
-        pynq_client = importlib.import_module("pynq_client")
+        run_pynq = importlib.import_module("run_pynq")
         protocol = importlib.import_module("protocol")
 
         players = [
@@ -132,11 +132,11 @@ def test_pynq_client_keeps_remote_entities_including_ghosts():
             "bits_mask": 0,
         }
         bram = DummyBram()
-        pynq_client._write_sprites(bram, state)
+        run_pynq._write_sprites(bram, state)
 
-        meta0 = bram.writes[pynq_client.ENTITY_BASE_OFFSET + 4]
-        meta1 = bram.writes[pynq_client.ENTITY_BASE_OFFSET + 12]
-        meta2 = bram.writes[pynq_client.ENTITY_BASE_OFFSET + 20]
+        meta0 = bram.writes[run_pynq.ENTITY_BASE_OFFSET + 4]
+        meta1 = bram.writes[run_pynq.ENTITY_BASE_OFFSET + 12]
+        meta2 = bram.writes[run_pynq.ENTITY_BASE_OFFSET + 20]
         assert (meta0 >> 24) & 0x7F == 2
         assert (meta1 >> 24) & 0x7F == 3
         assert (meta2 >> 24) & 0x7F == 4
@@ -144,9 +144,9 @@ def test_pynq_client_keeps_remote_entities_including_ghosts():
         assert (meta2 >> 16) & 0xFF & protocol.FLAG_GHOST
 
 
-def test_pynq_client_caps_remote_entity_count():
+def test_run_pynq_caps_remote_entity_count():
     with pynq_import_context():
-        pynq_client = importlib.import_module("pynq_client")
+        run_pynq = importlib.import_module("run_pynq")
 
         players = [
             {"player_id": player_id, "x": float(player_id), "y": 0.0, "angle": 0.0, "flags": 0}
@@ -170,18 +170,18 @@ def test_pynq_client_caps_remote_entity_count():
             "bits_mask": 0,
         }
         bram = DummyBram()
-        pynq_client._write_sprites(bram, state)
+        run_pynq._write_sprites(bram, state)
 
         metas = [
-            bram.writes[pynq_client.ENTITY_BASE_OFFSET + 4 + (slot * 8)]
-            for slot in range(pynq_client.MAX_ENTITIES)
+            bram.writes[run_pynq.ENTITY_BASE_OFFSET + 4 + (slot * 8)]
+            for slot in range(run_pynq.MAX_ENTITIES)
         ]
         assert [((meta >> 24) & 0x7F) for meta in metas] == [2, 3, 4, 5]
 
 
-def test_pynq_client_decodes_button_gpio_bits():
+def test_run_pynq_decodes_button_gpio_bits():
     with pynq_import_context():
-        pynq_client = importlib.import_module("pynq_client")
+        run_pynq = importlib.import_module("run_pynq")
 
         state = {
             "input_flags": 0,
@@ -200,16 +200,16 @@ def test_pynq_client_decodes_button_gpio_bits():
 
         class Buttons:
             def read(self):
-                return pynq_client.BTN_FWD | pynq_client.BTN_RIGHT
+                return run_pynq.BTN_FWD | run_pynq.BTN_RIGHT
 
-        pynq_client._apply_manual_input(state, Buttons())
+        run_pynq._apply_manual_input(state, Buttons())
         assert state["angle_raw"] == 64
 
 
-def test_pynq_client_auto_runner_prefers_nearest_active_bit_in_bits_mode():
+def test_run_pynq_auto_runner_prefers_nearest_active_bit_in_bits_mode():
     with pynq_import_context():
         protocol = importlib.import_module("protocol")
-        test_package = importlib.import_module("pynq_client")
+        test_package = importlib.import_module("run_pynq")
 
         state = {
             "registered": True,
@@ -237,10 +237,10 @@ def test_pynq_client_auto_runner_prefers_nearest_active_bit_in_bits_mode():
         assert (state["input_flags"] & protocol.FLAG_SHOOTING) == 0
 
 
-def test_pynq_client_auto_tagger_chases_runner_and_shoots_when_aligned():
+def test_run_pynq_auto_tagger_chases_runner_and_shoots_when_aligned():
     with pynq_import_context():
         protocol = importlib.import_module("protocol")
-        test_package = importlib.import_module("pynq_client")
+        test_package = importlib.import_module("run_pynq")
 
         state = {
             "registered": True,
@@ -271,9 +271,9 @@ def test_pynq_client_auto_tagger_chases_runner_and_shoots_when_aligned():
         assert state["input_flags"] & protocol.FLAG_SHOOTING
 
 
-def test_pynq_client_pathfinder_routes_through_gap():
+def test_run_pynq_pathfinder_routes_through_gap():
     with pynq_import_context():
-        test_package = importlib.import_module("pynq_client")
+        test_package = importlib.import_module("run_pynq")
 
         width = 8
         height = 8
@@ -296,10 +296,10 @@ def test_pynq_client_pathfinder_routes_through_gap():
         assert (4, 4) in path
 
 
-def test_pynq_client_runtime_mode_packet_switches_live_mode():
+def test_run_pynq_runtime_mode_packet_switches_live_mode():
     with pynq_import_context():
         protocol = importlib.import_module("protocol")
-        test_package = importlib.import_module("pynq_client")
+        test_package = importlib.import_module("run_pynq")
 
         state = {
             "mode": "manual",
@@ -323,9 +323,9 @@ def test_pynq_client_runtime_mode_packet_switches_live_mode():
         assert state["mode"] == "auto"
 
 
-def test_pynq_client_manual_input_uses_runtime_speed_override():
+def test_run_pynq_manual_input_uses_runtime_speed_override():
     with pynq_import_context():
-        test_package = importlib.import_module("pynq_client")
+        test_package = importlib.import_module("run_pynq")
 
         class Buttons:
             def read(self):
@@ -351,9 +351,9 @@ def test_pynq_client_manual_input_uses_runtime_speed_override():
         assert state["y"] == 0.0
 
 
-def test_pynq_client_ack_clears_live_state():
+def test_run_pynq_ack_clears_live_state():
     with pynq_import_context():
-        pynq_client = importlib.import_module("pynq_client")
+        run_pynq = importlib.import_module("run_pynq")
         protocol = importlib.import_module("protocol")
 
         state = {
@@ -379,7 +379,7 @@ def test_pynq_client_ack_clears_live_state():
         }
 
         packet = struct.pack(protocol.HEADER_FMT, protocol.PKT_ACK, 0, 1234) + struct.pack("<B", 1)
-        pynq_client._handle(packet, state, pynq_client._NullBram())
+        run_pynq._handle(packet, state, run_pynq._NullBram())
 
         assert state["registered"] is True
         assert state["player_id"] == 1
@@ -1508,6 +1508,76 @@ def test_pynq_redis_writes_include_latest_input_latency():
         assert latest["seq"] == 10
         assert latest["input_to_server_ms"] == 12.0
         assert latest["input_to_broadcast_ms"] is not None
+
+
+def test_protocol_round_trips_direct_rtt_packets():
+    with pynq_import_context():
+        protocol = importlib.import_module("protocol")
+
+        ping = protocol.pack_rtt_ping_packet(seq=17, timestamp=1234)
+        pong = protocol.pack_rtt_pong_packet(seq=17, timestamp=5678)
+
+        assert protocol.unpack_header(ping) == (protocol.PKT_RTT_PING, 17, 1234)
+        assert protocol.unpack_header(pong) == (protocol.PKT_RTT_PONG, 17, 5678)
+        assert protocol.unpack_rtt_packet(ping) == {
+            "pkt_type": protocol.PKT_RTT_PING,
+            "seq": 17,
+            "timestamp": 1234,
+        }
+        assert protocol.unpack_rtt_packet(pong) == {
+            "pkt_type": protocol.PKT_RTT_PONG,
+            "seq": 17,
+            "timestamp": 5678,
+        }
+
+
+def test_packet_handler_echoes_direct_rtt_ping():
+    with pynq_import_context():
+        import asyncio
+
+        protocol = importlib.import_module("protocol")
+        packet_handler_mod = importlib.import_module("t2_packet_handler")
+        match_state_mod = importlib.import_module("game_logic.match_state")
+
+        class DummyTransport:
+            def __init__(self):
+                self.sent = []
+
+            def sendto(self, data, addr):
+                self.sent.append((data, addr))
+
+        state = match_state_mod.MatchState()
+        transport = DummyTransport()
+
+        handler = packet_handler_mod.PacketHandler(
+            state=state,
+            packet_queue=asyncio.Queue(),
+            write_queue=[],
+            udp_transport=transport,
+            map_state={
+                "width": 32,
+                "height": 32,
+                "tile_scale": 8,
+                "tiles": bytearray(32 * 32),
+                "bits": [],
+                "spawn_positions": [(0.0, 0.0)],
+            },
+            on_match_start=lambda: None,
+            on_match_abort=lambda event=None: None,
+            on_match_pause=lambda event=None: None,
+            on_match_resume=lambda event=None: None,
+            on_event=lambda event=None: None,
+        )
+
+        packet = protocol.pack_rtt_ping_packet(seq=9, timestamp=2222)
+        handler._process_packet({"data": packet, "addr": ("board1", 9001)})
+
+        assert len(transport.sent) == 1
+        response, addr = transport.sent[0]
+        assert addr == ("board1", 9001)
+        pkt_type, seq, _timestamp = protocol.unpack_header(response)
+        assert pkt_type == protocol.PKT_RTT_PONG
+        assert seq == 9
 
 
 def test_pynq_packet_handler_kicked_board_is_temporarily_blocked_from_rejoining():

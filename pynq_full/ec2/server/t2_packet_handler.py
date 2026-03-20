@@ -16,14 +16,14 @@ import time
 
 from protocol import (
     # constants
-    NODE_SIZE, PKT_STATE_UPDATE, PKT_REGISTER, PKT_ACK, PKT_PERF, HEADER_FMT, HEADER_SIZE,
+    NODE_SIZE, PKT_STATE_UPDATE, PKT_REGISTER, PKT_ACK, PKT_PERF, PKT_RTT_PING, HEADER_FMT, HEADER_SIZE,
     CLIENT_INPUT_FLAGS, SERVER_STATE_FLAGS, MOVEMENT_MODE_INTENT_ONLY,
     ROLE_ANY, ROLE_RUNNER, ROLE_TAGGER,
     GAME_MODE_CHASE, GAME_MODE_CHASE_BITS, FLAG_GHOST,
     NODE_CONTROL_MODE_MANUAL, NODE_CONTROL_MODE_AUTO, NODE_CONTROL_MODE_REPLAY,
     # functions
     decode_movement_mode, unpack_node_packet, unpack_register_packet,
-    unpack_perf_packet,
+    unpack_perf_packet, pack_rtt_pong_packet,
     pack_map_packet, pack_bits_init_packet, pack_node_mode_packet,
 )
 from t2_constants import (
@@ -168,6 +168,9 @@ class PacketHandler:
             if pkt_type_peek == PKT_PERF:
                 self._handle_perf(data, addr)
                 return
+            if pkt_type_peek == PKT_RTT_PING:
+                self._handle_rtt_ping(data, addr)
+                return
 
         if len(data) < NODE_SIZE:
             return
@@ -305,6 +308,18 @@ class PacketHandler:
             "bram_write_us":     pkt["bram_write_us"],
             "worst_overrun_us":  pkt["worst_overrun_us"],
         }
+
+    def _handle_rtt_ping(self, data: bytes, addr):
+        if self.udp_transport is None:
+            return
+        if len(data) < HEADER_SIZE:
+            return
+        try:
+            _pkt_type, seq, _timestamp = struct.unpack_from(HEADER_FMT, data, 0)
+            reply = pack_rtt_pong_packet(seq)
+            self.udp_transport.sendto(reply, addr)
+        except Exception:
+            return
 
     # Record preferred role and keep humans in the lobby until the monitor sends Start.
     # Queued humans get ACK(0) so clients can move before the match begins.
