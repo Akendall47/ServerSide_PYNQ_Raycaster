@@ -383,19 +383,10 @@ function updateInputLatency(inputLatency, state) {
 
   const inputToServer = Number(inputLatency.input_to_server_ms || 0);
   const inputToBroadcast = Number(inputLatency.input_to_broadcast_ms || 0);
-  let inputToMonitor = null;
-  if (state?.server_sent_at != null && state?.redis?.monitor_push_hz) {
-    const wsTransit = Math.max(0, Date.now() - Number(state.server_sent_at));
-    inputToMonitor = inputToBroadcast + wsTransit;
-  }
 
   valueEl.textContent = `${inputToBroadcast.toFixed(1)} ms`;
   const sourceLabel = inputLatency.display_name || inputLatency.username || (inputLatency.board_slot ? `P${inputLatency.board_slot}` : `player ${inputLatency.player_id || '?'}`);
-  let note = `${sourceLabel} seq ${inputLatency.seq} -> server ${inputToServer.toFixed(1)} ms`;
-  if (inputToMonitor != null) {
-    note += ` -> monitor ~${inputToMonitor.toFixed(1)} ms`;
-  }
-  noteEl.textContent = note;
+  noteEl.textContent = `${sourceLabel} seq ${inputLatency.seq} · server ${inputToServer.toFixed(1)} ms`;
 }
 
 function updateMatches(matches) {
