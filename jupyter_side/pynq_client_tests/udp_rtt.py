@@ -486,7 +486,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             buttons = pynq_runtime._NullButtons()
             bram = pynq_runtime._NullBram()
         else:
-            _overlay, bram, buttons = pynq_runtime._load_overlay(args.overlay)
+            overlay_path = args.overlay or getattr(pynq_runtime, "OVERLAY_PATH", "")
+            _overlay, bram, buttons = pynq_runtime._load_overlay(overlay_path)
 
     report, csv_rows = run_udp_rtt_benchmark(
         server=args.server,
