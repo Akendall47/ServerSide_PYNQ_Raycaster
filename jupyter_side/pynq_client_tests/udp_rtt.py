@@ -17,16 +17,12 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from . import protocol
+    from . import rtt_protocol as protocol
 except Exception:
-    try:
-        import protocol
-    except ModuleNotFoundError:
-        SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-        JUPYTER_SIDE_DIR = os.path.dirname(SCRIPT_DIR)
-        if JUPYTER_SIDE_DIR not in sys.path:
-            sys.path.insert(0, JUPYTER_SIDE_DIR)
-        import protocol
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    if SCRIPT_DIR not in sys.path:
+        sys.path.insert(0, SCRIPT_DIR)
+    import rtt_protocol as protocol
 
 try:
     import run_pynq as pynq_runtime

@@ -21,6 +21,12 @@ or directly from inside the folder:
 python3 launch_rtt.py --server 3.9.71.204 --samples 100 --label idle
 ```
 
+or, if you want the filename to match the board runtime naming style:
+
+```bash
+python3 run_pynq_rtt.py --server 3.9.71.204 --samples 100 --label idle
+```
+
 Optional CSV + JSON export:
 
 ```bash
