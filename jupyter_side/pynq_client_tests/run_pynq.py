@@ -20,7 +20,14 @@ except ImportError:
     Overlay = None
     Clocks = None
 
-import protocol
+try:
+    from . import protocol as protocol
+except ImportError:
+    import os as _os, sys as _sys
+    _d = _os.path.dirname(_os.path.abspath(__file__))
+    if _d not in _sys.path:
+        _sys.path.insert(0, _d)
+    import protocol
 
 SERVER_IP = "3.9.71.204"
 SERVER_PORT = 9000
