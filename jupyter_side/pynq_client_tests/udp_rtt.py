@@ -247,6 +247,7 @@ def _build_runtime_state():
         "last_bits_ts": None,
         "last_mode_ts": None,
         "last_game_state_seq": None,
+        "last_game_state_ts": None,
         "tick": 0,
         "sprites_dirty": False,
         "last_perf_tx": 0.0,
@@ -289,16 +290,21 @@ def _drain_pending_packets(sock: socket.socket, state, bram, idle_s: float = 0.0
 def _measure_button_to_visible(sock: socket.socket, server: str, port: int, bram, state, button_mask: int, timeout_s: float) -> tuple[str, Optional[float]]:
     sample_buttons = _CapturedButtons(button_mask)
     _drain_pending_packets(sock, state, bram)
-    baseline_game_state_seq = state.get("last_game_state_seq")
+    # Record client send timestamp (truncated 32-bit ms, same as wire format) just
+    # before sending, so we can confirm the server broadcast was built *after* our
+    # packet was sent — not from a broadcast already in flight.
     started_ns = time.perf_counter_ns()
+    client_send_ts = int(time.time() * 1000) & 0xFFFFFFFF
     pynq_runtime._apply_manual_input(state, sample_buttons)
     pynq_runtime._send_state(sock, (server, port), state)
     deadline = time.monotonic() + max(0.1, float(timeout_s))
     while time.monotonic() < deadline:
-        if _handle_one_packet(sock, state, bram) and state.get("last_game_state_seq") != baseline_game_state_seq:
-            pynq_runtime._write_pose(bram, state)
-            finished_ns = time.perf_counter_ns()
-            return "ok", (finished_ns - started_ns) / 1_000_000.0
+        if _handle_one_packet(sock, state, bram):
+            server_ts = state.get("last_game_state_ts")
+            if server_ts is not None and int(server_ts) >= client_send_ts:
+                pynq_runtime._write_pose(bram, state)
+                finished_ns = time.perf_counter_ns()
+                return "ok", (finished_ns - started_ns) / 1_000_000.0
     return "timeout", None
 
 

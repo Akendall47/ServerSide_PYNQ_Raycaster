@@ -245,10 +245,11 @@ def _handle(data, state, bram):
         return
 
     if pkt_type == protocol.PKT_GAME_STATE:
-        _, rx_seq, _rx_ts, game_mode, players, bits_mask = protocol.unpack_server_packet(data)
+        _, rx_seq, rx_ts, game_mode, players, bits_mask = protocol.unpack_server_packet(data)
         if not _is_newer_seq(state.get("last_game_state_seq"), rx_seq):
             return
         state["last_game_state_seq"] = rx_seq
+        state["last_game_state_ts"] = int(rx_ts)  # server wall-clock ms (truncated 32-bit)
         state["game_mode"] = game_mode
         state["bits_mask"] = bits_mask
         state["players"] = players
