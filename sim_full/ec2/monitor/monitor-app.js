@@ -348,11 +348,6 @@ function scheduleMapRefresh(cmd) {
 }
 
 async function sendControl(cmd, label) {
-  const _resolvedMap = latestState?.selected_map || _selectedMapName || '';
-  if (cmd === 'start_match' && (!_resolvedMap || _resolvedMap === LOBBY_MAP_NAME)) {
-    setServiceNote('select a map before starting the match');
-    return;
-  }
   const forceHttp = String(cmd || '').startsWith('set_map:');
   if (!forceHttp && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({cmd}));
