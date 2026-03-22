@@ -641,20 +641,17 @@ def spawn_pose(map_state: dict, node_index: int, radius: float):
 
 
 class ManualController:
-    # Background-thread key reader: blocks on os.read so keys are never missed
-    # regardless of PTY buffering in tmux/WSL.
-
-    _ARROW_MAP = {
-        b"\x1b[A": "forward",
-        b"\x1b[B": "backward",
-        b"\x1b[C": "turn_right",
-        b"\x1b[D": "turn_left",
-    }
+    # Background-thread key reader using /dev/tty directly so it works
+    # regardless of how stdin is wired (tmux, pipes, WSL PTY).
 
     def __init__(self):
-        if termios is None or tty is None or not sys.stdin.isatty():
-            raise RuntimeError("manual mode requires a real TTY on a Unix-like terminal")
-        self.fd = sys.stdin.fileno()
+        if termios is None or tty is None:
+            raise RuntimeError("manual mode requires termios (Unix only)")
+        try:
+            self._tty = open("/dev/tty", "rb", buffering=0)
+        except OSError as exc:
+            raise RuntimeError(f"manual mode: cannot open /dev/tty: {exc}") from exc
+        self.fd = self._tty.fileno()
         self._old_attrs = None
         self._queue = queue.SimpleQueue()
         self._thread = None
@@ -675,8 +672,16 @@ class ManualController:
         if self._old_attrs is not None:
             termios.tcsetattr(self.fd, termios.TCSADRAIN, self._old_attrs)
             self._old_attrs = None
+        self._tty.close()
 
     def _reader(self):
+        key_map = {
+            b"w": "forward",
+            b"s": "backward",
+            b"a": "turn_left",
+            b"d": "turn_right",
+            b" ": "shoot",
+        }
         while not self._stop.is_set():
             try:
                 b = os.read(self.fd, 1)
@@ -684,13 +689,7 @@ class ManualController:
                 break
             if not b:
                 break
-            action = {
-                b"w": "forward",
-                b"s": "backward",
-                b"a": "turn_left",
-                b"d": "turn_right",
-                b" ": "shoot",
-            }.get(b)
+            action = key_map.get(b)
             if action:
                 self._queue.put(action)
 
