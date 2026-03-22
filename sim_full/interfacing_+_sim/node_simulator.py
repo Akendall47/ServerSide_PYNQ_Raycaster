@@ -7,6 +7,7 @@
 # Usage: python3 node_simulator.py <server_ip> [port] --nodes N --node-index I --username sim
 
 import os
+import queue
 import socket
 import struct
 import time
@@ -640,53 +641,74 @@ def spawn_pose(map_state: dict, node_index: int, radius: float):
 
 
 class ManualController:
-    # Non-blocking arrow-key reader for one simulator process
+    # Background-thread key reader: blocks on os.read so keys are never missed
+    # regardless of PTY buffering in tmux/WSL.
+
+    _ARROW_MAP = {
+        b"\x1b[A": "forward",
+        b"\x1b[B": "backward",
+        b"\x1b[C": "turn_right",
+        b"\x1b[D": "turn_left",
+    }
 
     def __init__(self):
         if termios is None or tty is None or not sys.stdin.isatty():
             raise RuntimeError("manual mode requires a real TTY on a Unix-like terminal")
         self.fd = sys.stdin.fileno()
         self._old_attrs = None
+        self._queue = queue.SimpleQueue()
+        self._thread = None
+        self._stop = threading.Event()
 
     def enable(self):
         if self._old_attrs is None:
             self._old_attrs = termios.tcgetattr(self.fd)
             tty.setcbreak(self.fd)
+        if self._thread is None or not self._thread.is_alive():
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._reader, daemon=True)
+            self._thread.start()
         return self
 
     def disable(self):
+        self._stop.set()
         if self._old_attrs is not None:
             termios.tcsetattr(self.fd, termios.TCSADRAIN, self._old_attrs)
             self._old_attrs = None
 
-    def _readbyte(self, timeout=0.0):
-        ready, _, _ = select.select([self.fd], [], [], timeout)
-        if not ready:
-            return None
-        b = os.read(self.fd, 1)
-        return b.decode("latin-1") if b else None
+    def _reader(self):
+        while not self._stop.is_set():
+            try:
+                b = os.read(self.fd, 1)
+            except OSError:
+                break
+            if not b:
+                break
+            if b == b"\x1b":
+                # read up to 2 more bytes for escape sequence with short timeout
+                rest = b""
+                for _ in range(2):
+                    ready, _, _ = select.select([self.fd], [], [], 0.05)
+                    if not ready:
+                        break
+                    nxt = os.read(self.fd, 1)
+                    if not nxt:
+                        break
+                    rest += nxt
+                seq = b + rest
+                action = self._ARROW_MAP.get(seq)
+                if action:
+                    self._queue.put(action)
+            elif b == b" ":
+                self._queue.put("shoot")
 
     def read_actions(self):
         actions = []
         while True:
-            ch = self._readbyte(timeout=0.0)
-            if ch is None:
+            try:
+                actions.append(self._queue.get_nowait())
+            except queue.Empty:
                 break
-            if ch == "\x1b":
-                b1 = self._readbyte(timeout=0.05)
-                b2 = self._readbyte(timeout=0.05) if b1 is not None else None
-                seq = ch + (b1 or "") + (b2 or "")
-                mapping = {
-                    "\x1b[A": "forward",
-                    "\x1b[B": "backward",
-                    "\x1b[C": "turn_right",
-                    "\x1b[D": "turn_left",
-                }
-                action = mapping.get(seq)
-                if action:
-                    actions.append(action)
-            elif ch == " ":
-                actions.append("shoot")
         return actions
 
 
