@@ -1024,7 +1024,7 @@ Error generating stack: `+n.message+`
               <span style="color:#90a3c4">loading maps...</span>
             </div>
           </div>
-          <div class="metric-note scroll-panel-footer">Map play is manual-only. Focus the relevant tmux pane before using arrow keys.</div>
+          <div class="metric-note scroll-panel-footer">Map play is manual-only. Focus the relevant tmux pane and use W/S to move, A/D to turn, Space to shoot.</div>
         </div>
 
         <div class="panel-raised controls-notes scroll-panel">

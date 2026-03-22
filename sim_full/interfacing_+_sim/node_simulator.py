@@ -684,23 +684,15 @@ class ManualController:
                 break
             if not b:
                 break
-            if b == b"\x1b":
-                # read up to 2 more bytes for escape sequence with short timeout
-                rest = b""
-                for _ in range(2):
-                    ready, _, _ = select.select([self.fd], [], [], 0.05)
-                    if not ready:
-                        break
-                    nxt = os.read(self.fd, 1)
-                    if not nxt:
-                        break
-                    rest += nxt
-                seq = b + rest
-                action = self._ARROW_MAP.get(seq)
-                if action:
-                    self._queue.put(action)
-            elif b == b" ":
-                self._queue.put("shoot")
+            action = {
+                b"w": "forward",
+                b"s": "backward",
+                b"a": "turn_left",
+                b"d": "turn_right",
+                b" ": "shoot",
+            }.get(b)
+            if action:
+                self._queue.put(action)
 
     def read_actions(self):
         actions = []
@@ -821,7 +813,7 @@ def run_node(server_ip, server_port, player_id, node_index,
             try:
                 manual_controller = ManualController()
                 manual_controller.enable()
-                print(f"{tag} manual mode: arrows move/turn, space shoots")
+                print(f"{tag} manual mode: W/S move, A/D turn, space shoots")
                 normalized_mode = "manual"
             except Exception as exc:
                 print(f"{tag} manual mode unavailable: {exc}")
@@ -930,7 +922,7 @@ def run_node(server_ip, server_port, player_id, node_index,
 
     try:
         if manual_controller:
-            print(f"{tag} manual mode: arrows move/turn, space shoots")
+            print(f"{tag} manual mode: W/S move, A/D turn, space shoots")
         while True:
             sync_runtime_from_redis()
             # ── DISCONNECTED / REJOINING ─────────────────────────────────────
