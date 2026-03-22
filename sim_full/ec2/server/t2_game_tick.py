@@ -92,7 +92,7 @@ class GameTick:
 
             elapsed   = time.monotonic() - tick_start
             sleep_for = max(0.0, self.interval - elapsed)
-            if self.tick_count % self.tick_rate == 0:
+            if self.tick_count % round(1.0 / self.interval) == 0:
                 self._print_metrics(elapsed)
             self.tick_count += 1
             await asyncio.sleep(sleep_for)
