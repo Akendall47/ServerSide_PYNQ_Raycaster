@@ -644,6 +644,20 @@ class ManualController:
     # Background-thread key reader using /dev/tty directly so it works
     # regardless of how stdin is wired (tmux, pipes, WSL PTY).
 
+    _KEY_MAP = {
+        b"w": "forward",
+        b"s": "backward",
+        b"a": "turn_left",
+        b"d": "turn_right",
+        b" ": "shoot",
+    }
+    _ARROW_MAP = {
+        b"\x1b[A": "forward",
+        b"\x1b[B": "backward",
+        b"\x1b[C": "turn_right",
+        b"\x1b[D": "turn_left",
+    }
+
     def __init__(self):
         if termios is None or tty is None:
             raise RuntimeError("manual mode requires termios (Unix only)")
@@ -675,13 +689,6 @@ class ManualController:
         self._tty.close()
 
     def _reader(self):
-        key_map = {
-            b"w": "forward",
-            b"s": "backward",
-            b"a": "turn_left",
-            b"d": "turn_right",
-            b" ": "shoot",
-        }
         while not self._stop.is_set():
             try:
                 b = os.read(self.fd, 1)
@@ -689,7 +696,14 @@ class ManualController:
                 break
             if not b:
                 break
-            action = key_map.get(b)
+
+            action = self._KEY_MAP.get(b)
+            if b == b"\x1b":
+                try:
+                    tail = os.read(self.fd, 2)
+                except OSError:
+                    tail = b""
+                action = self._ARROW_MAP.get(b + tail) or action
             if action:
                 self._queue.put(action)
 
