@@ -38,6 +38,11 @@ Each script SSHes into EC2, pulls latest, rebuilds the monitor bundle, and launc
 > [!TIP]
 > #### Running this + `python3 launch.py` on the pynq board terminal is the full stack.
 
+
+https://github.com/user-attachments/assets/8d100d5a-41ee-4512-ad4e-756c20289bab
+
+
+
 **Simulated (no boards needed - legacy):**
 
 ```bash
@@ -89,6 +94,9 @@ The browser dashboard (`localhost:8080`) distinguishes PYNQcast as a **game-dev 
 | **Match Replay** | Stream recorded matches from S3 directly to a PYNQ screen |
 | **Server Monitoring** | SEDA queue health, Redis metrics, live event feed |
 | **Player Stats** | Per-player tag counts, career stats |
+
+
+https://github.com/user-attachments/assets/4d9b6678-f908-41b8-9264-f60a8735c5f3
 
 ---
 ---
