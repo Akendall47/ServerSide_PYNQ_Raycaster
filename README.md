@@ -2,10 +2,10 @@
 
 > Multiplayer FPGA raycasting game engine. PYNQ-Z1 nodes render via hardware DDA; this repo holds the **authoritative EC2 game server**, **browser monitor / game-dev environment** and **persistence layer**
 
-![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)
 ![Server](https://img.shields.io/badge/Server-EC2_asyncio-orange)
 ![Board](https://img.shields.io/badge/Board-PYNQ--Z1-green)
-![Tests](https://img.shields.io/badge/Tests-~120_pytest_&_isolated_sim_mode-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-~120_pytest_%26_isolated_sim_mode-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 <!-- TODO: add screenshot / GIF of gameplay + monitor dashboard -->
