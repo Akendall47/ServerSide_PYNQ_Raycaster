@@ -14,7 +14,7 @@
 ## Quick Start
 
 > [!IMPORTANT]
-> **`raycastpair.pem`** (EC2 SSH key) is required for full access to launch scripts and will be provided on github temporarily for security reasons. Place it at the repo root. However, server will be running so Client Side (PYNQ board) will still work without.
+> **`raycastpair.pem`** (EC2 SSH key) is required for full access to launch scripts and will be provided on github temporarily for security reasons. Place it at the repo root if it is not already. However, server will be running so Client Side (PYNQ board) will still work without.
 > Future plan is too design a full tutorial on how to setup your own server using our tools.
 
 ### Three launch modes - from repo root
