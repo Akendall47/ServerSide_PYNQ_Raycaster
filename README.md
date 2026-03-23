@@ -17,7 +17,7 @@
 > **`raycastpair.pem`** (EC2 SSH key) is required for all launch scripts and will be provided to the assessor separately. Place it at the repo root.
 > Future plan is too design a full tutorial on how to setup your own server using our tools.
 
-### Three launch modes
+### Three launch modes - from repo root
 
 | Script | What it does | When to use |
 |--------|-------------|-------------|
