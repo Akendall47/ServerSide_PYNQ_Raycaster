@@ -25,7 +25,7 @@
 | `./sim_dev2.sh` | 6-pane tmux: server + sidecar + auto-launch monitor + 2 sim nodes + Redis | Server dev without hardware |
 | `./monitor_view.sh` | SSH tunnel, opens dashboard at `localhost:8080` | Assessor / quick demo view |
 
-Each script SSHes into EC2, pulls latest, rebuilds the monitor bundle, and launches everything. PYNQ nodes connect to `EC2:9000` over UDP.
+Each script SSHes into EC2, pulls latest, rebuilds the monitor bundle, and launches everything. PYNQ nodes connect to `EC2:9000` over UDP. Dev scripts are written for WSL/Ubuntu on Windows but run unmodified on native Linux.
 
 
 **Real hardware: - will still work without boards - game-dev environment most up-to-date**
