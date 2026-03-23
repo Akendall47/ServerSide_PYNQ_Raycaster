@@ -132,15 +132,27 @@ When both humans pick runner, up to 3 **ghost AI taggers** spawn automatically.
 
 ## Tests
 
+> [!NOTE]
+> No EC2, Redis, or PYNQ hardware required. The entire suite runs in-process on a laptop — server modules are imported directly, a `_NullUDPTransport` absorbs outgoing UDP, and the FPGA BRAM contract is verified by asserting on integer encoding outputs.
+
 ```bash
 pip install -r requirements.txt
+python -m pytest tests/ -v                        # full suite
+python -m pytest tests/test_server_latency.py -s  # with live benchmark output
+python3 tests/test_protocol.py                    # protocol micro-benchmark
 ```
 
-```bash
-python -m pytest tests/ -v
-```
+| Area | File | What it covers |
+|------|------|----------------|
+| Game rules | `test_game_logic.py`, `test_match_modes.py` | Tag detection, match lifecycle, grace ticks, timeouts, ghost AI, chase-bits mode, lobby return |
+| Regression | `test_bottleneck_fixes.py` | Sequence validation across all movement modes, 16-bit rollover, sidecar background thread |
+| FPGA contract | `test_pynq_hardware_contract.py` | BRAM map encoding (`word |= 1 << col`), Q6.10 coordinate format, entity slot layout — pins the PS/PL boundary |
+| Protocol | `test_protocol.py` | Pack/unpack round-trips + µs timings for every packet type |
+| Performance | `test_server_latency.py` | In-process tick benchmark: asserts `avg < 25 ms`, `p95 < 35 ms`; optional live UDP RTT probe |
+| Monitor | `test_monitor_map_store.py` | Map editor save/load, system map protection, spawn ordering |
+| Identity | `test_sim_identity.py`, `test_pynq_client_tests.py` | Username registration, RTT metric percentile tooling |
 
-Covers game rules, protocol encode/decode, BRAM hardware contract, tick timing under load, anti-cheat, and sim/pynq parity.
+See [`tests/README.md`](tests/README.md) for the full breakdown including the dual sim/pynq test matrix and how the in-process benchmark works.
 
 ---
 
@@ -154,6 +166,10 @@ Covers game rules, protocol encode/decode, BRAM hardware contract, tick timing u
 | **Redis** | EC2 `localhost:6379` (tunnelled to local `6380`) |
 | **DynamoDB** | `pynq-raycaster-seda-matches`, `eu-west-2` |
 | **S3** | Compressed NDJSON replays + DDB archives |
+
+---
+
+> See [`docs/`](docs/) for architecture, protocol, performance, and concurrency deep-dives.
 
 ---
 
