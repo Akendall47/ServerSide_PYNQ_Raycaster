@@ -39,7 +39,9 @@ python3 tests/test_protocol.py
 ## File guide
 
 - `test_pynq_hardware_contract.py`, `test_pynq_runtime_fixes.py`: PYNQ client/runtime behavior and packet contracts
+- `test_pynq_client_tests.py`: RTT metric percentile computation and input latency tooling from `jupyter_side/`
 - `test_match_modes.py`, `test_game_logic.py`, `test_bottleneck_fixes.py`, `test_sim_identity.py`: server/gameplay/regression coverage
 - `test_monitor_map_store.py`: dashboard map editor storage behavior
 - `test_server_latency.py`: latency and live network diagnostics
 - `test_protocol.py`: protocol round-trip and micro-benchmark output
+- `conftest.py`: shared pytest fixtures

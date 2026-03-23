@@ -5,7 +5,7 @@ This is the live server-side runtime.
 ## Core runtime
 
 - [server.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/server.py)
-  - starts the SEDA pipeline
+  - starts the reactor pipeline (SEDA-inspired)
 - [t1_udp_receiver.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/t1_udp_receiver.py)
   - UDP ingress on port `9000`
 - [t2_game_tick.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/t2_game_tick.py)

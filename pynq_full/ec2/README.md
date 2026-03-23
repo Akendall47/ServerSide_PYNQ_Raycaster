@@ -5,7 +5,7 @@ This is the live server-side runtime.
 ## Core runtime
 
 - [server.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/server.py)
-  - starts the SEDA pipeline
+  - starts the reactor pipeline (SEDA-inspired)
 - [t1_udp_receiver.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/t1_udp_receiver.py)
   - UDP ingress on port `9000`
 - [t2_game_tick.py](/home/akendall/Documents/ServerSide_PYNQ_Raycaster/ec2/server/t2_game_tick.py)
@@ -26,12 +26,7 @@ This is the live server-side runtime.
 
 ## Game logic
 
-`game_logic/` contains the C++ helpers used for compute-heavy primitives:
-
-- ray casting
-- line-of-sight
-- anti-cheat / movement validation
-- node registry helpers
+`game_logic/` contains pure Python game rules: `core_logic.py`, `match_state.py`, `anticheat.py`. C++ reference implementations are archived in `game_logic/cpp_archive/` but not compiled or used at runtime.
 
 ## Runtime shape
 

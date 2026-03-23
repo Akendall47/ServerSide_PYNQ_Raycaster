@@ -1,6 +1,6 @@
 # server/
 
-SEDA game server for the PYNQ raycaster. Runs on EC2, listens on UDP port 9000.
+Reactor game server (SEDA-inspired pipeline) for the PYNQ raycaster. Runs on EC2, listens on UDP port 9000.
 
 ## Files
 

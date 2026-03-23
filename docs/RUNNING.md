@@ -29,12 +29,12 @@ After this, the dev scripts handle everything else automatically on every run.
 
 ## What each script does
 
-1. **Preflight** — checks SSH key, EC2 reachability, local tools (`tmux`, `ssh`, `npm`, etc.)
-2. **Build** — `npm run build:monitor-ui` compiles the React monitor bundle into `monitor_ui/dist/`
-3. **Remote sync** — `git reset --hard` the EC2 repo to match the pushed branch exactly
-4. **Tmux** — opens panes that SSH into EC2 and run server, sidecar, monitor in the venv
-5. **Tunnels** — SSH port-forwards EC2:8080 → local:8080 (monitor UI); sim also forwards EC2:6379 → local:6380 for node sims
-6. **Browser** — opens `http://<WSL-IP>:8080` automatically
+1. **Preflight**: checks SSH key, EC2 reachability, local tools (`tmux`, `ssh`, `npm`, etc.)
+2. **Build**: `npm run build:monitor-ui` compiles the React monitor bundle into `monitor_ui/dist/`
+3. **Remote sync**: `git reset --hard` the EC2 repo to match the pushed branch exactly
+4. **Tmux**: opens panes that SSH into EC2 and run server, sidecar, monitor in the venv
+5. **Tunnels**: SSH port-forwards EC2:8080 to local:8080 (monitor UI); sim also forwards EC2:6379 to local:6380 for node sims
+6. **Browser**: opens `http://<WSL-IP>:8080` automatically
 
 ---
 
@@ -60,13 +60,13 @@ sudo apt-get install -y redis-server
 git clone <repo-url> ~/ServerSide_PYNQ_Raycaster
 ```
 
-AWS credentials come from the EC2 instance's IAM role — nothing to configure as long as you're on the existing instance.
+AWS credentials come from the EC2 instance's IAM role; nothing to configure as long as you're on the existing instance.
 
 ---
 
 ## Giving someone else access
 
-Hand them `raycastpair.pem`. As long as the EC2 instance keeps running they get the full stack — the IAM role is attached to the instance, not the key.
+Hand them `raycastpair.pem`. As long as the EC2 instance keeps running they get the full stack; the IAM role is attached to the instance, not the key.
 
 ```bash
 cp raycastpair.pem ServerSide_PYNQ_Raycaster/
@@ -76,7 +76,7 @@ npm install        # one-time
 ./sim_dev2.sh      # or ./pynq_dev.sh
 ```
 
-For assessors who only need the dashboard, they can skip the full launchers:
+For assessors who only need the dashboard:
 
 ```bash
 cp raycastpair.pem ServerSide_PYNQ_Raycaster/
