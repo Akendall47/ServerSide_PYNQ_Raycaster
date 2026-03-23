@@ -33,7 +33,7 @@ Each script SSHes into EC2, pulls latest, rebuilds the monitor bundle, and launc
 ```bash
 ./pynq_dev.sh
 ```
-[NOTE!] #### Running this + `python3 launch.py` on the pynq board terminal is the full stack. 
+[!IMPORTANT] #### Running this + `python3 launch.py` on the pynq board terminal is the full stack. 
 
 **Simulated (no boards needed - legacy):**
 
